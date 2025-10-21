@@ -5,6 +5,9 @@ import os
 import io
 from datetime import datetime, timedelta
 
+# === Set page config HARUS paling awal dan hanya sekali ===
+st.set_page_config(page_title='ThinkVerse LMS', page_icon='🎓', layout='wide')
+
 # =============================
 # ThinkVerse LMS (Canvas-like) — FULL APP
 # =============================
@@ -316,7 +319,7 @@ def login(email, pw):
 
 # ---------- Landing Login ----------
 def page_login():
-    st.set_page_config(page_title='ThinkVerse LMS', page_icon='🎓', layout='wide')
+    # HAPUS set_page_config dari sini (sudah di atas file)
     st.markdown('<div style="display:flex;justify-content:center;align-items:center;height:80vh;background:#2f4858">', unsafe_allow_html=True)
     st.markdown('<div style="background:#fff;padding:32px;border-radius:12px;width:520px;box-shadow:0 10px 30px rgba(0,0,0,.15)">', unsafe_allow_html=True)
     st.markdown('## Welcome to LMS')
@@ -1200,7 +1203,7 @@ def page_announcements(cid):
 
 # ---------- App ----------
 def main():
-    st.set_page_config(page_title='ThinkVerse LMS', page_icon='🎓', layout='wide')
+    # HAPUS set_page_config dari sini (sudah di atas file)
     init_db()
     seed_demo()
 
