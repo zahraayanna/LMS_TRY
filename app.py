@@ -857,34 +857,30 @@ def page_modules(cid):
     st.header('📦 Modules (Materi per Bagian)')
     u = st.session_state.user
 
+    # ===== Tambah Topik =====
     if u['role'] in ['instructor', 'admin']:
         with st.form('new_mod'):
             title = st.text_input('Judul Topik')
-            content = st.text_area('Pembahasan (Markdown diperbolehkan, LaTeX pakai $...$)')
+            content = st.text_area('Pembahasan (Markdown + bisa embed gambar, daftar, dll.)')
             yt = st.text_input('YouTube URL (opsional)')
-            imgs = st.file_uploader('Gambar (opsional, bisa banyak)', accept_multiple_files=True)
+            img = st.file_uploader('Gambar (opsional)')
             order = st.number_input('Urutan', 0, 1000, 0)
             ok = st.form_submit_button('Tambah Topik')
         if ok:
             img_path = None
+            if img is not None:
+                img_path = os.path.join(UPLOAD_DIR, f"mod_{cid}_{datetime.now().timestamp()}_{img.name}")
+                with open(img_path, 'wb') as f: f.write(img.read())
             with get_conn() as conn:
                 c = conn.cursor()
                 c.execute('INSERT INTO modules(course_id,title,content,youtube_url,image_path,order_index) VALUES(?,?,?,?,?,?)',
-                          (cid, title, content, yt, None, order))
-                conn.commit()
-                mid = c.lastrowid
-                # save uploaded images to module_images
-                if imgs:
-                    for i, f in enumerate(imgs):
-                        fname = f"modimg_{mid}_{int(datetime.now().timestamp())}_{i}_{f.name}"
-                        fpath = os.path.join(UPLOAD_DIR, fname)
-                        with open(fpath, 'wb') as fh: fh.write(f.read())
-                        c.execute('INSERT INTO module_images(module_id,path,caption,order_index) VALUES(?,?,?,?)',
-                                  (mid, fpath, '', i))
+                          (cid, title, content, yt, img_path, order))
                 conn.commit()
             create_announcement(cid, 'Topik baru ditambahkan', f'Topik **{title}** telah dipublish.', 1)
-            st.success('Topik dibuat.'); st.rerun()
+            st.success('Topik dibuat.')
+            st.rerun()
 
+    # ===== Tampilkan Topik =====
     with get_conn() as conn:
         c = conn.cursor()
         c.execute('SELECT id,title,content,youtube_url,image_path,order_index FROM modules WHERE course_id=? ORDER BY order_index', (cid,))
@@ -892,191 +888,52 @@ def page_modules(cid):
 
     for mid, t, cont, yt, ip, ordr in mods:
         with st.expander(f"{ordr}. {t}", expanded=False):
-            # Display youtube if present
             if yt: st.video(yt)
+            if ip and os.path.exists(ip): st.image(ip)
+            if cont: st.markdown(cont)
 
-            # fetch module images (ordered)
-            with get_conn() as conn:
-                cur = conn.cursor()
-                cur.execute('SELECT id,path,caption,order_index FROM module_images WHERE module_id=? ORDER BY order_index', (mid,))
-                modimgs = cur.fetchall()
-
-            # render images with numbering and caption & allow reorder
-            if modimgs:
-                for idx, (imgid, path, cap, oidx) in enumerate(modimgs, start=1):
-                    if path and os.path.exists(path):
-                        st.markdown(f"**Gambar {idx}.** {cap or ''}")
-                        st.image(path)
-                st.markdown('---')
-
-            if cont:
-                st.markdown(cont)
-
-            # ---- Edit module (instruktur)
             if u['role'] in ['instructor','admin']:
-                with st.expander('✏️ Edit Topik'):
-                    # main edit form
-                    with st.form(f'edit_mod_{mid}'):
-                        new_title = st.text_input('Judul', value=t)
-                        new_content = st.text_area('Konten (Markdown)', value=cont or '')
-                        new_yt = st.text_input('YouTube URL', value=yt or '')
-                        # upload new images
-                        new_imgs = st.file_uploader('Unggah gambar baru (opsional, bisa banyak)', accept_multiple_files=True, key=f'upimg_{mid}')
-                        save_mod = st.form_submit_button('Simpan Perubahan')
-                    if save_mod:
-                        with get_conn() as conn:
-                            c = conn.cursor()
-                            c.execute('UPDATE modules SET title=?, content=?, youtube_url=? WHERE id=?',
-                                      (new_title, new_content, new_yt or None, mid))
-                            # save new images
-                            if new_imgs:
-                                # determine current max order_index
-                                c.execute('SELECT COALESCE(MAX(order_index), -1) FROM module_images WHERE module_id=?', (mid,))
-                                maxord = c.fetchone()[0] or -1
-                                for i, f in enumerate(new_imgs, start=1):
-                                    fname = f"modimg_{mid}_{int(datetime.now().timestamp())}_{i}_{f.name}"
-                                    fpath = os.path.join(UPLOAD_DIR, fname)
-                                    with open(fpath, 'wb') as fh: fh.write(f.read())
-                                    c.execute('INSERT INTO module_images(module_id,path,caption,order_index) VALUES(?,?,?,?)',
-                                              (mid, fpath, '', maxord + i))
-                            conn.commit()
-                        st.success('Perubahan tersimpan.'); st.rerun()
+                if st.button(f"✏️ Edit Topik Ini", key=f"edit_btn_{mid}"):
+                    st.session_state[f"editing_mod_{mid}"] = not st.session_state.get(f"editing_mod_{mid}", False)
 
-                    # manage existing images: change caption, reorder, delete
-                    if modimgs:
-                        st.markdown('**Kelola Gambar Topik**')
-                        form_fields = []
-                        with st.form(f'manage_imgs_{mid}'):
-                            new_orders = {}
-                            del_ids = []
-                            new_caps = {}
-                            for imgid, path, cap, oidx in modimgs:
-                                cols = st.columns([5,1,1])
-                                with cols[0]:
-                                    st.write(os.path.basename(path))
-                                    st.caption(cap or '')
-                                with cols[1]:
-                                    new_order = st.number_input(f'Order {imgid}', value=oidx or 0, key=f'ord_{imgid}')
-                                    new_orders[imgid] = new_order
-                                with cols[2]:
-                                    remove = st.checkbox(f'Hapus {imgid}', key=f'rem_{imgid}')
-                                    if remove:
-                                        del_ids.append(imgid)
-                                # caption edit
-                                new_cap = st.text_input(f'Caption {imgid}', value=cap or '', key=f'cap_{imgid}')
-                                new_caps[imgid] = new_cap
-                            save_imgs = st.form_submit_button('Simpan Perubahan Gambar')
-                        if save_imgs:
-                            with get_conn() as conn:
-                                c = conn.cursor()
-                                for iid in del_ids:
-                                    # delete file if exists
-                                    c.execute('SELECT path FROM module_images WHERE id=?', (iid,))
-                                    row = c.fetchone()
-                                    if row and row[0] and os.path.exists(row[0]):
-                                        try: os.remove(row[0])
-                                        except Exception: pass
-                                    c.execute('DELETE FROM module_images WHERE id=?', (iid,))
-                                for iid, nv in new_orders.items():
-                                    c.execute('UPDATE module_images SET order_index=? WHERE id=?', (nv, iid))
-                                for iid, nc in new_caps.items():
-                                    c.execute('UPDATE module_images SET caption=? WHERE id=?', (nc, iid))
-                                conn.commit()
-                            st.success('Perubahan gambar tersimpan.'); st.rerun()
+        # === Form Edit (di luar expander utama agar tidak nested) ===
+        if st.session_state.get(f"editing_mod_{mid}", False):
+            st.markdown(f"### ✏️ Edit Topik: {t}")
+            with st.form(f'edit_mod_{mid}'):
+                new_title = st.text_input('Judul Topik', value=t)
+                new_content = st.text_area('Isi Penjelasan (Markdown)', value=cont or '')
+                new_yt = st.text_input('YouTube URL (opsional)', value=yt or '')
+                new_img = st.file_uploader('Upload gambar tambahan (opsional)')
+                new_order = st.number_input('Urutan', 0, 1000, value=ordr)
+                ok_edit = st.form_submit_button('Simpan Perubahan')
 
-            # ---- Quick add Assignment / Quiz
-            if u['role'] in ['instructor','admin']:
-                st.subheader('➕ Tambah Tugas/Quiz pada Topik ini')
-                colA, colQ = st.columns(2)
+            if ok_edit:
+                img_path = ip
+                if new_img is not None:
+                    img_path = os.path.join(UPLOAD_DIR, f"mod_{cid}_{datetime.now().timestamp()}_{new_img.name}")
+                    with open(img_path, 'wb') as f: f.write(new_img.read())
 
-                with colA:
-                    with st.form(f'add_asg_{mid}'):
-                        at = st.text_input('Judul Assignment', key=f'at_{mid}')
-                        ad = st.text_area('Deskripsi', key=f'ad_{mid}')
-                        due_date = st.date_input('Deadline (tanggal)', value=(datetime.now()+timedelta(days=7)).date(), key=f'dd_{mid}')
-                        due_time = st.time_input('Jam', value=datetime.now().time().replace(microsecond=0), key=f'dt_{mid}')
-                        pts = st.number_input('Poin', 0, 1000, 100, key=f'pts_{mid}')
-                        yt_a = st.text_input('YouTube (opsional)', key=f'yt_{mid}')
-                        embed = st.text_input('Embed LKPD/Form (opsional)', key=f'em_{mid}')
-                        ok_a = st.form_submit_button('Tambah Assignment')
-                    if ok_a and at.strip():
-                        due = datetime.combine(due_date, due_time)
-                        with get_conn() as conn:
-                            c = conn.cursor()
-                            c.execute('''INSERT INTO assignments(course_id,module_id,title,description,due_at,points,youtube_url,embed_url)
-                                         VALUES(?,?,?,?,?,?,?,?)''',
-                                      (cid, mid, at.strip(), ad, due.isoformat(), int(pts), yt_a, embed))
-                            conn.commit()
-                        create_announcement(cid, 'Tugas baru', f'Tugas **{at.strip()}** ditambahkan pada topik **{t}**.', 1)
-                        st.success('Assignment dibuat.'); st.rerun()
+                with get_conn() as conn:
+                    c = conn.cursor()
+                    c.execute('UPDATE modules SET title=?, content=?, youtube_url=?, image_path=?, order_index=? WHERE id=?',
+                              (new_title, new_content, new_yt, img_path, new_order, mid))
+                    conn.commit()
 
-                with colQ:
-                    with st.form(f'add_quiz_{mid}'):
-                        qt = st.text_input('Judul Quiz', key=f'qt_{mid}')
-                        qd = st.text_area('Deskripsi', key=f'qd_{mid}')
-                        tlim = st.number_input('Batas waktu (menit)', 0, 300, 0, key=f'ql_{mid}')
-                        embed = st.text_input('Embed / Video URL (opsional)', key=f'qem_{mid}')
-                        ok_q = st.form_submit_button('Tambah Quiz')
-                    if ok_q and qt.strip():
-                        with get_conn() as conn:
-                            c = conn.cursor()
-                            c.execute('INSERT INTO quizzes(course_id,module_id,title,description,time_limit_minutes,embed_url) VALUES(?,?,?,?,?,?)',
-                                      (cid, mid, qt.strip(), qd, int(tlim), embed or None))
-                            conn.commit()
-                        create_announcement(cid, 'Quiz baru', f'Quiz **{qt.strip()}** ditambahkan pada topik **{t}**.', 1)
-                        st.success('Quiz dibuat.'); st.rerun()
+                st.success(f'Topik "{new_title}" berhasil diperbarui.')
+                st.session_state[f"editing_mod_{mid}"] = False
+                st.rerun()
 
-            # ---- Daftar tugas & quiz terkait topik ini
-            st.markdown('---')
-            st.markdown('**Tugas pada Topik ini**')
-            with get_conn() as conn:
-                c = conn.cursor()
-                c.execute('SELECT id,title,due_at,points FROM assignments WHERE course_id=? AND module_id=? ORDER BY id DESC', (cid, mid))
-                asgs = c.fetchall()
-            if asgs:
-                for aid, atitle, due, pts in asgs:
-                    cols = st.columns([5,1])
-                    with cols[0]:
-                        st.write(f"• **{atitle}** — due: {due} — {pts} pts")
-                    if u['role'] in ['instructor','admin']:
-                        with cols[1]:
-                            with st.form(f'del_asg_in_mod_{aid}'):
-                                cfm = st.checkbox('Konfirmasi')
-                                sub = st.form_submit_button('Hapus')
-                            if sub and cfm:
-                                delete_assignment(aid)
-                                st.success('Assignment dihapus.'); st.rerun()
-            else:
-                st.caption('Belum ada tugas di topik ini.')
+        # === Tombol Hapus Topik ===
+        if u['role'] in ['instructor','admin']:
+            with st.form(f'del_mod_{mid}'):
+                st.warning('Menghapus topik **tidak** menghapus tugas/kuis, hanya melepas keterkaitan.')
+                cfm = st.checkbox('Saya paham dan ingin menghapus topik ini.')
+                sub = st.form_submit_button('Hapus Topik')
+            if sub and cfm:
+                delete_module(mid)
+                st.success('Topik dihapus. Tugas/Kuis terkait dilepas dari topik.')
+                st.rerun()
 
-            st.markdown('**Quiz pada Topik ini**')
-            with get_conn() as conn:
-                c = conn.cursor()
-                c.execute('SELECT id,title,total_points FROM quizzes WHERE course_id=? AND module_id=? ORDER BY id DESC', (cid, mid))
-                qzs = c.fetchall()
-            if qzs:
-                for qid, qtitle, tpts in qzs:
-                    colsq = st.columns([5,1])
-                    with colsq[0]:
-                        st.write(f"• **{qtitle}** — total {tpts or 0} pts")
-                    if u['role'] in ['instructor','admin']:
-                        with colsq[1]:
-                            with st.form(f'del_qz_in_mod_{qid}'):
-                                cfmq = st.checkbox('Konfirmasi')
-                                subq = st.form_submit_button('Hapus')
-                            if subq and cfmq:
-                                delete_quiz(qid)
-                                st.success('Quiz dihapus.'); st.rerun()
-
-            # ---- HAPUS TOPIK (detach item)
-            if u['role'] in ['instructor','admin']:
-                with st.form(f'del_mod_{mid}'):
-                    st.warning('Menghapus topik **tidak** menghapus tugas/kuis. Item akan dilepas dari topik.')
-                    cfm = st.checkbox('Saya paham dan ingin menghapus topik ini.')
-                    sub = st.form_submit_button('Hapus Topik')
-                if sub and cfm:
-                    delete_module(mid)
-                    st.success('Topik dihapus. Tugas/Kuis terkait dilepas dari topik.'); st.rerun()
 
 # ----- Assignments (global) -----
 def page_assignments(cid):
@@ -1565,3 +1422,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+
