@@ -256,6 +256,58 @@ def detach_module_items(module_id: int):
         c.execute('UPDATE quizzes SET module_id=NULL WHERE module_id=?', (module_id,))
         conn.commit()
 
+def delete_course(course_id: int):
+    """Hapus kursus + seluruh data turunannya secara aman."""
+    with get_conn() as conn:
+        c = conn.cursor()
+
+        # --- Quizzes: hapus attempts -> answers, questions -> choices, lalu quiz
+        c.execute('SELECT id FROM quizzes WHERE course_id=?', (course_id,))
+        quiz_ids = [r[0] for r in c.fetchall()]
+        if quiz_ids:
+            # attempts -> answers
+            c.execute(f"SELECT id FROM quiz_attempts WHERE quiz_id IN ({','.join('?'*len(quiz_ids))})", quiz_ids)
+            att_ids = [r[0] for r in c.fetchall()]
+            if att_ids:
+                c.execute(f"DELETE FROM quiz_answers WHERE attempt_id IN ({','.join('?'*len(att_ids))})", att_ids)
+                c.execute(f"DELETE FROM quiz_attempts WHERE id IN ({','.join('?'*len(att_ids))})", att_ids)
+
+            # questions -> choices
+            c.execute(f"SELECT id FROM quiz_questions WHERE quiz_id IN ({','.join('?'*len(quiz_ids))})", quiz_ids)
+            qn_ids = [r[0] for r in c.fetchall()]
+            if qn_ids:
+                c.execute(f"DELETE FROM quiz_choices WHERE question_id IN ({','.join('?'*len(qn_ids))})", qn_ids)
+                c.execute(f"DELETE FROM quiz_questions WHERE id IN ({','.join('?'*len(qn_ids))})", qn_ids)
+
+            # quizzes
+            c.execute(f"DELETE FROM quizzes WHERE id IN ({','.join('?'*len(quiz_ids))})", quiz_ids)
+
+        # --- Assignments
+        c.execute('DELETE FROM assignments WHERE course_id=?', (course_id,))
+
+        # --- Modules
+        c.execute('DELETE FROM modules WHERE course_id=?', (course_id,))
+
+        # --- Books / Flipbooks
+        c.execute('DELETE FROM course_books WHERE course_id=?', (course_id,))
+
+        # --- Announcements
+        c.execute('DELETE FROM announcements WHERE course_id=?', (course_id,))
+
+        # --- Attendance (logs dulu baru sessions)
+        c.execute('SELECT id FROM attendance_sessions WHERE course_id=?', (course_id,))
+        sess_ids = [r[0] for r in c.fetchall()]
+        if sess_ids:
+            c.execute(f"DELETE FROM attendance_logs WHERE session_id IN ({','.join('?'*len(sess_ids))})", sess_ids)
+            c.execute(f"DELETE FROM attendance_sessions WHERE id IN ({','.join('?'*len(sess_ids))})", sess_ids)
+
+        # --- Enrollments
+        c.execute('DELETE FROM enrollments WHERE course_id=?', (course_id,))
+
+        # --- Finally: Course
+        c.execute('DELETE FROM courses WHERE id=?', (course_id,))
+        conn.commit()
+
 def delete_assignment(aid: int):
     with get_conn() as conn:
         c = conn.cursor()
@@ -522,24 +574,56 @@ def page_courses():
     render_user_chip()
     st.header('📘 Kursus')
     u = st.session_state.user
+
+    # ====== Form BUAT KURSUS (hanya instructor/admin) ======
+    if u['role'] in ['instructor', 'admin']:
+        with st.expander('➕ Buat Kursus (Guru)', expanded=False):
+            with st.form('new_course'):
+                code = st.text_input('Kode (unik, mis. MATH101)')
+                title = st.text_input('Judul Kursus')
+                desc = st.text_area('Deskripsi')
+                yt = st.text_input('YouTube URL (opsional)')
+                access = st.text_input('Kode Akses untuk siswa (opsional)')
+                ok_new = st.form_submit_button('Buat')
+            if ok_new:
+                if not code.strip() or not title.strip():
+                    st.error('Kode dan Judul wajib diisi.')
+                else:
+                    try:
+                        with get_conn() as conn:
+                            c = conn.cursor()
+                            c.execute('''INSERT INTO courses(code,title,description,youtube_url,access_code,instructor_id)
+                                         VALUES(?,?,?,?,?,?)''',
+                                      (code.strip(), title.strip(), desc, yt or None, access.strip() or None, u['id']))
+                            conn.commit()
+                        st.success('Kursus berhasil dibuat.')
+                        st.rerun()
+                    except sqlite3.IntegrityError:
+                        st.error('Kode kursus sudah dipakai. Gunakan kode lain.')
+
+    # ====== Ambil semua kursus ======
     with get_conn() as conn:
         c = conn.cursor()
-        c.execute('''SELECT c.id,c.code,c.title,c.description,c.youtube_url,u.name
-                     FROM courses c LEFT JOIN users u ON c.instructor_id=u.id''')
+        c.execute('''SELECT c.id,c.code,c.title,c.description,c.youtube_url,u.name,c.instructor_id
+                     FROM courses c LEFT JOIN users u ON c.instructor_id=u.id
+                     ORDER BY c.title''')
         rows = c.fetchall()
 
-    for cid, code, title, desc, yt, instr in rows:
+    # ====== Daftar kursus ======
+    for cid, code, title, desc, yt, instr, instr_id in rows:
         st.markdown(f"### {code} — {title}")
-        st.caption(f"Pengampu: {instr}")
+        st.caption(f"Pengampu: {instr or '-'}")
         if yt: st.video(yt)
         st.write(desc or '-')
 
+        # status enroll user sekarang
         with get_conn() as conn:
             c = conn.cursor()
             c.execute('SELECT 1 FROM enrollments WHERE user_id=? AND course_id=?', (u['id'], cid))
             enrolled = c.fetchone() is not None
 
-        cols = st.columns(2)
+        cols = st.columns([2,2,2])
+        # --- Kolom 1: Masuk / Gabung
         with cols[0]:
             if enrolled:
                 if st.button('Masuk ke Kelas', key=f'ent_{cid}'):
@@ -555,7 +639,7 @@ def page_courses():
                         c = conn.cursor()
                         c.execute('SELECT access_code FROM courses WHERE id=?', (cid,))
                         real = (c.fetchone() or [''])[0]
-                        if code_in == real:
+                        if (code_in or '').strip() == (real or '').strip():
                             c.execute('INSERT OR IGNORE INTO enrollments(user_id,course_id,role) VALUES(?,?,?)',
                                       (u['id'], cid, 'student'))
                             conn.commit()
@@ -566,25 +650,46 @@ def page_courses():
                         else:
                             st.error('Kode akses salah.')
 
+        # --- Kolom 2: Edit (Guru)
         with cols[1]:
-            if u['role'] in ['instructor', 'admin']:
+            if u['role'] in ['instructor', 'admin'] and (u['id'] == instr_id or u['role']=='admin'):
                 with st.expander('Edit Kursus (Guru)'):
                     with st.form(f'edit_{cid}'):
                         new_desc = st.text_area('Deskripsi', value=desc or '')
                         new_yt = st.text_input('YouTube URL', value=yt or '')
-                        new_code = st.text_input('Kode Akses (kosongkan jika tidak diubah)', value='')
+                        new_code = st.text_input('Kode Akses (opsional)', value='')
                         save = st.form_submit_button('Simpan')
                     if save:
                         with get_conn() as conn:
                             c = conn.cursor()
                             if new_code.strip():
                                 c.execute('UPDATE courses SET description=?, youtube_url=?, access_code=? WHERE id=?',
-                                          (new_desc, new_yt, new_code.strip(), cid))
+                                          (new_desc, new_yt or None, new_code.strip(), cid))
                             else:
                                 c.execute('UPDATE courses SET description=?, youtube_url=? WHERE id=?',
-                                          (new_desc, new_yt, cid))
+                                          (new_desc, new_yt or None, cid))
                             conn.commit()
                         st.success('Tersimpan.')
+
+        # --- Kolom 3: HAPUS (Guru/Admin)
+        with cols[2]:
+            if u['role'] in ['instructor', 'admin'] and (u['id'] == instr_id or u['role']=='admin'):
+                with st.expander('⚠️ Hapus Kursus'):
+                    with st.form(f'del_course_{cid}'):
+                        st.warning('Menghapus kursus akan menghapus semua data terkait (modules, assignments, quizzes, kehadiran, pengumuman, enrollments).')
+                        cek = st.checkbox('Saya paham risikonya')
+                        ketik = st.text_input(f"Ketik KODE kursus untuk konfirmasi: {code}")
+                        go = st.form_submit_button('Hapus Permanen')
+                    if go:
+                        if not cek:
+                            st.error('Centang konfirmasi dulu.')
+                        elif ketik.strip() != code:
+                            st.error('Kode konfirmasi tidak cocok.')
+                        else:
+                            delete_course(cid)
+                            st.success('Kursus terhapus.')
+                            st.rerun()
+
         st.divider()
 
 # ---------- Course context ----------
@@ -1266,3 +1371,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+
