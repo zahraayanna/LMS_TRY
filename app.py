@@ -4,12 +4,13 @@ import hashlib
 import os
 import io
 from datetime import datetime, timedelta
+import re
 
 # === Set page config HARUS paling awal dan hanya sekali ===
 st.set_page_config(page_title='ThinkVerse LMS', page_icon='🎓', layout='wide')
 
 # =============================
-# ThinkVerse LMS (Canvas-like) — FULL APP
+# ThinkVerse LMS (Canvas-like) — FULL APP (revisi modul/quiz/assignments)
 # =============================
 
 DB_PATH = 'lms.db'
@@ -92,6 +93,15 @@ def init_db():
             order_index INTEGER DEFAULT 0
         )''')
 
+        # module_images (multi-image per module)
+        c.execute('''CREATE TABLE IF NOT EXISTS module_images(
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            module_id INTEGER NOT NULL,
+            path TEXT NOT NULL,
+            caption TEXT,
+            order_index INTEGER DEFAULT 0
+        )''')
+
         # assignments
         c.execute('''CREATE TABLE IF NOT EXISTS assignments(
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -106,7 +116,7 @@ def init_db():
             embed_url TEXT
         )''')
 
-        # quizzes
+        # quizzes (tambah embed_url)
         c.execute('''CREATE TABLE IF NOT EXISTS quizzes(
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             course_id INTEGER NOT NULL,
@@ -114,7 +124,8 @@ def init_db():
             title TEXT NOT NULL,
             description TEXT,
             time_limit_minutes INTEGER,
-            total_points INTEGER DEFAULT 0
+            total_points INTEGER DEFAULT 0,
+            embed_url TEXT
         )''')
 
         c.execute('''CREATE TABLE IF NOT EXISTS quiz_questions(
@@ -199,6 +210,7 @@ def init_db():
             if column not in cols:
                 c.execute(f"ALTER TABLE {table} ADD COLUMN {column} {coltype}")
 
+        # keep backwards compat / safe migrations
         add_column_if_missing('courses', 'youtube_url', 'TEXT')
         add_column_if_missing('courses', 'access_code', 'TEXT')
         add_column_if_missing('modules', 'youtube_url', 'TEXT')
@@ -209,6 +221,7 @@ def init_db():
         add_column_if_missing('assignments', 'embed_url', 'TEXT')
         add_column_if_missing('assignments', 'module_id', 'INTEGER')
         add_column_if_missing('quizzes', 'module_id', 'INTEGER')
+        add_column_if_missing('quizzes', 'embed_url', 'TEXT')  # migration
         add_column_if_missing('quiz_questions', 'correct_text', 'TEXT')
         add_column_if_missing('quiz_questions', 'correct_regex', 'TEXT')
         add_column_if_missing('quiz_questions', 'case_sensitive', 'INTEGER')
@@ -285,7 +298,11 @@ def delete_course(course_id: int):
         # --- Assignments
         c.execute('DELETE FROM assignments WHERE course_id=?', (course_id,))
 
-        # --- Modules
+        # --- Modules (and module images)
+        c.execute('SELECT id FROM modules WHERE course_id=?', (course_id,))
+        mod_ids = [r[0] for r in c.fetchall()]
+        if mod_ids:
+            c.execute(f"DELETE FROM module_images WHERE module_id IN ({','.join('?'*len(mod_ids))})", mod_ids)
         c.execute('DELETE FROM modules WHERE course_id=?', (course_id,))
 
         # --- Books / Flipbooks
@@ -331,9 +348,11 @@ def delete_quiz(qid: int):
         conn.commit()
 
 def delete_module(mid: int):
-    detach_module_items(mid)
     with get_conn() as conn:
         c = conn.cursor()
+        # delete module images
+        c.execute('DELETE FROM module_images WHERE module_id=?', (mid,))
+        detach_module_items(mid)
         c.execute('DELETE FROM modules WHERE id=?', (mid,))
         conn.commit()
 
@@ -411,7 +430,7 @@ def page_login():
 # ---------- Sidebar (dashboard mode) ----------
 def sidebar_nav():
     st.sidebar.title('📚 ThinkVerse LMS')
-    u = st.session_state.get('user')
+    u = st.session_state.user
     if u:
         if u.get('photo_path') and os.path.exists(u['photo_path']):
             st.sidebar.image(u['photo_path'], width=72)  # tanpa caption
@@ -833,7 +852,7 @@ def page_books(course_id):
                 st.success('Buku dihapus.'); st.rerun()
         st.divider()
 
-# ----- Modules (Materi + quick add Assignment/Quiz) -----
+# ----- Modules (Materi + multi-image + edit) -----
 def page_modules(cid):
     st.header('📦 Modules (Materi per Bagian)')
     u = st.session_state.user
@@ -843,21 +862,28 @@ def page_modules(cid):
             title = st.text_input('Judul Topik')
             content = st.text_area('Pembahasan (Markdown diperbolehkan, LaTeX pakai $...$)')
             yt = st.text_input('YouTube URL (opsional)')
-            img = st.file_uploader('Gambar (opsional)')
+            imgs = st.file_uploader('Gambar (opsional, bisa banyak)', accept_multiple_files=True)
             order = st.number_input('Urutan', 0, 1000, 0)
             ok = st.form_submit_button('Tambah Topik')
         if ok:
             img_path = None
-            if img is not None:
-                img_path = os.path.join(UPLOAD_DIR, f"mod_{cid}_{datetime.now().timestamp()}_{img.name}")
-                with open(img_path, 'wb') as f: f.write(img.read())
             with get_conn() as conn:
                 c = conn.cursor()
                 c.execute('INSERT INTO modules(course_id,title,content,youtube_url,image_path,order_index) VALUES(?,?,?,?,?,?)',
-                          (cid, title, content, yt, img_path, order))
+                          (cid, title, content, yt, None, order))
+                conn.commit()
+                mid = c.lastrowid
+                # save uploaded images to module_images
+                if imgs:
+                    for i, f in enumerate(imgs):
+                        fname = f"modimg_{mid}_{int(datetime.now().timestamp())}_{i}_{f.name}"
+                        fpath = os.path.join(UPLOAD_DIR, fname)
+                        with open(fpath, 'wb') as fh: fh.write(f.read())
+                        c.execute('INSERT INTO module_images(module_id,path,caption,order_index) VALUES(?,?,?,?)',
+                                  (mid, fpath, '', i))
                 conn.commit()
             create_announcement(cid, 'Topik baru ditambahkan', f'Topik **{title}** telah dipublish.', 1)
-            st.success('Topik dibuat.')
+            st.success('Topik dibuat.'); st.rerun()
 
     with get_conn() as conn:
         c = conn.cursor()
@@ -866,9 +892,97 @@ def page_modules(cid):
 
     for mid, t, cont, yt, ip, ordr in mods:
         with st.expander(f"{ordr}. {t}", expanded=False):
+            # Display youtube if present
             if yt: st.video(yt)
-            if ip and os.path.exists(ip): st.image(ip)  # tanpa caption
-            if cont: st.markdown(cont)
+
+            # fetch module images (ordered)
+            with get_conn() as conn:
+                cur = conn.cursor()
+                cur.execute('SELECT id,path,caption,order_index FROM module_images WHERE module_id=? ORDER BY order_index', (mid,))
+                modimgs = cur.fetchall()
+
+            # render images with numbering and caption & allow reorder
+            if modimgs:
+                for idx, (imgid, path, cap, oidx) in enumerate(modimgs, start=1):
+                    if path and os.path.exists(path):
+                        st.markdown(f"**Gambar {idx}.** {cap or ''}")
+                        st.image(path)
+                st.markdown('---')
+
+            if cont:
+                st.markdown(cont)
+
+            # ---- Edit module (instruktur)
+            if u['role'] in ['instructor','admin']:
+                with st.expander('✏️ Edit Topik'):
+                    # main edit form
+                    with st.form(f'edit_mod_{mid}'):
+                        new_title = st.text_input('Judul', value=t)
+                        new_content = st.text_area('Konten (Markdown)', value=cont or '')
+                        new_yt = st.text_input('YouTube URL', value=yt or '')
+                        # upload new images
+                        new_imgs = st.file_uploader('Unggah gambar baru (opsional, bisa banyak)', accept_multiple_files=True, key=f'upimg_{mid}')
+                        save_mod = st.form_submit_button('Simpan Perubahan')
+                    if save_mod:
+                        with get_conn() as conn:
+                            c = conn.cursor()
+                            c.execute('UPDATE modules SET title=?, content=?, youtube_url=? WHERE id=?',
+                                      (new_title, new_content, new_yt or None, mid))
+                            # save new images
+                            if new_imgs:
+                                # determine current max order_index
+                                c.execute('SELECT COALESCE(MAX(order_index), -1) FROM module_images WHERE module_id=?', (mid,))
+                                maxord = c.fetchone()[0] or -1
+                                for i, f in enumerate(new_imgs, start=1):
+                                    fname = f"modimg_{mid}_{int(datetime.now().timestamp())}_{i}_{f.name}"
+                                    fpath = os.path.join(UPLOAD_DIR, fname)
+                                    with open(fpath, 'wb') as fh: fh.write(f.read())
+                                    c.execute('INSERT INTO module_images(module_id,path,caption,order_index) VALUES(?,?,?,?)',
+                                              (mid, fpath, '', maxord + i))
+                            conn.commit()
+                        st.success('Perubahan tersimpan.'); st.rerun()
+
+                    # manage existing images: change caption, reorder, delete
+                    if modimgs:
+                        st.markdown('**Kelola Gambar Topik**')
+                        form_fields = []
+                        with st.form(f'manage_imgs_{mid}'):
+                            new_orders = {}
+                            del_ids = []
+                            new_caps = {}
+                            for imgid, path, cap, oidx in modimgs:
+                                cols = st.columns([5,1,1])
+                                with cols[0]:
+                                    st.write(os.path.basename(path))
+                                    st.caption(cap or '')
+                                with cols[1]:
+                                    new_order = st.number_input(f'Order {imgid}', value=oidx or 0, key=f'ord_{imgid}')
+                                    new_orders[imgid] = new_order
+                                with cols[2]:
+                                    remove = st.checkbox(f'Hapus {imgid}', key=f'rem_{imgid}')
+                                    if remove:
+                                        del_ids.append(imgid)
+                                # caption edit
+                                new_cap = st.text_input(f'Caption {imgid}', value=cap or '', key=f'cap_{imgid}')
+                                new_caps[imgid] = new_cap
+                            save_imgs = st.form_submit_button('Simpan Perubahan Gambar')
+                        if save_imgs:
+                            with get_conn() as conn:
+                                c = conn.cursor()
+                                for iid in del_ids:
+                                    # delete file if exists
+                                    c.execute('SELECT path FROM module_images WHERE id=?', (iid,))
+                                    row = c.fetchone()
+                                    if row and row[0] and os.path.exists(row[0]):
+                                        try: os.remove(row[0])
+                                        except Exception: pass
+                                    c.execute('DELETE FROM module_images WHERE id=?', (iid,))
+                                for iid, nv in new_orders.items():
+                                    c.execute('UPDATE module_images SET order_index=? WHERE id=?', (nv, iid))
+                                for iid, nc in new_caps.items():
+                                    c.execute('UPDATE module_images SET caption=? WHERE id=?', (nc, iid))
+                                conn.commit()
+                            st.success('Perubahan gambar tersimpan.'); st.rerun()
 
             # ---- Quick add Assignment / Quiz
             if u['role'] in ['instructor','admin']:
@@ -901,12 +1015,13 @@ def page_modules(cid):
                         qt = st.text_input('Judul Quiz', key=f'qt_{mid}')
                         qd = st.text_area('Deskripsi', key=f'qd_{mid}')
                         tlim = st.number_input('Batas waktu (menit)', 0, 300, 0, key=f'ql_{mid}')
+                        embed = st.text_input('Embed / Video URL (opsional)', key=f'qem_{mid}')
                         ok_q = st.form_submit_button('Tambah Quiz')
                     if ok_q and qt.strip():
                         with get_conn() as conn:
                             c = conn.cursor()
-                            c.execute('INSERT INTO quizzes(course_id,module_id,title,description,time_limit_minutes) VALUES(?,?,?,?,?)',
-                                      (cid, mid, qt.strip(), qd, int(tlim)))
+                            c.execute('INSERT INTO quizzes(course_id,module_id,title,description,time_limit_minutes,embed_url) VALUES(?,?,?,?,?,?)',
+                                      (cid, mid, qt.strip(), qd, int(tlim), embed or None))
                             conn.commit()
                         create_announcement(cid, 'Quiz baru', f'Quiz **{qt.strip()}** ditambahkan pada topik **{t}**.', 1)
                         st.success('Quiz dibuat.'); st.rerun()
@@ -980,7 +1095,7 @@ def page_assignments(cid):
             due = datetime.combine(due_date, due_time)
             pts=st.number_input('Poin',0,1000,100)
             yt=st.text_input('YouTube URL (opsional)')
-            embed=st.text_input('Embed LKPD URL (Liveworksheets/Form/HTML, opsional)')
+            embed=st.text_input('Embed LKPD URL (Liveworksheets/Form/HTML/PDF, opsional)')
             mod = st.selectbox('Letakkan di Topik', mod_opts, format_func=lambda x: x[1])
             ok=st.form_submit_button('Tambah Tugas')
         if ok and title.strip():
@@ -1003,7 +1118,15 @@ def page_assignments(cid):
             st.markdown(f"### {at}  {'· 🧩 '+mtitle if mtitle else ''}")
             st.caption(f"Batas: {due} · Poin: {pts}")
             if yt: st.video(yt)
-            if embed: st.components.v1.iframe(embed, height=600)
+            # smarter embed: jika url mengarah ke pdf -> tampilkan pdf iframe
+            if embed:
+                if '.pdf' in (embed or '').lower():
+                    try:
+                        st.components.v1.iframe(embed, height=700)
+                    except Exception:
+                        st.write("Embed PDF gagal tampil. Coba link lain.")
+                else:
+                    st.components.v1.iframe(embed, height=600)
             if ad: st.markdown(ad)
         if u['role'] in ['instructor','admin']:
             with cols[1]:
@@ -1015,7 +1138,31 @@ def page_assignments(cid):
                     st.success('Assignment dihapus.'); st.rerun()
         st.divider()
 
-# ----- Quizzes (editor + autograde + delete question) -----
+# helper: grade short answer based on question id & given text
+def grade_short_answer_for_question(question_id, answer_text):
+    with get_conn() as conn:
+        c = conn.cursor()
+        c.execute('SELECT correct_text, correct_regex, case_sensitive, points FROM quiz_questions WHERE id=?', (question_id,))
+        row = c.fetchone()
+    if not row:
+        return False, 0
+    ct, cr, cs, pts = row
+    ans = (answer_text or '')
+    ok = None
+    if ct:
+        if cs:
+            ok = (ans == ct)
+        else:
+            ok = (ans.lower() == (ct or '').lower())
+    if ok is not True and cr:
+        try:
+            flags = 0 if cs else re.IGNORECASE
+            ok = re.fullmatch(cr, ans, flags) is not None
+        except re.error:
+            ok = False
+    return (True if ok else False), (pts or 0)
+
+# ----- Quizzes (editor + embed + inline short answer submission) -----
 def page_quizzes(cid):
     st.header('🧪 Quizzes')
     u = st.session_state.user
@@ -1029,26 +1176,41 @@ def page_quizzes(cid):
             qtitle = st.text_input('Judul Kuis')
             qdesc  = st.text_area('Deskripsi (opsional)')
             tlim   = st.number_input('Batas Waktu (menit)', 0, 300, 0)
+            embed = st.text_input('Embed / Video URL (opsional)')
             mod = st.selectbox('Letakkan di Topik', mod_opts, format_func=lambda x: x[1])
             ok = st.form_submit_button('Buat Kuis')
         if ok and qtitle.strip():
             with get_conn() as conn:
                 c = conn.cursor()
-                c.execute('INSERT INTO quizzes(course_id,module_id,title,description,time_limit_minutes) VALUES(?,?,?,?,?)',
-                          (cid, mod[0], qtitle.strip(), qdesc, int(tlim)))
+                c.execute('INSERT INTO quizzes(course_id,module_id,title,description,time_limit_minutes,embed_url) VALUES(?,?,?,?,?,?)',
+                          (cid, mod[0], qtitle.strip(), qdesc, int(tlim), embed or None))
                 conn.commit()
             create_announcement(cid, 'Quiz baru', f'Quiz **{qtitle.strip()}** dipublish.', 1)
             st.success('Kuis dibuat.'); st.rerun()
 
     with get_conn() as conn:
         c = conn.cursor()
-        c.execute('''SELECT q.id,q.title,q.description,q.time_limit_minutes,q.total_points,m.title
+        c.execute('''SELECT q.id,q.title,q.description,q.time_limit_minutes,q.total_points,q.embed_url,m.title
                      FROM quizzes q LEFT JOIN modules m ON q.module_id=m.id
                      WHERE q.course_id=? ORDER BY q.id DESC''', (cid,))
         quizzes = c.fetchall()
 
-    for qid, qt, qdesc, tlim, tpts, mtitle in quizzes:
+    for qid, qt, qdesc, tlim, tpts, qembed, mtitle in quizzes:
         with st.expander(f"{qt} {'· 🧩 '+mtitle if mtitle else ''} — {tpts or 0} pts"):
+            # show embed if present
+            if qembed:
+                # if looks like youtube link, show video widget; else iframe
+                if 'youtube' in (qembed or '') or 'youtu.be' in (qembed or ''):
+                    try:
+                        st.video(qembed)
+                    except Exception:
+                        st.components.v1.iframe(qembed, height=600)
+                else:
+                    try:
+                        st.components.v1.iframe(qembed, height=600)
+                    except Exception:
+                        st.write("Embed tidak dapat ditampilkan.")
+
             st.write(qdesc or '-')
             st.caption(f"Time limit: {tlim or '—'} menit")
 
@@ -1114,6 +1276,7 @@ def page_quizzes(cid):
                 if ip and os.path.exists(ip): st.image(ip)
                 st.caption(f"Poin: {pp}")
 
+                # Instructor view for MCQ: manage choices (existing behavior)
                 if qt_ == 'mcq' and u['role'] in ['instructor','admin']:
                     with get_conn() as conn:
                         c = conn.cursor()
@@ -1143,6 +1306,38 @@ def page_quizzes(cid):
                             conn.commit()
                         st.success('Pilihan diperbarui.'); st.rerun()
 
+                # STUDENT inline short-answer quick submit
+                if qt_ == 'short' and u['role'] == 'student':
+                    # show last submission if exists
+                    with get_conn() as conn:
+                        c = conn.cursor()
+                        c.execute('''SELECT qa.text_answer, qa.is_correct, qa.attempt_id, a.submitted_at
+                                     FROM quiz_answers qa JOIN quiz_attempts a ON qa.attempt_id=a.id
+                                     WHERE qa.question_id=? AND a.student_id=? ORDER BY a.id DESC LIMIT 1''', (qnid, u['id']))
+                        prev = c.fetchone()
+                    if prev:
+                        prev_txt, prev_ok, prev_attid, prev_ts = prev
+                        st.caption(f"Terakhir dikirim: '{prev_txt}' — {'Benar' if prev_ok==1 else 'Salah' if prev_ok==0 else 'Belum dinilai'} • {prev_ts}")
+                    with st.form(f'inline_short_{qnid}'):
+                        ans = st.text_input('Kirim jawaban singkat', key=f'ins_{qnid}')
+                        submit_short = st.form_submit_button('Kirim Jawaban')
+                    if submit_short:
+                        # grade answer
+                        is_correct, pts = grade_short_answer_for_question(qnid, ans)
+                        # create attempt & answer
+                        with get_conn() as conn:
+                            c = conn.cursor()
+                            now = datetime.now().isoformat()
+                            c.execute('INSERT INTO quiz_attempts(quiz_id,student_id,started_at,submitted_at,score) VALUES(?,?,?,?,?)',
+                                      (qid, u['id'], now, now, 0))
+                            att_id = c.lastrowid
+                            c.execute('INSERT INTO quiz_answers(attempt_id,question_id,choice_id,text_answer,is_correct) VALUES(?,?,?,?,?)',
+                                      (att_id, qnid, None, ans, 1 if is_correct else 0))
+                            # update attempt score
+                            c.execute('UPDATE quiz_attempts SET score=? WHERE id=?', (pts if is_correct else 0, att_id))
+                            conn.commit()
+                        st.success(f'Jawaban terkirim. {"Benar" if is_correct else "Salah"} — mendapat {pts if is_correct else 0} poin.')
+
             if u['role'] in ['instructor','admin']:
                 with st.form(f'del_quiz_{qid}'):
                     cfm = st.checkbox('Hapus kuis ini **beserta** semua soal & data hasilnya.')
@@ -1158,7 +1353,7 @@ def page_quizzes(cid):
                     att = c.fetchone()
                 if att:
                     st.info(f"Percobaan terakhir: skor {att[0]} • {att[1]}")
-                if st.button('Kerjakan Kuis', key=f'do_{qid}'):
+                if st.button('Kerjakan Kuis (Full)', key=f'do_{qid}'):
                     do_quiz(cid, qid)
 
             if u['role'] in ['instructor','admin']:
@@ -1255,7 +1450,6 @@ def page_take_quiz():
                     if ct:
                         ok = (ans == ct) if cs else (ans.lower() == (ct or '').lower())
                     if ok is not True and cr:
-                        import re
                         flags = 0 if cs else re.IGNORECASE
                         try:
                             ok = re.fullmatch(cr, ans, flags) is not None
@@ -1371,4 +1565,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-
