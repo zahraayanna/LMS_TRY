@@ -734,36 +734,47 @@ def page_attendance(course_id):
     import csv
     from io import StringIO
 
-    for sid, title, sdate, code, is_open, created_at in sess:
+        for sid, title, sdate, code, is_open, created_at in sess:
         with st.expander(f"{title} • {sdate} {'🟢 OPEN' if is_open else '🔴 CLOSED'}"):
             st.caption(f"Kode: **{code or '-'}** • Dibuat: {created_at}")
-            if u['role'] in ['instructor','admin']:\
-                c1, c2, c3 = st.columns([1,1,2])
+            if u['role'] in ['instructor', 'admin']:
+                c1, c2, c3 = st.columns([1, 1, 2])
                 with c1:
                     if st.button('Buka', key=f'op_{sid}'):
                         with get_conn() as conn:
-                            cur=conn.cursor(); cur.execute('UPDATE attendance_sessions SET is_open=1 WHERE id=?', (sid,)); conn.commit()
+                            cur = conn.cursor()
+                            cur.execute('UPDATE attendance_sessions SET is_open=1 WHERE id=?', (sid,))
+                            conn.commit()
                         st.rerun()
                 with c2:
                     if st.button('Tutup', key=f'cl_{sid}'):
                         with get_conn() as conn:
-                            cur=conn.cursor(); cur.execute('UPDATE attendance_sessions SET is_open=0 WHERE id=?', (sid,)); conn.commit()
+                            cur = conn.cursor()
+                            cur.execute('UPDATE attendance_sessions SET is_open=0 WHERE id=?', (sid,))
+                            conn.commit()
                         st.rerun()
                 with c3:
                     with get_conn() as conn:
-                        cur=conn.cursor()
+                        cur = conn.cursor()
                         cur.execute('''SELECT u.name, l.marked_at
-                                       FROM attendance_logs l JOIN users u ON u.id=l.student_id
+                                       FROM attendance_logs l
+                                       JOIN users u ON u.id = l.student_id
                                        WHERE l.session_id=? ORDER BY l.id ASC''', (sid,))
                         logs = cur.fetchall()
                     if logs:
-                        buff = StringIO(); writer = csv.writer(buff)
-                        writer.writerow(['Nama','Marked At'])
-                        for nm, ts in logs: writer.writerow([nm, ts])
-                        st.download_button('Unduh CSV Kehadiran', buff.getvalue().encode('utf-8'), file_name=f'absensi_{sid}.csv', mime='text/csv')
+                        import csv
+                        from io import StringIO
+                        buff = StringIO()
+                        writer = csv.writer(buff)
+                        writer.writerow(['Nama', 'Marked At'])
+                        for nm, ts in logs:
+                            writer.writerow([nm, ts])
+                        st.download_button('Unduh CSV Kehadiran', buff.getvalue().encode('utf-8'),
+                                           file_name=f'absensi_{sid}.csv', mime='text/csv')
                     else:
                         st.caption('Belum ada kehadiran.')
-            if u['role']=='student':
+
+            if u['role'] == 'student':
                 if is_open:
                     with st.form(f'mark_{sid}'):
                         code_in = st.text_input('Masukkan kode absensi')
@@ -773,9 +784,10 @@ def page_attendance(course_id):
                             st.error('Kode absensi salah.')
                         else:
                             with get_conn() as conn:
-                                cur=conn.cursor()
+                                cur = conn.cursor()
                                 try:
-                                    cur.execute('INSERT INTO attendance_logs(session_id,student_id) VALUES(?,?)', (sid, u['id']))
+                                    cur.execute('INSERT INTO attendance_logs(session_id,student_id) VALUES(?,?)',
+                                                (sid, u['id']))
                                     conn.commit()
                                     st.success('Kehadiran terekam!')
                                 except sqlite3.IntegrityError:
@@ -1390,3 +1402,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+
