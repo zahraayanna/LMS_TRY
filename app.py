@@ -390,24 +390,56 @@ def login(email, pw):
 
 # ---------- Landing Login ----------
 def page_login():
-    # HAPUS set_page_config dari sini (sudah di atas file)
     st.markdown('<div style="display:flex;justify-content:center;align-items:center;height:80vh;background:#2f4858">', unsafe_allow_html=True)
     st.markdown('<div style="background:#fff;padding:32px;border-radius:12px;width:520px;box-shadow:0 10px 30px rgba(0,0,0,.15)">', unsafe_allow_html=True)
-    st.markdown('## Welcome to LMS')
+    st.markdown('## Welcome to ThinkVerse LMS')
 
-    with st.form('login_form'):
-        email = st.text_input('Email *')
-        pw = st.text_input('Password *', type='password')
-        ok = st.form_submit_button('Log In')
-    if ok:
-        user = login(email, pw)
-        if user:
-            st.session_state.user = user
-            st.rerun()
-        else:
-            st.error('Email atau password salah.')
+    # === Tab navigasi login / lupa password / register ===
+    tabs = st.tabs(["🔑 Login", "🔁 Lupa Password", "🆕 Register"])
 
-    with st.expander('Create an account'):
+    # ---------------- LOGIN ----------------
+    with tabs[0]:
+        with st.form('login_form'):
+            email = st.text_input('Email *')
+            pw = st.text_input('Password *', type='password')
+            ok = st.form_submit_button('Log In')
+        if ok:
+            user = login(email, pw)
+            if user:
+                st.session_state.user = user
+                st.rerun()
+            else:
+                st.error('Email atau password salah.')
+
+    # ---------------- FORGOT PASSWORD ----------------
+    with tabs[1]:
+        st.write("Masukkan email akun kamu dan buat password baru.")
+        with st.form("forgot_pw"):
+            email_fp = st.text_input("Email akun *")
+            new_pw = st.text_input("Password baru *", type='password')
+            confirm_pw = st.text_input("Ulangi password baru *", type='password')
+            ok_fp = st.form_submit_button("Reset Password")
+
+        if ok_fp:
+            if not email_fp.strip():
+                st.error("Email wajib diisi.")
+            elif new_pw != confirm_pw:
+                st.error("Password baru tidak sama.")
+            else:
+                with get_conn() as conn:
+                    c = conn.cursor()
+                    c.execute("SELECT id FROM users WHERE email=?", (email_fp.strip(),))
+                    user_row = c.fetchone()
+                    if user_row:
+                        uid = user_row[0]
+                        c.execute("UPDATE users SET password_hash=? WHERE id=?", (hash_pw(new_pw), uid))
+                        conn.commit()
+                        st.success("✅ Password berhasil direset! Silakan login kembali.")
+                    else:
+                        st.error("Email tidak ditemukan di sistem.")
+
+    # ---------------- REGISTER ----------------
+    with tabs[2]:
         with st.form('reg'):
             name = st.text_input('Full name')
             email_r = st.text_input('Email')
@@ -421,7 +453,7 @@ def page_login():
                     c.execute('INSERT INTO users(name,email,password_hash,role) VALUES(?,?,?,?)',
                               (name, email_r, hash_pw(pw_r), role))
                     conn.commit()
-                st.success('Account created. Please log in above.')
+                st.success('Akun berhasil dibuat! Silakan login di tab pertama.')
             except sqlite3.IntegrityError:
                 st.error('Email sudah terdaftar.')
 
@@ -1422,4 +1454,5 @@ def main():
 
 if __name__ == '__main__':
     main()
+
 
