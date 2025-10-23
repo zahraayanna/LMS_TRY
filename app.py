@@ -3,57 +3,55 @@ import sqlite3
 import hashlib
 import os
 import io
-from datetime import datetime, timedelta
 import re
+import time
+from datetime import datetime, timedelta
 
-# === Set page config HARUS paling awal dan hanya sekali ===
+# === CONFIG UTAMA ===
 st.set_page_config(page_title='ThinkVerse LMS', page_icon='🎓', layout='wide')
 
 # =============================
-# ThinkVerse LMS (Canvas-like) — FULL APP (revisi modul/quiz/assignments)
+# ThinkVerse LMS — CORE SYSTEM
 # =============================
 
-DB_PATH = 'lms.db'
-UPLOAD_DIR = 'uploads'
+# Folder dasar
+BASE_DIR = "C:\\LMS_TRY2"
+DB_PATH = os.path.join(BASE_DIR, "lms.db")
+UPLOAD_DIR = os.path.join(BASE_DIR, "uploads")
+os.makedirs(BASE_DIR, exist_ok=True)
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
-# ---------- Utilities ----------
+COOKIE_KEY = "thinkverse_login_token"
+
+# ---------- UTILITAS DASAR ----------
 def get_conn():
     return sqlite3.connect(DB_PATH, check_same_thread=False)
 
 def hash_pw(pw: str) -> str:
     return hashlib.sha256(pw.encode()).hexdigest()
 
-def create_announcement(course_id: int, title: str, message: str, is_system: int = 1):
-    with get_conn() as conn:
-        c = conn.cursor()
-        c.execute(
-            'INSERT INTO announcements(course_id,title,message,is_system) VALUES(?,?,?,?)',
-            (course_id, title, message, is_system)
-        )
-        conn.commit()
-
 def render_user_chip():
-    """Chip user di kanan atas halaman (foto + nama + role) tanpa caption gambar."""
+    """Chip user kanan atas"""
     u = st.session_state.get('user')
-    if not u: return
+    if not u:
+        return
     col_sp, col_chip = st.columns([6, 1])
     with col_chip:
         st.markdown("<div style='text-align:right'>", unsafe_allow_html=True)
         if u.get('photo_path') and os.path.exists(u['photo_path']):
-            st.image(u['photo_path'], width=64)  # tanpa caption
+            st.image(u['photo_path'], width=64)
         st.markdown(
             f"<div style='font-size:0.85rem;color:#6b7280'>{u['name']} • {u['role']}</div>",
             unsafe_allow_html=True
         )
         st.markdown("</div>", unsafe_allow_html=True)
 
-# ---------- DB ----------
+
+# ---------- INISIALISASI DATABASE ----------
 def init_db():
     with get_conn() as conn:
         c = conn.cursor()
 
-        # users (+ photo_path)
         c.execute('''CREATE TABLE IF NOT EXISTS users(
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL,
@@ -63,7 +61,6 @@ def init_db():
             photo_path TEXT
         )''')
 
-        # courses
         c.execute('''CREATE TABLE IF NOT EXISTS courses(
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             code TEXT UNIQUE NOT NULL,
@@ -74,7 +71,6 @@ def init_db():
             instructor_id INTEGER
         )''')
 
-        # enrollments
         c.execute('''CREATE TABLE IF NOT EXISTS enrollments(
             user_id INTEGER,
             course_id INTEGER,
@@ -82,7 +78,6 @@ def init_db():
             PRIMARY KEY(user_id,course_id)
         )''')
 
-        # modules
         c.execute('''CREATE TABLE IF NOT EXISTS modules(
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             course_id INTEGER NOT NULL,
@@ -93,16 +88,6 @@ def init_db():
             order_index INTEGER DEFAULT 0
         )''')
 
-        # module_images (multi-image per module)
-        c.execute('''CREATE TABLE IF NOT EXISTS module_images(
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            module_id INTEGER NOT NULL,
-            path TEXT NOT NULL,
-            caption TEXT,
-            order_index INTEGER DEFAULT 0
-        )''')
-
-        # assignments
         c.execute('''CREATE TABLE IF NOT EXISTS assignments(
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             course_id INTEGER NOT NULL,
@@ -116,7 +101,6 @@ def init_db():
             embed_url TEXT
         )''')
 
-        # quizzes (tambah embed_url)
         c.execute('''CREATE TABLE IF NOT EXISTS quizzes(
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             course_id INTEGER NOT NULL,
@@ -128,45 +112,6 @@ def init_db():
             embed_url TEXT
         )''')
 
-        c.execute('''CREATE TABLE IF NOT EXISTS quiz_questions(
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            quiz_id INTEGER NOT NULL,
-            qtype TEXT NOT NULL CHECK(qtype IN ('mcq','short')),
-            prompt TEXT,
-            latex TEXT,
-            image_path TEXT,
-            points INTEGER DEFAULT 1,
-            correct_text TEXT,
-            correct_regex TEXT,
-            case_sensitive INTEGER DEFAULT 0
-        )''')
-
-        c.execute('''CREATE TABLE IF NOT EXISTS quiz_choices(
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            question_id INTEGER NOT NULL,
-            label TEXT NOT NULL,
-            is_correct INTEGER DEFAULT 0
-        )''')
-
-        c.execute('''CREATE TABLE IF NOT EXISTS quiz_attempts(
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            quiz_id INTEGER NOT NULL,
-            student_id INTEGER NOT NULL,
-            started_at TEXT,
-            submitted_at TEXT,
-            score REAL
-        )''')
-
-        c.execute('''CREATE TABLE IF NOT EXISTS quiz_answers(
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            attempt_id INTEGER NOT NULL,
-            question_id INTEGER NOT NULL,
-            choice_id INTEGER,
-            text_answer TEXT,
-            is_correct INTEGER
-        )''')
-
-        # announcements
         c.execute('''CREATE TABLE IF NOT EXISTS announcements(
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             course_id INTEGER NOT NULL,
@@ -176,60 +121,10 @@ def init_db():
             posted_at TEXT DEFAULT CURRENT_TIMESTAMP
         )''')
 
-        # books/resources (flipbook)
-        c.execute('''CREATE TABLE IF NOT EXISTS course_books (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            course_id INTEGER NOT NULL,
-            title TEXT NOT NULL,
-            embed_url TEXT NOT NULL
-        )''')
-
-        # attendance
-        c.execute('''CREATE TABLE IF NOT EXISTS attendance_sessions (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            course_id INTEGER NOT NULL,
-            title TEXT NOT NULL,
-            session_date TEXT NOT NULL,
-            access_code TEXT,
-            is_open INTEGER DEFAULT 1,
-            created_at TEXT DEFAULT CURRENT_TIMESTAMP
-        )''')
-
-        c.execute('''CREATE TABLE IF NOT EXISTS attendance_logs (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            session_id INTEGER NOT NULL,
-            student_id INTEGER NOT NULL,
-            marked_at TEXT DEFAULT CURRENT_TIMESTAMP,
-            UNIQUE(session_id, student_id)
-        )''')
-
-        # ---- light migrations ----
-        def add_column_if_missing(table, column, coltype):
-            c.execute(f"PRAGMA table_info({table})")
-            cols = [r[1] for r in c.fetchall()]
-            if column not in cols:
-                c.execute(f"ALTER TABLE {table} ADD COLUMN {column} {coltype}")
-
-        # keep backwards compat / safe migrations
-        add_column_if_missing('courses', 'youtube_url', 'TEXT')
-        add_column_if_missing('courses', 'access_code', 'TEXT')
-        add_column_if_missing('modules', 'youtube_url', 'TEXT')
-        add_column_if_missing('modules', 'image_path', 'TEXT')
-        add_column_if_missing('modules', 'order_index', 'INTEGER')
-        add_column_if_missing('assignments', 'youtube_url', 'TEXT')
-        add_column_if_missing('assignments', 'image_path', 'TEXT')
-        add_column_if_missing('assignments', 'embed_url', 'TEXT')
-        add_column_if_missing('assignments', 'module_id', 'INTEGER')
-        add_column_if_missing('quizzes', 'module_id', 'INTEGER')
-        add_column_if_missing('quizzes', 'embed_url', 'TEXT')  # migration
-        add_column_if_missing('quiz_questions', 'correct_text', 'TEXT')
-        add_column_if_missing('quiz_questions', 'correct_regex', 'TEXT')
-        add_column_if_missing('quiz_questions', 'case_sensitive', 'INTEGER')
-        add_column_if_missing('announcements', 'is_system', 'INTEGER')
-        add_column_if_missing('users', 'photo_path', 'TEXT')
-
         conn.commit()
 
+
+# ---------- SEED DEMO ----------
 def seed_demo():
     with get_conn() as conn:
         c = conn.cursor()
@@ -243,142 +138,10 @@ def seed_demo():
             ]
             c.executemany('INSERT INTO users(name,email,password_hash,role,photo_path) VALUES(?,?,?,?,?)', users)
 
-        c.execute('SELECT COUNT(*) FROM courses')
-        if c.fetchone()[0] == 0:
-            c.execute('SELECT id FROM users WHERE email=?', ('instructor@example.com',))
-            instr_id = c.fetchone()[0]
-            c.execute('''INSERT INTO courses(code,title,description,youtube_url,access_code,instructor_id)
-                         VALUES(?,?,?,?,?,?)''',
-                      ('PHY101', 'EFEK FOTOLISTRIK',
-                       'Unit pembelajaran tentang efek fotolistrik.',
-                       'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
-                       'PHY101-2025', instr_id))
-            cid = c.lastrowid
-            c.execute('SELECT id FROM users WHERE email=?', ('student@example.com',))
-            stu_id = c.fetchone()[0]
-            c.execute('INSERT OR IGNORE INTO enrollments(user_id,course_id,role) VALUES(?,?,?)', (instr_id, cid, 'instructor'))
-            c.execute('INSERT OR IGNORE INTO enrollments(user_id,course_id,role) VALUES(?,?,?)', (stu_id, cid, 'student'))
-
         conn.commit()
 
-# ---------- Deletion helpers ----------
-def detach_module_items(module_id: int):
-    with get_conn() as conn:
-        c = conn.cursor()
-        c.execute('UPDATE assignments SET module_id=NULL WHERE module_id=?', (module_id,))
-        c.execute('UPDATE quizzes SET module_id=NULL WHERE module_id=?', (module_id,))
-        conn.commit()
 
-def delete_course(course_id: int):
-    """Hapus kursus + seluruh data turunannya secara aman."""
-    with get_conn() as conn:
-        c = conn.cursor()
-
-        # --- Quizzes: hapus attempts -> answers, questions -> choices, lalu quiz
-        c.execute('SELECT id FROM quizzes WHERE course_id=?', (course_id,))
-        quiz_ids = [r[0] for r in c.fetchall()]
-        if quiz_ids:
-            # attempts -> answers
-            c.execute(f"SELECT id FROM quiz_attempts WHERE quiz_id IN ({','.join('?'*len(quiz_ids))})", quiz_ids)
-            att_ids = [r[0] for r in c.fetchall()]
-            if att_ids:
-                c.execute(f"DELETE FROM quiz_answers WHERE attempt_id IN ({','.join('?'*len(att_ids))})", att_ids)
-                c.execute(f"DELETE FROM quiz_attempts WHERE id IN ({','.join('?'*len(att_ids))})", att_ids)
-
-            # questions -> choices
-            c.execute(f"SELECT id FROM quiz_questions WHERE quiz_id IN ({','.join('?'*len(quiz_ids))})", quiz_ids)
-            qn_ids = [r[0] for r in c.fetchall()]
-            if qn_ids:
-                c.execute(f"DELETE FROM quiz_choices WHERE question_id IN ({','.join('?'*len(qn_ids))})", qn_ids)
-                c.execute(f"DELETE FROM quiz_questions WHERE id IN ({','.join('?'*len(qn_ids))})", qn_ids)
-
-            # quizzes
-            c.execute(f"DELETE FROM quizzes WHERE id IN ({','.join('?'*len(quiz_ids))})", quiz_ids)
-
-        # --- Assignments
-        c.execute('DELETE FROM assignments WHERE course_id=?', (course_id,))
-
-        # --- Modules (and module images)
-        c.execute('SELECT id FROM modules WHERE course_id=?', (course_id,))
-        mod_ids = [r[0] for r in c.fetchall()]
-        if mod_ids:
-            c.execute(f"DELETE FROM module_images WHERE module_id IN ({','.join('?'*len(mod_ids))})", mod_ids)
-        c.execute('DELETE FROM modules WHERE course_id=?', (course_id,))
-
-        # --- Books / Flipbooks
-        c.execute('DELETE FROM course_books WHERE course_id=?', (course_id,))
-
-        # --- Announcements
-        c.execute('DELETE FROM announcements WHERE course_id=?', (course_id,))
-
-        # --- Attendance (logs dulu baru sessions)
-        c.execute('SELECT id FROM attendance_sessions WHERE course_id=?', (course_id,))
-        sess_ids = [r[0] for r in c.fetchall()]
-        if sess_ids:
-            c.execute(f"DELETE FROM attendance_logs WHERE session_id IN ({','.join('?'*len(sess_ids))})", sess_ids)
-            c.execute(f"DELETE FROM attendance_sessions WHERE id IN ({','.join('?'*len(sess_ids))})", sess_ids)
-
-        # --- Enrollments
-        c.execute('DELETE FROM enrollments WHERE course_id=?', (course_id,))
-
-        # --- Finally: Course
-        c.execute('DELETE FROM courses WHERE id=?', (course_id,))
-        conn.commit()
-
-def delete_assignment(aid: int):
-    with get_conn() as conn:
-        c = conn.cursor()
-        c.execute('DELETE FROM assignments WHERE id=?', (aid,))
-        conn.commit()
-
-def delete_quiz(qid: int):
-    with get_conn() as conn:
-        c = conn.cursor()
-        c.execute('SELECT id FROM quiz_attempts WHERE quiz_id=?', (qid,))
-        atts = [r[0] for r in c.fetchall()]
-        if atts:
-            c.execute(f"DELETE FROM quiz_answers WHERE attempt_id IN ({','.join('?'*len(atts))})", atts)
-            c.execute(f"DELETE FROM quiz_attempts WHERE id IN ({','.join('?'*len(atts))})", atts)
-        c.execute('SELECT id FROM quiz_questions WHERE quiz_id=?', (qid,))
-        qids = [r[0] for r in c.fetchall()]
-        if qids:
-            c.execute(f"DELETE FROM quiz_choices WHERE question_id IN ({','.join('?'*len(qids))})", qids)
-            c.execute(f"DELETE FROM quiz_questions WHERE id IN ({','.join('?'*len(qids))})", qids)
-        c.execute('DELETE FROM quizzes WHERE id=?', (qid,))
-        conn.commit()
-
-def delete_module(mid: int):
-    with get_conn() as conn:
-        c = conn.cursor()
-        # delete module images
-        c.execute('DELETE FROM module_images WHERE module_id=?', (mid,))
-        detach_module_items(mid)
-        c.execute('DELETE FROM modules WHERE id=?', (mid,))
-        conn.commit()
-
-def delete_announcement(anid: int):
-    with get_conn() as conn:
-        c = conn.cursor()
-        c.execute('DELETE FROM announcements WHERE id=?', (anid,))
-        conn.commit()
-
-def delete_book(bid: int):
-    with get_conn() as conn:
-        c = conn.cursor()
-        c.execute('DELETE FROM course_books WHERE id=?', (bid,))
-        conn.commit()
-
-def delete_question(qnid: int, quiz_id: int):
-    with get_conn() as conn:
-        c = conn.cursor()
-        c.execute('DELETE FROM quiz_answers WHERE question_id=?', (qnid,))
-        c.execute('DELETE FROM quiz_choices WHERE question_id=?', (qnid,))
-        c.execute('DELETE FROM quiz_questions WHERE id=?', (qnid,))
-        c.execute('UPDATE quizzes SET total_points=(SELECT COALESCE(SUM(points),0) FROM quiz_questions WHERE quiz_id=?) WHERE id=?',
-                  (quiz_id, quiz_id))
-        conn.commit()
-
-# ---------- Auth ----------
+# ---------- AUTENTIKASI ----------
 def login(email, pw):
     with get_conn() as conn:
         c = conn.cursor()
@@ -388,30 +151,59 @@ def login(email, pw):
             return {'id': r[0], 'name': r[1], 'email': email, 'role': r[3], 'photo_path': r[5]}
     return None
 
-# ---------- Landing Login ----------
+
+def auto_login():
+    """Login otomatis dari cookie jika ada"""
+    token = st.experimental_get_query_params().get(COOKIE_KEY, [None])[0]
+    if not token:
+        return False
+
+    with get_conn() as conn:
+        c = conn.cursor()
+        c.execute("SELECT id,name,email,role,photo_path FROM users WHERE password_hash=?", (token,))
+        r = c.fetchone()
+        if r:
+            st.session_state.user = {'id': r[0], 'name': r[1], 'email': r[2], 'role': r[3], 'photo_path': r[4]}
+            return True
+    return False
+
+
+# ---------- HALAMAN LOGIN ----------
 def page_login():
+    # Auto-login dulu
+    if 'user' in st.session_state and st.session_state.user:
+        return
+    if auto_login():
+        st.success("Login otomatis berhasil ✅")
+        time.sleep(0.5)
+        st.rerun()
+
     st.markdown('<div style="display:flex;justify-content:center;align-items:center;height:80vh;background:#2f4858">', unsafe_allow_html=True)
     st.markdown('<div style="background:#fff;padding:32px;border-radius:12px;width:520px;box-shadow:0 10px 30px rgba(0,0,0,.15)">', unsafe_allow_html=True)
     st.markdown('## Welcome to ThinkVerse LMS')
 
-    # === Tab navigasi login / lupa password / register ===
     tabs = st.tabs(["🔑 Login", "🔁 Lupa Password", "🆕 Register"])
 
-    # ---------------- LOGIN ----------------
+    # --- LOGIN ---
     with tabs[0]:
         with st.form('login_form'):
             email = st.text_input('Email *')
             pw = st.text_input('Password *', type='password')
+            remember = st.checkbox('Ingat saya di perangkat ini')
             ok = st.form_submit_button('Log In')
         if ok:
             user = login(email, pw)
             if user:
                 st.session_state.user = user
+                if remember:
+                    st.experimental_set_query_params(**{COOKIE_KEY: hash_pw(pw)})
+                st.success(f"Selamat datang, {user['name']}!")
+                time.sleep(0.8)
                 st.rerun()
             else:
                 st.error('Email atau password salah.')
 
-    # ---------------- FORGOT PASSWORD ----------------
+    # --- LUPA PASSWORD ---
     with tabs[1]:
         st.write("Masukkan email akun kamu dan buat password baru.")
         with st.form("forgot_pw"):
@@ -438,7 +230,7 @@ def page_login():
                     else:
                         st.error("Email tidak ditemukan di sistem.")
 
-    # ---------------- REGISTER ----------------
+    # --- REGISTER ---
     with tabs[2]:
         with st.form('reg'):
             name = st.text_input('Full name')
@@ -459,29 +251,35 @@ def page_login():
 
     st.markdown('</div></div>', unsafe_allow_html=True)
 
-# ---------- Sidebar (dashboard mode) ----------
+# ======================================================
+# ===============  DASHBOARD UTAMA  ====================
+# ======================================================
+
+# ---------- SIDEBAR (navigasi utama) ----------
 def sidebar_nav():
     st.sidebar.title('📚 ThinkVerse LMS')
     u = st.session_state.user
     if u:
         if u.get('photo_path') and os.path.exists(u['photo_path']):
-            st.sidebar.image(u['photo_path'], width=72)  # tanpa caption
+            st.sidebar.image(u['photo_path'], width=72)
         st.sidebar.markdown(f"**{u['name']}**  \n_{u['role']}_")
         st.sidebar.success(f"Login sebagai {u['email']}")
         if st.sidebar.button('Logout'):
             st.session_state.user = None
             st.session_state.in_course = False
             st.session_state.current_course = None
+            st.experimental_set_query_params()  # hapus token cookie
             st.rerun()
+
     section = st.sidebar.radio('Navigasi', ['🏠 Beranda', '📘 Kursus', '👤 Akun'])
     return section
 
-# ---------- Helper Dashboard ----------
+
+# ---------- HELPER KURSUS ----------
 def get_enrolled_courses_for_user(user_id: int):
-    """Kursus yang diikuti user (student) atau diampu (instructor)."""
     with get_conn() as conn:
         c = conn.cursor()
-        # Kursus diikuti (role student)
+        # kursus diikuti siswa
         c.execute('''SELECT c.id, c.code, c.title, u.name as instr_name, c.description
                      FROM enrollments e
                      JOIN courses c ON c.id = e.course_id
@@ -490,7 +288,7 @@ def get_enrolled_courses_for_user(user_id: int):
                      ORDER BY c.title''', (user_id,))
         enrolled = c.fetchall()
 
-        # Kursus diampu (role instructor)
+        # kursus diampu guru
         c.execute('''SELECT c.id, c.code, c.title, u.name as instr_name, c.description
                      FROM courses c
                      LEFT JOIN users u ON u.id = c.instructor_id
@@ -500,8 +298,9 @@ def get_enrolled_courses_for_user(user_id: int):
 
     return enrolled, teaching
 
+
 def render_course_tile(cid, code, title, instr, desc, button_key: str):
-    """Tile kursus ala Canvas dengan key tombol unik untuk hindari duplikasi."""
+    """Tampilan tile kursus ala Canvas"""
     with st.container(border=True):
         st.markdown(f"### {title}")
         st.caption(f"{code} • Pengampu: {instr or '-'}")
@@ -513,17 +312,18 @@ def render_course_tile(cid, code, title, instr, desc, button_key: str):
             st.session_state.in_course = True
             st.rerun()
 
-# ---------- Dashboard pages ----------
+
+# ---------- HALAMAN HOME ----------
 def page_home():
     render_user_chip()
     st.title('Dashboard')
-    st.write('Selamat datang di **ThinkVerse LMS**. Masuk ke **Kursus** untuk melihat/bergabung kelas.')
+    st.write('Selamat datang di **ThinkVerse LMS**. Masuk ke **Kursus** untuk melihat atau bergabung kelas.')
     st.info('Akun demo: instructor@example.com / teach123, student@example.com / learn123')
 
     u = st.session_state.user
     enrolled, teaching = get_enrolled_courses_for_user(u['id'])
 
-    # Grid "Kursus Saya" ala Canvas
+    # daftar kursus saya (student)
     st.subheader('📂 Kursus Saya')
     if not enrolled and u['role'] == 'student':
         st.caption('Belum ada kursus yang kamu ikuti. Buka tab **Kursus** untuk bergabung menggunakan kode akses.')
@@ -533,12 +333,9 @@ def page_home():
             if i % cols_per_row == 0:
                 cols = st.columns(cols_per_row)
             with cols[i % cols_per_row]:
-                render_course_tile(
-                    cid, code, title, instr, desc,
-                    button_key=f"std_{cid}_{i}"  # unik per tile student
-                )
+                render_course_tile(cid, code, title, instr, desc, f"std_{cid}_{i}")
 
-    # Untuk instructor/admin, tampilkan juga kursus yang diampu
+    # kursus diampu guru
     if u['role'] in ['instructor', 'admin']:
         st.subheader('🧑‍🏫 Kursus yang Diampu')
         if not teaching:
@@ -549,24 +346,23 @@ def page_home():
                 if j % cols_per_row == 0:
                     cols = st.columns(cols_per_row)
                 with cols[j % cols_per_row]:
-                    render_course_tile(
-                        cid, code, title, instr, desc,
-                        button_key=f"tch_{cid}_{j}"  # unik per tile teaching
-                    )
+                    render_course_tile(cid, code, title, instr, desc, f"tch_{cid}_{j}")
 
+
+# ---------- HALAMAN ACCOUNT ----------
 def page_account():
     st.header('👤 Kelola Akun')
     u = st.session_state.user
 
-    colA, colB = st.columns([1,3])
+    colA, colB = st.columns([1, 3])
     with colA:
         if u.get('photo_path') and os.path.exists(u['photo_path']):
-            st.image(u['photo_path'], width=160)  # tanpa caption agar nama tak bertumpuk
+            st.image(u['photo_path'], width=160)
             st.caption('Foto kamu')
         else:
             st.info('Belum ada foto.')
     with colB:
-        up = st.file_uploader('Upload foto baru (jpg/png)', type=['jpg','jpeg','png'])
+        up = st.file_uploader('Upload foto baru (jpg/png)', type=['jpg', 'jpeg', 'png'])
         remove = st.checkbox('Hapus foto profil')
 
     with st.form('upd_profile'):
@@ -577,13 +373,16 @@ def page_account():
         new_photo_path = u.get('photo_path')
         if remove:
             if new_photo_path and os.path.exists(new_photo_path):
-                try: os.remove(new_photo_path)
-                except Exception: pass
+                try:
+                    os.remove(new_photo_path)
+                except Exception:
+                    pass
             new_photo_path = None
         elif up is not None:
             fname = f"avatar_{u['id']}_{int(datetime.now().timestamp())}_{up.name}"
             fpath = os.path.join(UPLOAD_DIR, fname)
-            with open(fpath, 'wb') as f: f.write(up.read())
+            with open(fpath, 'wb') as f:
+                f.write(up.read())
             new_photo_path = fpath
 
         try:
@@ -621,12 +420,14 @@ def page_account():
                     conn.commit()
                     st.success('Password berhasil diubah.')
 
+
+# ---------- HALAMAN COURSES ----------
 def page_courses():
     render_user_chip()
     st.header('📘 Kursus')
     u = st.session_state.user
 
-    # ====== Form BUAT KURSUS (hanya instructor/admin) ======
+    # ====== Buat kursus (guru) ======
     if u['role'] in ['instructor', 'admin']:
         with st.expander('➕ Buat Kursus (Guru)', expanded=False):
             with st.form('new_course'):
@@ -652,7 +453,7 @@ def page_courses():
                     except sqlite3.IntegrityError:
                         st.error('Kode kursus sudah dipakai. Gunakan kode lain.')
 
-    # ====== Ambil semua kursus ======
+    # ====== Tampilkan semua kursus ======
     with get_conn() as conn:
         c = conn.cursor()
         c.execute('''SELECT c.id,c.code,c.title,c.description,c.youtube_url,u.name,c.instructor_id
@@ -660,21 +461,21 @@ def page_courses():
                      ORDER BY c.title''')
         rows = c.fetchall()
 
-    # ====== Daftar kursus ======
     for cid, code, title, desc, yt, instr, instr_id in rows:
         st.markdown(f"### {code} — {title}")
         st.caption(f"Pengampu: {instr or '-'}")
-        if yt: st.video(yt)
+        if yt:
+            st.video(yt)
         st.write(desc or '-')
 
-        # status enroll user sekarang
         with get_conn() as conn:
             c = conn.cursor()
             c.execute('SELECT 1 FROM enrollments WHERE user_id=? AND course_id=?', (u['id'], cid))
             enrolled = c.fetchone() is not None
 
-        cols = st.columns([2,2,2])
-        # --- Kolom 1: Masuk / Gabung
+        cols = st.columns([2, 2, 2])
+
+        # --- Kolom 1: Masuk / Gabung ---
         with cols[0]:
             if enrolled:
                 if st.button('Masuk ke Kelas', key=f'ent_{cid}'):
@@ -701,9 +502,9 @@ def page_courses():
                         else:
                             st.error('Kode akses salah.')
 
-        # --- Kolom 2: Edit (Guru)
+        # --- Kolom 2: Edit (Guru) ---
         with cols[1]:
-            if u['role'] in ['instructor', 'admin'] and (u['id'] == instr_id or u['role']=='admin'):
+            if u['role'] in ['instructor', 'admin'] and (u['id'] == instr_id or u['role'] == 'admin'):
                 with st.expander('Edit Kursus (Guru)'):
                     with st.form(f'edit_{cid}'):
                         new_desc = st.text_area('Deskripsi', value=desc or '')
@@ -722,12 +523,12 @@ def page_courses():
                             conn.commit()
                         st.success('Tersimpan.')
 
-        # --- Kolom 3: HAPUS (Guru/Admin)
+        # --- Kolom 3: Hapus Kursus ---
         with cols[2]:
-            if u['role'] in ['instructor', 'admin'] and (u['id'] == instr_id or u['role']=='admin'):
+            if u['role'] in ['instructor', 'admin'] and (u['id'] == instr_id or u['role'] == 'admin'):
                 with st.expander('⚠️ Hapus Kursus'):
                     with st.form(f'del_course_{cid}'):
-                        st.warning('Menghapus kursus akan menghapus semua data terkait (modules, assignments, quizzes, kehadiran, pengumuman, enrollments).')
+                        st.warning('Menghapus kursus akan menghapus semua data terkait (modules, assignments, quizzes, dll).')
                         cek = st.checkbox('Saya paham risikonya')
                         ketik = st.text_input(f"Ketik KODE kursus untuk konfirmasi: {code}")
                         go = st.form_submit_button('Hapus Permanen')
@@ -743,7 +544,139 @@ def page_courses():
 
         st.divider()
 
-# ---------- Course context ----------
+# ======================================================
+# ==========  FITUR DALAM KELAS (COURSE MODE) ==========
+# ======================================================
+
+# ---------- Helpers umum ----------
+def create_announcement(course_id: int, title: str, message: str, is_system: int = 1):
+    with get_conn() as conn:
+        c = conn.cursor()
+        c.execute(
+            'INSERT INTO announcements(course_id,title,message,is_system) VALUES(?,?,?,?)',
+            (course_id, title, message, is_system)
+        )
+        conn.commit()
+
+def detach_module_items(module_id: int):
+    with get_conn() as conn:
+        c = conn.cursor()
+        c.execute('UPDATE assignments SET module_id=NULL WHERE module_id=?', (module_id,))
+        c.execute('UPDATE quizzes SET module_id=NULL WHERE module_id=?', (module_id,))
+        conn.commit()
+
+def delete_assignment(aid: int):
+    with get_conn() as conn:
+        c = conn.cursor()
+        c.execute('DELETE FROM assignments WHERE id=?', (aid,))
+        conn.commit()
+
+def delete_quiz(qid: int):
+    with get_conn() as conn:
+        c = conn.cursor()
+        # attempts -> answers
+        c.execute('SELECT id FROM quiz_attempts WHERE quiz_id=?', (qid,))
+        atts = [r[0] for r in c.fetchall()]
+        if atts:
+            qmarks = ','.join('?'*len(atts))
+            c.execute(f"DELETE FROM quiz_answers WHERE attempt_id IN ({qmarks})", atts)
+            c.execute(f"DELETE FROM quiz_attempts WHERE id IN ({qmarks})", atts)
+        # questions -> choices
+        c.execute('SELECT id FROM quiz_questions WHERE quiz_id=?', (qid,))
+        qids = [r[0] for r in c.fetchall()]
+        if qids:
+            qmarks = ','.join('?'*len(qids))
+            c.execute(f"DELETE FROM quiz_choices WHERE question_id IN ({qmarks})", qids)
+            c.execute(f"DELETE FROM quiz_questions WHERE id IN ({qmarks})", qids)
+        # quiz
+        c.execute('DELETE FROM quizzes WHERE id=?', (qid,))
+        conn.commit()
+
+def delete_question(qnid: int, quiz_id: int):
+    with get_conn() as conn:
+        c = conn.cursor()
+        c.execute('DELETE FROM quiz_answers WHERE question_id=?', (qnid,))
+        c.execute('DELETE FROM quiz_choices WHERE question_id=?', (qnid,))
+        c.execute('DELETE FROM quiz_questions WHERE id=?', (qnid,))
+        c.execute('UPDATE quizzes SET total_points=(SELECT COALESCE(SUM(points),0) FROM quiz_questions WHERE quiz_id=?) WHERE id=?',
+                  (quiz_id, quiz_id))
+        conn.commit()
+
+def delete_announcement(anid: int):
+    with get_conn() as conn:
+        c = conn.cursor()
+        c.execute('DELETE FROM announcements WHERE id=?', (anid,))
+        conn.commit()
+
+def delete_book(bid: int):
+    with get_conn() as conn:
+        c = conn.cursor()
+        c.execute('DELETE FROM course_books WHERE id=?', (bid,))
+        conn.commit()
+
+def delete_module(mid: int):
+    with get_conn() as conn:
+        c = conn.cursor()
+        detach_module_items(mid)
+        c.execute('DELETE FROM modules WHERE id=?', (mid,))
+        conn.commit()
+
+def delete_course(course_id: int):
+    """Hapus kursus + seluruh data turunannya secara aman."""
+    with get_conn() as conn:
+        c = conn.cursor()
+
+        # quizzes: attempts -> answers, questions -> choices, lalu quiz
+        c.execute('SELECT id FROM quizzes WHERE course_id=?', (course_id,))
+        quiz_ids = [r[0] for r in c.fetchall()]
+        if quiz_ids:
+            qmarks = ','.join('?'*len(quiz_ids))
+            # attempts -> answers
+            c.execute(f"SELECT id FROM quiz_attempts WHERE quiz_id IN ({qmarks})", quiz_ids)
+            att_ids = [r[0] for r in c.fetchall()]
+            if att_ids:
+                amarks = ','.join('?'*len(att_ids))
+                c.execute(f"DELETE FROM quiz_answers WHERE attempt_id IN ({amarks})", att_ids)
+                c.execute(f"DELETE FROM quiz_attempts WHERE id IN ({amarks})", att_ids)
+            # questions -> choices
+            c.execute(f"SELECT id FROM quiz_questions WHERE quiz_id IN ({qmarks})", quiz_ids)
+            qn_ids = [r[0] for r in c.fetchall()]
+            if qn_ids:
+                qnmarks = ','.join('?'*len(qn_ids))
+                c.execute(f"DELETE FROM quiz_choices WHERE question_id IN ({qnmarks})", qn_ids)
+                c.execute(f"DELETE FROM quiz_questions WHERE id IN ({qnmarks})", qn_ids)
+            # quizzes
+            c.execute(f"DELETE FROM quizzes WHERE id IN ({qmarks})", quiz_ids)
+
+        # assignments
+        c.execute('DELETE FROM assignments WHERE course_id=?', (course_id,))
+
+        # modules
+        c.execute('DELETE FROM modules WHERE course_id=?', (course_id,))
+
+        # books
+        c.execute('DELETE FROM course_books WHERE course_id=?', (course_id,))
+
+        # announcements
+        c.execute('DELETE FROM announcements WHERE course_id=?', (course_id,))
+
+        # attendance logs/sessions
+        c.execute('SELECT id FROM attendance_sessions WHERE course_id=?', (course_id,))
+        sess_ids = [r[0] for r in c.fetchall()]
+        if sess_ids:
+            smarks = ','.join('?'*len(sess_ids))
+            c.execute(f"DELETE FROM attendance_logs WHERE session_id IN ({smarks})", sess_ids)
+            c.execute(f"DELETE FROM attendance_sessions WHERE id IN ({smarks})", sess_ids)
+
+        # enrollments
+        c.execute('DELETE FROM enrollments WHERE course_id=?', (course_id,))
+
+        # course
+        c.execute('DELETE FROM courses WHERE id=?', (course_id,))
+        conn.commit()
+
+
+# ---------- Navigasi di dalam Course ----------
 def course_sidebar_nav(cid):
     with get_conn() as conn:
         c = conn.cursor()
@@ -762,7 +695,8 @@ def course_sidebar_nav(cid):
         ['Home', 'Attendance', 'Books', 'Modules', 'Quizzes', 'Assignments', 'Announcements']
     )
 
-# ----- Attendance / Absensi -----
+
+# ---------- Attendance ----------
 def page_attendance(course_id):
     st.header('🗓️ Attendance / Absensi')
     u = st.session_state.user
@@ -797,10 +731,13 @@ def page_attendance(course_id):
         st.info('Belum ada sesi absensi.')
         return
 
+    import csv
+    from io import StringIO
+
     for sid, title, sdate, code, is_open, created_at in sess:
         with st.expander(f"{title} • {sdate} {'🟢 OPEN' if is_open else '🔴 CLOSED'}"):
             st.caption(f"Kode: **{code or '-'}** • Dibuat: {created_at}")
-            if u['role'] in ['instructor','admin']:
+            if u['role'] in ['instructor','admin']:\
                 c1, c2, c3 = st.columns([1,1,2])
                 with c1:
                     if st.button('Buka', key=f'op_{sid}'):
@@ -820,8 +757,6 @@ def page_attendance(course_id):
                                        WHERE l.session_id=? ORDER BY l.id ASC''', (sid,))
                         logs = cur.fetchall()
                     if logs:
-                        import csv
-                        from io import StringIO
                         buff = StringIO(); writer = csv.writer(buff)
                         writer.writerow(['Nama','Marked At'])
                         for nm, ts in logs: writer.writerow([nm, ts])
@@ -848,7 +783,8 @@ def page_attendance(course_id):
                 else:
                     st.info('Sesi ini ditutup.')
 
-# ----- Books / Flipbooks -----
+
+# ---------- Books / Flipbooks ----------
 def page_books(course_id):
     st.header('📖 Books & Bahan Ajar (Flipbook)')
     u = st.session_state.user
@@ -884,16 +820,17 @@ def page_books(course_id):
                 st.success('Buku dihapus.'); st.rerun()
         st.divider()
 
-# ----- Modules (Materi + multi-image + edit) -----
+
+# ---------- Modules (Materi + edit aman) ----------
 def page_modules(cid):
     st.header('📦 Modules (Materi per Bagian)')
     u = st.session_state.user
 
-    # ===== Tambah Topik =====
+    # Tambah Topik
     if u['role'] in ['instructor', 'admin']:
         with st.form('new_mod'):
             title = st.text_input('Judul Topik')
-            content = st.text_area('Pembahasan (Markdown + bisa embed gambar, daftar, dll.)')
+            content = st.text_area('Pembahasan (Markdown + bisa daftar, rumus LaTeX $...$)')
             yt = st.text_input('YouTube URL (opsional)')
             img = st.file_uploader('Gambar (opsional)')
             order = st.number_input('Urutan', 0, 1000, 0)
@@ -901,7 +838,7 @@ def page_modules(cid):
         if ok:
             img_path = None
             if img is not None:
-                img_path = os.path.join(UPLOAD_DIR, f"mod_{cid}_{datetime.now().timestamp()}_{img.name}")
+                img_path = os.path.join(UPLOAD_DIR, f"mod_{cid}_{int(datetime.now().timestamp())}_{img.name}")
                 with open(img_path, 'wb') as f: f.write(img.read())
             with get_conn() as conn:
                 c = conn.cursor()
@@ -909,10 +846,9 @@ def page_modules(cid):
                           (cid, title, content, yt, img_path, order))
                 conn.commit()
             create_announcement(cid, 'Topik baru ditambahkan', f'Topik **{title}** telah dipublish.', 1)
-            st.success('Topik dibuat.')
-            st.rerun()
+            st.success('Topik dibuat.'); st.rerun()
 
-    # ===== Tampilkan Topik =====
+    # Tampilkan Topik
     with get_conn() as conn:
         c = conn.cursor()
         c.execute('SELECT id,title,content,youtube_url,image_path,order_index FROM modules WHERE course_id=? ORDER BY order_index', (cid,))
@@ -923,42 +859,39 @@ def page_modules(cid):
             if yt: st.video(yt)
             if ip and os.path.exists(ip): st.image(ip)
             if cont: st.markdown(cont)
-
             if u['role'] in ['instructor','admin']:
                 if st.button(f"✏️ Edit Topik Ini", key=f"edit_btn_{mid}"):
                     st.session_state[f"editing_mod_{mid}"] = not st.session_state.get(f"editing_mod_{mid}", False)
 
-        # === Form Edit (di luar expander utama agar tidak nested) ===
+        # Form edit (di luar expander agar tidak nested)
         if st.session_state.get(f"editing_mod_{mid}", False):
             st.markdown(f"### ✏️ Edit Topik: {t}")
             with st.form(f'edit_mod_{mid}'):
                 new_title = st.text_input('Judul Topik', value=t)
                 new_content = st.text_area('Isi Penjelasan (Markdown)', value=cont or '')
                 new_yt = st.text_input('YouTube URL (opsional)', value=yt or '')
-                new_img = st.file_uploader('Upload gambar tambahan (opsional)')
+                new_img = st.file_uploader('Ganti gambar (opsional)')
                 new_order = st.number_input('Urutan', 0, 1000, value=ordr)
                 ok_edit = st.form_submit_button('Simpan Perubahan')
 
             if ok_edit:
                 img_path = ip
                 if new_img is not None:
-                    img_path = os.path.join(UPLOAD_DIR, f"mod_{cid}_{datetime.now().timestamp()}_{new_img.name}")
+                    img_path = os.path.join(UPLOAD_DIR, f"mod_{cid}_{int(datetime.now().timestamp())}_{new_img.name}")
                     with open(img_path, 'wb') as f: f.write(new_img.read())
-
                 with get_conn() as conn:
                     c = conn.cursor()
                     c.execute('UPDATE modules SET title=?, content=?, youtube_url=?, image_path=?, order_index=? WHERE id=?',
                               (new_title, new_content, new_yt, img_path, new_order, mid))
                     conn.commit()
-
                 st.success(f'Topik "{new_title}" berhasil diperbarui.')
                 st.session_state[f"editing_mod_{mid}"] = False
                 st.rerun()
 
-        # === Tombol Hapus Topik ===
+        # Hapus topik
         if u['role'] in ['instructor','admin']:
             with st.form(f'del_mod_{mid}'):
-                st.warning('Menghapus topik **tidak** menghapus tugas/kuis, hanya melepas keterkaitan.')
+                st.warning('Menghapus topik **tidak** menghapus tugas/kuis. Item akan dilepas dari topik.')
                 cfm = st.checkbox('Saya paham dan ingin menghapus topik ini.')
                 sub = st.form_submit_button('Hapus Topik')
             if sub and cfm:
@@ -967,10 +900,11 @@ def page_modules(cid):
                 st.rerun()
 
 
-# ----- Assignments (global) -----
+# ---------- Assignments ----------
 def page_assignments(cid):
     st.header('📝 Assignments')
-    u=st.session_state.user
+    u = st.session_state.user
+
     if u['role'] in ['instructor','admin']:
         with get_conn() as conn:
             c=conn.cursor()
@@ -995,19 +929,20 @@ def page_assignments(cid):
                 conn.commit()
             create_announcement(cid, 'Tugas baru', f'Tugas **{title.strip()}** dipublish.', 1)
             st.success('Tugas dibuat.')
+
     with get_conn() as conn:
         c=conn.cursor()
         c.execute('''SELECT a.id,a.title,a.description,a.due_at,a.points,a.youtube_url,a.embed_url,m.title
                      FROM assignments a LEFT JOIN modules m ON a.module_id=m.id
                      WHERE a.course_id=? ORDER BY a.id DESC''',(cid,))
         rows=c.fetchall()
+
     for aid,at,ad,due,pts,yt,embed,mtitle in rows:
         cols = st.columns([6,1])
         with cols[0]:
             st.markdown(f"### {at}  {'· 🧩 '+mtitle if mtitle else ''}")
             st.caption(f"Batas: {due} · Poin: {pts}")
             if yt: st.video(yt)
-            # smarter embed: jika url mengarah ke pdf -> tampilkan pdf iframe
             if embed:
                 if '.pdf' in (embed or '').lower():
                     try:
@@ -1027,7 +962,8 @@ def page_assignments(cid):
                     st.success('Assignment dihapus.'); st.rerun()
         st.divider()
 
-# helper: grade short answer based on question id & given text
+
+# ---------- Quizzes ----------
 def grade_short_answer_for_question(question_id, answer_text):
     with get_conn() as conn:
         c = conn.cursor()
@@ -1039,10 +975,7 @@ def grade_short_answer_for_question(question_id, answer_text):
     ans = (answer_text or '')
     ok = None
     if ct:
-        if cs:
-            ok = (ans == ct)
-        else:
-            ok = (ans.lower() == (ct or '').lower())
+        ok = (ans == ct) if cs else (ans.lower() == (ct or '').lower())
     if ok is not True and cr:
         try:
             flags = 0 if cs else re.IGNORECASE
@@ -1051,11 +984,11 @@ def grade_short_answer_for_question(question_id, answer_text):
             ok = False
     return (True if ok else False), (pts or 0)
 
-# ----- Quizzes (editor + embed + inline short answer submission) -----
 def page_quizzes(cid):
     st.header('🧪 Quizzes')
     u = st.session_state.user
 
+    # buat kuis
     if u['role'] in ['instructor', 'admin']:
         with get_conn() as conn:
             c=conn.cursor()
@@ -1077,6 +1010,7 @@ def page_quizzes(cid):
             create_announcement(cid, 'Quiz baru', f'Quiz **{qtitle.strip()}** dipublish.', 1)
             st.success('Kuis dibuat.'); st.rerun()
 
+    # daftar kuis
     with get_conn() as conn:
         c = conn.cursor()
         c.execute('''SELECT q.id,q.title,q.description,q.time_limit_minutes,q.total_points,q.embed_url,m.title
@@ -1086,23 +1020,18 @@ def page_quizzes(cid):
 
     for qid, qt, qdesc, tlim, tpts, qembed, mtitle in quizzes:
         with st.expander(f"{qt} {'· 🧩 '+mtitle if mtitle else ''} — {tpts or 0} pts"):
-            # show embed if present
+            # embed
             if qembed:
-                # if looks like youtube link, show video widget; else iframe
                 if 'youtube' in (qembed or '') or 'youtu.be' in (qembed or ''):
-                    try:
-                        st.video(qembed)
-                    except Exception:
-                        st.components.v1.iframe(qembed, height=600)
+                    try: st.video(qembed)
+                    except Exception: st.components.v1.iframe(qembed, height=600)
                 else:
-                    try:
-                        st.components.v1.iframe(qembed, height=600)
-                    except Exception:
-                        st.write("Embed tidak dapat ditampilkan.")
-
+                    try: st.components.v1.iframe(qembed, height=600)
+                    except Exception: st.write("Embed tidak dapat ditampilkan.")
             st.write(qdesc or '-')
             st.caption(f"Time limit: {tlim or '—'} menit")
 
+            # tambah soal (guru)
             if u['role'] in ['instructor','admin']:
                 st.markdown('**Tambah Soal**')
                 with st.form(f'new_q_{qid}'):
@@ -1112,10 +1041,10 @@ def page_quizzes(cid):
                     img    = st.file_uploader('Gambar (opsional)', key=f'qi_{qid}')
                     pts    = st.number_input('Poin', 1, 100, 1, key=f'pts_{qid}')
                     if qtype == 'short':
-                        st.caption('Opsi penilaian otomatis (pilih salah satu atau keduanya).')
-                        correct_text   = st.text_input('Jawaban persis (teks) — kosongkan jika pakai regex', key=f'ct_{qid}')
+                        st.caption('Penilaian otomatis (pilih salah satu atau keduanya).')
+                        correct_text   = st.text_input('Jawaban persis (teks)', key=f'ct_{qid}')
                         correct_regex  = st.text_input('Regex benar (opsional)', key=f'cr_{qid}')
-                        case_sensitive = st.checkbox('Case-sensitive (untuk jawaban persis)', value=False, key=f'cs_{qid}')
+                        case_sensitive = st.checkbox('Case-sensitive', value=False, key=f'cs_{qid}')
                     else:
                         correct_text = ''
                         correct_regex = ''
@@ -1125,7 +1054,7 @@ def page_quizzes(cid):
                 if ok_q:
                     img_path = None
                     if img is not None:
-                        img_path = os.path.join(UPLOAD_DIR, f"qq_{qid}_{datetime.now().timestamp()}_{img.name}")
+                        img_path = os.path.join(UPLOAD_DIR, f"qq_{qid}_{int(datetime.now().timestamp())}_{img.name}")
                         with open(img_path, 'wb') as f: f.write(img.read())
                     with get_conn() as conn:
                         c = conn.cursor()
@@ -1141,6 +1070,7 @@ def page_quizzes(cid):
                         conn.commit()
                     st.success('Soal ditambahkan.'); st.rerun()
 
+            # tampilkan soal
             with get_conn() as conn:
                 c = conn.cursor()
                 c.execute('SELECT id,qtype,prompt,latex,image_path,points FROM quiz_questions WHERE quiz_id=?', (qid,))
@@ -1165,7 +1095,7 @@ def page_quizzes(cid):
                 if ip and os.path.exists(ip): st.image(ip)
                 st.caption(f"Poin: {pp}")
 
-                # Instructor view for MCQ: manage choices (existing behavior)
+                # manage MCQ choices (guru)
                 if qt_ == 'mcq' and u['role'] in ['instructor','admin']:
                     with get_conn() as conn:
                         c = conn.cursor()
@@ -1195,9 +1125,8 @@ def page_quizzes(cid):
                             conn.commit()
                         st.success('Pilihan diperbarui.'); st.rerun()
 
-                # STUDENT inline short-answer quick submit
+                # student: inline short answer submit
                 if qt_ == 'short' and u['role'] == 'student':
-                    # show last submission if exists
                     with get_conn() as conn:
                         c = conn.cursor()
                         c.execute('''SELECT qa.text_answer, qa.is_correct, qa.attempt_id, a.submitted_at
@@ -1206,14 +1135,12 @@ def page_quizzes(cid):
                         prev = c.fetchone()
                     if prev:
                         prev_txt, prev_ok, prev_attid, prev_ts = prev
-                        st.caption(f"Terakhir dikirim: '{prev_txt}' — {'Benar' if prev_ok==1 else 'Salah' if prev_ok==0 else 'Belum dinilai'} • {prev_ts}")
+                        st.caption(f"Terakhir: '{prev_txt}' — {'Benar' if prev_ok==1 else 'Salah' if prev_ok==0 else 'Belum'} • {prev_ts}")
                     with st.form(f'inline_short_{qnid}'):
                         ans = st.text_input('Kirim jawaban singkat', key=f'ins_{qnid}')
                         submit_short = st.form_submit_button('Kirim Jawaban')
                     if submit_short:
-                        # grade answer
                         is_correct, pts = grade_short_answer_for_question(qnid, ans)
-                        # create attempt & answer
                         with get_conn() as conn:
                             c = conn.cursor()
                             now = datetime.now().isoformat()
@@ -1222,11 +1149,11 @@ def page_quizzes(cid):
                             att_id = c.lastrowid
                             c.execute('INSERT INTO quiz_answers(attempt_id,question_id,choice_id,text_answer,is_correct) VALUES(?,?,?,?,?)',
                                       (att_id, qnid, None, ans, 1 if is_correct else 0))
-                            # update attempt score
                             c.execute('UPDATE quiz_attempts SET score=? WHERE id=?', (pts if is_correct else 0, att_id))
                             conn.commit()
-                        st.success(f'Jawaban terkirim. {"Benar" if is_correct else "Salah"} — mendapat {pts if is_correct else 0} poin.')
+                        st.success(f'Jawaban terkirim. {"Benar" if is_correct else "Salah"} — {pts if is_correct else 0} poin.')
 
+            # hapus kuis
             if u['role'] in ['instructor','admin']:
                 with st.form(f'del_quiz_{qid}'):
                     cfm = st.checkbox('Hapus kuis ini **beserta** semua soal & data hasilnya.')
@@ -1235,6 +1162,7 @@ def page_quizzes(cid):
                     delete_quiz(qid)
                     st.success('Kuis dan seluruh datanya dihapus.'); st.rerun()
 
+            # student info & tombol kerjakan full
             if u['role'] == 'student':
                 with get_conn() as conn:
                     c = conn.cursor()
@@ -1245,6 +1173,7 @@ def page_quizzes(cid):
                 if st.button('Kerjakan Kuis (Full)', key=f'do_{qid}'):
                     do_quiz(cid, qid)
 
+            # rekap guru
             if u['role'] in ['instructor','admin']:
                 st.markdown('---')
                 st.markdown('**Hasil Kuis (Dashboard Guru)**')
@@ -1268,7 +1197,8 @@ def page_quizzes(cid):
                 else:
                     st.caption('Belum ada percobaan kuis.')
 
-# --- take quiz helper ---
+
+# --- take quiz (full) ---
 def do_quiz(cid, qid):
     st.session_state.in_quiz = {'course': cid, 'quiz': qid}
     st.rerun()
@@ -1317,8 +1247,9 @@ def page_take_quiz():
         score = 0
         with get_conn() as conn:
             c = conn.cursor()
+            now = datetime.now().isoformat()
             c.execute('INSERT INTO quiz_attempts(quiz_id,student_id,started_at,submitted_at,score) VALUES(?,?,?,?,?)',
-                      (qid, st.session_state.user['id'], datetime.now().isoformat(), datetime.now().isoformat(), 0))
+                      (qid, st.session_state.user['id'], now, now, 0))
             att_id = c.lastrowid
 
             for qnid, meta in answers.items():
@@ -1358,7 +1289,8 @@ def page_take_quiz():
         st.success(f'Kuis dikumpulkan. Skor: {score}/{total_points} • Benar: {correct_count} dari {len(qs)} soal')
         del st.session_state['in_quiz']
 
-# ----- Announcements -----
+
+# ---------- Announcements ----------
 def page_announcements(cid):
     st.header('📣 Announcements')
     u = st.session_state.user
@@ -1370,6 +1302,7 @@ def page_announcements(cid):
         if ok and title.strip():
             create_announcement(cid, title.strip(), msg or '', 0)
             st.success('Pengumuman dikirim.'); st.rerun()
+
     with get_conn() as conn:
         c=conn.cursor()
         c.execute('SELECT id,title,message,is_system,posted_at FROM announcements WHERE course_id=? ORDER BY id DESC',(cid,))
@@ -1389,9 +1322,11 @@ def page_announcements(cid):
                     delete_announcement(anid)
                     st.success('Pengumuman dihapus.'); st.rerun()
 
-# ---------- App ----------
+
+# ======================================================
+# =====================  APP  ==========================
+# ======================================================
 def main():
-    # HAPUS set_page_config dari sini (sudah di atas file)
     init_db()
     seed_demo()
 
@@ -1452,8 +1387,6 @@ def main():
     elif sec == '👤 Akun':
         page_account()
 
+
 if __name__ == '__main__':
     main()
-
-
-
