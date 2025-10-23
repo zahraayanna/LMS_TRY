@@ -702,29 +702,42 @@ def page_attendance(course_id):
     u = st.session_state.user
 
     colL, colR = st.columns(2)
+
+    # === Buat sesi baru (guru/admin) ===
     if u['role'] in ['instructor', 'admin']:
         with colL:
             with st.form('new_session'):
                 title = st.text_input('Judul Sesi (mis. Pertemuan 5)')
                 sdate = st.date_input('Tanggal', value=datetime.now().date())
-                code  = st.text_input('Kode Akses Absensi (opsional, biarkan kosong untuk auto)')
+                code = st.text_input('Kode Akses Absensi (opsional, biarkan kosong untuk auto)')
                 open_now = st.checkbox('Buka Absensi Sekarang', value=True)
                 ok = st.form_submit_button('Buat Sesi')
             if ok and title:
-                if not code: code = str(int(datetime.now().timestamp()))[-6:]
+                if not code:
+                    code = str(int(datetime.now().timestamp()))[-6:]
                 with get_conn() as conn:
                     c = conn.cursor()
-                    c.execute('INSERT INTO attendance_sessions(course_id,title,session_date,access_code,is_open) VALUES(?,?,?,?,?)',
-                              (course_id, title, sdate.isoformat(), code, 1 if open_now else 0))
+                    c.execute(
+                        'INSERT INTO attendance_sessions(course_id,title,session_date,access_code,is_open) VALUES(?,?,?,?,?)',
+                        (course_id, title, sdate.isoformat(), code, 1 if open_now else 0)
+                    )
                     conn.commit()
                 create_announcement(course_id, 'Absensi baru dibuka', f'Sesi **{title}** tanggal {sdate.isoformat()} telah dibuka.', 1)
-                st.success('Sesi absensi dibuat.'); st.rerun()
+                st.success('Sesi absensi dibuat.')
+                st.rerun()
+
         with colR:
             st.caption('Instruktur dapat membuka/menutup sesi dan membagikan kode ke siswa.')
 
+    # === Tampilkan daftar sesi absensi ===
     with get_conn() as conn:
         c = conn.cursor()
-        c.execute('SELECT id,title,session_date,access_code,is_open,created_at FROM attendance_sessions WHERE course_id=? ORDER BY id DESC', (course_id,))
+        c.execute('''
+            SELECT id, title, session_date, access_code, is_open, created_at
+            FROM attendance_sessions
+            WHERE course_id=?
+            ORDER BY id DESC
+        ''', (course_id,))
         sess = c.fetchall()
 
     if not sess:
@@ -734,11 +747,15 @@ def page_attendance(course_id):
     import csv
     from io import StringIO
 
-        for sid, title, sdate, code, is_open, created_at in sess:
+    for sid, title, sdate, code, is_open, created_at in sess:
         with st.expander(f"{title} • {sdate} {'🟢 OPEN' if is_open else '🔴 CLOSED'}"):
             st.caption(f"Kode: **{code or '-'}** • Dibuat: {created_at}")
+
+            # --- Bagian instruktur/admin ---
             if u['role'] in ['instructor', 'admin']:
                 c1, c2, c3 = st.columns([1, 1, 2])
+
+                # Tombol buka sesi
                 with c1:
                     if st.button('Buka', key=f'op_{sid}'):
                         with get_conn() as conn:
@@ -746,6 +763,8 @@ def page_attendance(course_id):
                             cur.execute('UPDATE attendance_sessions SET is_open=1 WHERE id=?', (sid,))
                             conn.commit()
                         st.rerun()
+
+                # Tombol tutup sesi
                 with c2:
                     if st.button('Tutup', key=f'cl_{sid}'):
                         with get_conn() as conn:
@@ -753,27 +772,36 @@ def page_attendance(course_id):
                             cur.execute('UPDATE attendance_sessions SET is_open=0 WHERE id=?', (sid,))
                             conn.commit()
                         st.rerun()
+
+                # Unduh daftar hadir
                 with c3:
                     with get_conn() as conn:
                         cur = conn.cursor()
-                        cur.execute('''SELECT u.name, l.marked_at
-                                       FROM attendance_logs l
-                                       JOIN users u ON u.id = l.student_id
-                                       WHERE l.session_id=? ORDER BY l.id ASC''', (sid,))
+                        cur.execute('''
+                            SELECT u.name, l.marked_at
+                            FROM attendance_logs l
+                            JOIN users u ON u.id = l.student_id
+                            WHERE l.session_id=?
+                            ORDER BY l.id ASC
+                        ''', (sid,))
                         logs = cur.fetchall()
+
                     if logs:
-                        import csv
-                        from io import StringIO
                         buff = StringIO()
                         writer = csv.writer(buff)
-                        writer.writerow(['Nama', 'Marked At'])
+                        writer.writerow(['Nama', 'Waktu Hadir'])
                         for nm, ts in logs:
                             writer.writerow([nm, ts])
-                        st.download_button('Unduh CSV Kehadiran', buff.getvalue().encode('utf-8'),
-                                           file_name=f'absensi_{sid}.csv', mime='text/csv')
+                        st.download_button(
+                            'Unduh CSV Kehadiran',
+                            buff.getvalue().encode('utf-8'),
+                            file_name=f'absensi_{sid}.csv',
+                            mime='text/csv'
+                        )
                     else:
                         st.caption('Belum ada kehadiran.')
 
+            # --- Bagian siswa ---
             if u['role'] == 'student':
                 if is_open:
                     with st.form(f'mark_{sid}'):
@@ -786,14 +814,17 @@ def page_attendance(course_id):
                             with get_conn() as conn:
                                 cur = conn.cursor()
                                 try:
-                                    cur.execute('INSERT INTO attendance_logs(session_id,student_id) VALUES(?,?)',
-                                                (sid, u['id']))
+                                    cur.execute(
+                                        'INSERT INTO attendance_logs(session_id,student_id) VALUES(?,?)',
+                                        (sid, u['id'])
+                                    )
                                     conn.commit()
                                     st.success('Kehadiran terekam!')
                                 except sqlite3.IntegrityError:
                                     st.info('Kamu sudah menandai hadir untuk sesi ini.')
                 else:
                     st.info('Sesi ini ditutup.')
+
 
 
 # ---------- Books / Flipbooks ----------
@@ -1402,4 +1433,5 @@ def main():
 
 if __name__ == '__main__':
     main()
+
 
