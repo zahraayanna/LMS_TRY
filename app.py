@@ -21,71 +21,82 @@ st.markdown(
     <style>
         /* ===== GLOBAL STYLE ===== */
         .stApp {
-            background: linear-gradient(135deg, rgba(99,91,255,0.2), rgba(236,72,153,0.2));
+            background: linear-gradient(135deg, #a18cd1 0%, #fbc2eb 100%);
             background-attachment: fixed;
             color: #fff;
             font-family: "Poppins", sans-serif;
         }
 
         h1, h2, h3, h4 {
-            color: #f2f2f7 !important;
+            color: #fff !important;
         }
 
         /* ===== CARD / CONTAINER ===== */
         .glass-box {
-            background: rgba(255, 255, 255, 0.12);
-            border-radius: 20px;
-            backdrop-filter: blur(14px);
-            border: 1px solid rgba(255, 255, 255, 0.2);
-            box-shadow: 0 4px 30px rgba(0,0,0,0.2);
-            padding: 32px 40px;
+            background: rgba(255, 255, 255, 0.25);
+            border-radius: 25px;
+            backdrop-filter: blur(15px);
+            -webkit-backdrop-filter: blur(15px);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            box-shadow: 0 8px 32px rgba(31, 38, 135, 0.3);
+            padding: 40px;
             margin-bottom: 20px;
         }
 
         /* ===== SIDEBAR ===== */
         [data-testid="stSidebar"] {
-            background: rgba(255,255,255,0.1);
+            background: rgba(255,255,255,0.18);
             backdrop-filter: blur(10px);
-            border-right: 1px solid rgba(255,255,255,0.2);
+            border-right: 1px solid rgba(255,255,255,0.3);
+            color: white !important;
         }
 
         /* ===== BUTTON ===== */
         button[kind="primary"] {
             background: linear-gradient(90deg, #635BFF, #EC4899);
-            border-radius: 10px;
+            border-radius: 12px;
             font-weight: 600;
             color: white !important;
             border: none;
-            transition: 0.3s ease;
+            transition: all 0.3s ease;
+            box-shadow: 0px 3px 10px rgba(0,0,0,0.2);
         }
 
         button[kind="primary"]:hover {
-            filter: brightness(1.1);
-            transform: scale(1.02);
+            filter: brightness(1.2);
+            transform: scale(1.03);
+            box-shadow: 0px 5px 15px rgba(0,0,0,0.3);
         }
 
         /* ===== INPUTS ===== */
         input, select, textarea {
-            background-color: rgba(255,255,255,0.1) !important;
-            color: #f2f2f7 !important;
+            background-color: rgba(255,255,255,0.3) !important;
+            color: #fff !important;
         }
 
         /* ===== FORM LABELS ===== */
         label {
-            font-weight: 500;
-            color: #fdfdfd !important;
+            font-weight: 600;
+            color: #fff !important;
         }
 
         /* Tabs */
         .stTabs [data-baseweb="tab"] {
-            background: rgba(255,255,255,0.15);
-            border-radius: 10px;
+            background: rgba(255,255,255,0.3);
+            border-radius: 12px;
             color: white !important;
+            padding: 8px 16px;
         }
 
         /* Divider */
         hr {
-            border-color: rgba(255,255,255,0.2);
+            border-color: rgba(255,255,255,0.4);
+        }
+
+        /* ===== INFO BOX ===== */
+        .stAlert {
+            background: rgba(255,255,255,0.2) !important;
+            color: white !important;
         }
     </style>
     """,
@@ -185,7 +196,7 @@ def page_login():
     st.markdown("</div>", unsafe_allow_html=True)
 
 # ==============================
-# NAVIGASI & HALAMAN
+# HALAMAN UTAMA
 # ==============================
 def sidebar_nav():
     st.sidebar.image("https://cdn-icons-png.flaticon.com/512/906/906175.png", width=70)
@@ -268,3 +279,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
