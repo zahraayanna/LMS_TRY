@@ -225,6 +225,7 @@ def page_courses():
     st.markdown("<div class='glass-box'>", unsafe_allow_html=True)
     st.title("📘 Kursus")
     st.caption("Daftar kursus yang tersedia di ThinkVerse.")
+
     try:
         courses = supabase.table("courses").select("*").execute()
         if len(courses.data) == 0:
@@ -233,13 +234,25 @@ def page_courses():
             return
 
         for c in courses.data:
-            with st.container():
-                st.markdown(f"### {c['title']}")
-                st.write(c.get("description", ""))
-                st.caption(f"👨‍🏫 Pengampu: {c.get('instructor_email', '-')}")
-                st.divider()
+            # Ganti dari 'with st.container():' jadi card bergaya langsung
+            st.markdown(f"""
+                <div style="
+                    background: rgba(255,255,255,0.75);
+                    border-radius: 18px;
+                    padding: 20px 25px;
+                    margin-top: 15px;
+                    box-shadow: 0 4px 10px rgba(0,0,0,0.08);
+                ">
+                    <h4 style="margin-bottom: 4px;">{c['title']}</h4>
+                    <p style="margin: 0;">{c.get('description', '')}</p>
+                    <p style="font-size: 14px; opacity: 0.7;">
+                        👩‍🏫 Pengampu: {c.get('instructor_email', '-')}
+                    </p>
+                </div>
+            """, unsafe_allow_html=True)
     except Exception as e:
         st.error(f"Gagal mengambil data kursus: {e}")
+
     st.markdown("</div>", unsafe_allow_html=True)
 
 def page_account():
@@ -278,3 +291,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
