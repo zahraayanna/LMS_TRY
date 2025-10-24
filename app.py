@@ -129,9 +129,9 @@ def page_login():
 
     # --- LOGIN ---
     with tabs[0]:
-        with st.form("login_form"):
-            email = st.text_input("Email", key="login_email")
-            pw = st.text_input("Password", type="password", key="login_pw")
+        with st.form("login_form_tab1"):
+            email = st.text_input("Email", key="login_email_tab1")
+            pw = st.text_input("Password", type="password", key="login_pw_tab1")
             ok = st.form_submit_button("Masuk")
         if ok:
             u = login(email, pw)
@@ -145,11 +145,11 @@ def page_login():
 
     # --- REGISTER ---
     with tabs[1]:
-        with st.form("reg_form"):
-            name = st.text_input("Nama Lengkap")
-            email = st.text_input("Email")
-            pw = st.text_input("Password", type="password")
-            role = st.selectbox("Peran", ["student", "instructor"])
+        with st.form("reg_form_tab2"):
+            name = st.text_input("Nama Lengkap", key="reg_name_tab2")
+            email = st.text_input("Email", key="reg_email_tab2")
+            pw = st.text_input("Password", type="password", key="reg_pw_tab2")
+            role = st.selectbox("Peran", ["student", "instructor"], key="reg_role_tab2")
             ok2 = st.form_submit_button("Daftar Akun Baru")
         if ok2:
             if register_user(name, email, pw, role):
@@ -157,10 +157,10 @@ def page_login():
 
     # --- LUPA PASSWORD ---
     with tabs[2]:
-        with st.form("forgot_pw_form"):
-            email_fp = st.text_input("Masukkan email kamu")
-            new_pw = st.text_input("Password baru", type="password")
-            new_pw2 = st.text_input("Ulangi password baru", type="password")
+        with st.form("forgot_pw_form_tab3"):
+            email_fp = st.text_input("Masukkan email kamu", key="fp_email_tab3")
+            new_pw = st.text_input("Password baru", type="password", key="fp_pw_tab3")
+            new_pw2 = st.text_input("Ulangi password baru", type="password", key="fp_pw2_tab3")
             ok3 = st.form_submit_button("Reset Password")
         if ok3:
             if new_pw != new_pw2:
@@ -397,4 +397,5 @@ else:
         page_courses()
     elif section == "👤 Akun":
         page_account()
+
 
