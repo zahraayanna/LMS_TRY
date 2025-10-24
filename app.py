@@ -294,3 +294,107 @@ else:
         page_courses()
     elif section == "👤 Akun":
         page_account()
+
+# =========================================
+# ============= MODULES ==================
+# =========================================
+
+def page_modules(course):
+    st.header(f"📦 Modules — {course['title']}")
+    u = st.session_state.user
+
+    # --- tampilkan semua modul dari course ini ---
+    res = supabase.table("modules").select("*").eq("course_id", course["id"]).order("order_index").execute()
+    mods = res.data or []
+
+    if not mods:
+        st.info("Belum ada materi untuk kursus ini.")
+    else:
+        for m in mods:
+            st.subheader(f"{m['order_index']}. {m['title']}")
+            if m.get("youtube_url"):
+                st.video(m["youtube_url"])
+            if m.get("image_url"):
+                st.image(m["image_url"])
+            if m.get("content"):
+                st.markdown(m["content"])
+            st.divider()
+
+    # --- bagian instruktur: tambah modul ---
+    if u["role"] in ["instructor", "admin"]:
+        st.subheader("➕ Tambah Modul Baru")
+        with st.form("new_module"):
+            title = st.text_input("Judul Modul")
+            content = st.text_area("Isi Materi (Markdown boleh)")
+            youtube_url = st.text_input("YouTube URL (opsional)")
+            image_url = st.text_input("Link Gambar (opsional)")
+            order_index = st.number_input("Urutan", 0, 100, 0)
+            ok = st.form_submit_button("Tambah Modul")
+        if ok and title.strip():
+            supabase.table("modules").insert({
+                "course_id": course["id"],
+                "title": title,
+                "content": content,
+                "youtube_url": youtube_url or None,
+                "image_url": image_url or None,
+                "order_index": order_index,
+            }).execute()
+            st.success("Modul berhasil ditambahkan!")
+            st.rerun()
+
+def page_course_detail(course):
+    st.title(course["title"])
+    st.caption(f"Kode: {course['code']}")
+    menu = st.radio("Navigasi Kelas", ["Home", "Modules", "Assignments", "Quizzes", "Announcements"])
+
+    if menu == "Home":
+        st.subheader("🏠 Beranda Kelas")
+        st.write(course["description"] or "-")
+
+    elif menu == "Modules":
+        page_modules(course)
+
+    elif menu == "Assignments":
+        st.info("Fitur tugas akan ditambahkan di versi berikutnya 💡")
+
+    elif menu == "Quizzes":
+        st.info("Fitur kuis akan segera hadir 🧠")
+
+    elif menu == "Announcements":
+        st.info("Fitur pengumuman kelas akan ditambahkan 📢")
+
+    if st.button("← Kembali ke Dashboard"):
+        st.session_state.in_course = False
+        st.session_state.current_course = None
+        st.rerun()
+
+for c in courses:
+    st.markdown(f"### {c['title']}")
+    st.caption(f"Kode: {c['code']}")
+    st.write(c.get("description") or "-")
+    if st.button(f"Masuk ke {c['title']}", key=f"go_{c['id']}"):
+        st.session_state.in_course = True
+        st.session_state.current_course = c
+        st.rerun()
+    st.divider()
+
+if "user" not in st.session_state:
+    st.session_state.user = None
+if "in_course" not in st.session_state:
+    st.session_state.in_course = False
+if "current_course" not in st.session_state:
+    st.session_state.current_course = None
+
+if not st.session_state.user:
+    page_login()
+elif st.session_state.in_course and st.session_state.current_course:
+    page_course_detail(st.session_state.current_course)
+else:
+    section = sidebar_nav()
+    if section == "🏠 Beranda":
+        page_home()
+    elif section == "📘 Kursus Saya":
+        page_courses()
+    elif section == "👤 Akun":
+        page_account()
+
