@@ -12,114 +12,108 @@ SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJ
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 # ==============================
-# HALAMAN & TEMA
+# KONFIGURASI HALAMAN
 # ==============================
 st.set_page_config(page_title="ThinkVerse LMS", page_icon="🎓", layout="wide")
 
-st.markdown(
-    """
-    <style>
-        /* ===== GLOBAL RESET ===== */
-        .stApp {
-            background: linear-gradient(135deg, #dcd6f7 0%, #f9d7e3 100%) !important;
-            background-attachment: fixed;
-            font-family: "Poppins", sans-serif;
-            color: #222 !important;
-            padding-top: 0 !important;
-            margin-top: 0 !important;
-        }
-
-        /* Hilangkan header kosong & padding aneh bawaan */
-        [data-testid="stHeader"], [data-testid="stAppViewBlockContainer"], section[data-testid="block-container"] > div:first-child {
-            background: transparent !important;
-            height: 0 !important;
-            padding-top: 0 !important;
-            margin-top: 0 !important;
-        }
-
-        /* Sembunyikan kotak kosong besar paling atas */
-        section.main > div:nth-child(1),
-        section[data-testid="block-container"] > div:nth-child(1),
-        [data-testid="stAppViewBlockContainer"] > div:first-of-type {
-            display: none !important;
-        }
-
-        [data-testid="stToolbar"] {
-            top: -100px !important;
-        }
-
-        /* ===== TEKS & JUDUL ===== */
-        h1, h2, h3, h4, h5 {
-            color: #222 !important;
-            font-weight: 700;
-        }
-
-        /* ===== CARD / CONTAINER ===== */
-        .glass-box {
-            background: rgba(255, 255, 255, 0.6);
-            border-radius: 25px;
-            backdrop-filter: blur(14px);
-            -webkit-backdrop-filter: blur(14px);
-            border: 1px solid rgba(255, 255, 255, 0.3);
-            box-shadow: 0 6px 24px rgba(0,0,0,0.08);
-            padding: 40px;
-            margin: 20px 0 25px 0;
-        }
-
-        /* ===== SIDEBAR ===== */
-        [data-testid="stSidebar"] {
-            background: rgba(255,255,255,0.55);
-            backdrop-filter: blur(10px);
-            border-right: 1px solid rgba(255,255,255,0.4);
-            color: #222 !important;
-        }
-
-        /* ===== BUTTON ===== */
-        button[kind="primary"] {
-            background: linear-gradient(90deg, #7c3aed, #ec4899);
-            border-radius: 12px;
-            font-weight: 600;
-            color: white !important;
-            border: none;
-            transition: all 0.3s ease;
-        }
-        button[kind="primary"]:hover {
-            filter: brightness(1.1);
-            transform: scale(1.02);
-        }
-
-        /* ===== INPUTS ===== */
-        input, select, textarea {
-            background-color: rgba(255,255,255,0.85) !important;
-            color: #222 !important;
-        }
-
-        /* ===== LABEL ===== */
-        label {
-            font-weight: 600;
-            color: #333 !important;
-        }
-
-        /* ===== TABS ===== */
-        .stTabs [data-baseweb="tab"] {
-            background: rgba(255,255,255,0.7);
-            border-radius: 12px;
-            color: #222 !important;
-            padding: 8px 16px;
-        }
-
-        /* ===== ALERT ===== */
-        .stAlert {
-            background: rgba(255,255,255,0.7) !important;
-            color: #222 !important;
-        }
-    </style>
-    """,
-    unsafe_allow_html=True
-)
+# TRIK 1: Buat blok kosong di awal lalu langsung hapus (hapus block pertama bawaan)
+placeholder = st.empty()
+placeholder.empty()
 
 # ==============================
-# UTILITAS
+# CSS GLOBAL
+# ==============================
+st.markdown("""
+<style>
+    html, body, .stApp {
+        margin: 0 !important;
+        padding: 0 !important;
+        background: linear-gradient(135deg, #dcd6f7 0%, #f9d7e3 100%) !important;
+        font-family: "Poppins", sans-serif !important;
+        color: #222 !important;
+    }
+
+    /* Hilangkan header & ruang kosong */
+    [data-testid="stHeader"], header, section[data-testid="block-container"] > div:first-child {
+        display: none !important;
+    }
+
+    /* Hapus padding default container utama */
+    section[data-testid="block-container"] {
+        padding-top: 0 !important;
+        margin-top: 0 !important;
+    }
+
+    /* Hilangkan toolbar Streamlit */
+    [data-testid="stToolbar"] {
+        display: none !important;
+    }
+
+    /* Styling teks */
+    h1, h2, h3, h4, h5 {
+        color: #222 !important;
+        font-weight: 700 !important;
+    }
+
+    /* Glass box */
+    .glass-box {
+        background: rgba(255,255,255,0.6);
+        border-radius: 25px;
+        backdrop-filter: blur(14px);
+        -webkit-backdrop-filter: blur(14px);
+        border: 1px solid rgba(255,255,255,0.3);
+        box-shadow: 0 6px 24px rgba(0,0,0,0.08);
+        padding: 40px;
+        margin: 20px 0 25px 0;
+    }
+
+    /* Sidebar */
+    [data-testid="stSidebar"] {
+        background: rgba(255,255,255,0.55);
+        backdrop-filter: blur(10px);
+        border-right: 1px solid rgba(255,255,255,0.4);
+        color: #222 !important;
+    }
+
+    /* Buttons */
+    button[kind="primary"] {
+        background: linear-gradient(90deg, #7c3aed, #ec4899);
+        border-radius: 12px;
+        font-weight: 600;
+        color: white !important;
+        border: none;
+        transition: all 0.3s ease;
+    }
+    button[kind="primary"]:hover {
+        filter: brightness(1.1);
+        transform: scale(1.02);
+    }
+
+    /* Inputs */
+    input, select, textarea {
+        background-color: rgba(255,255,255,0.85) !important;
+        color: #222 !important;
+    }
+
+    /* Tabs */
+    .stTabs [data-baseweb="tab"] {
+        background: rgba(255,255,255,0.7);
+        border-radius: 12px;
+        color: #222 !important;
+        padding: 8px 16px;
+    }
+
+    /* Alerts */
+    .stAlert {
+        background: rgba(255,255,255,0.7) !important;
+        color: #222 !important;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+
+# ==============================
+# FUNGSI LOGIN & DATABASE
 # ==============================
 def hash_pw(password):
     return hashlib.sha256(password.encode()).hexdigest()
@@ -167,7 +161,6 @@ def page_login():
 
     tabs = st.tabs(["🔑 Login", "🆕 Register", "🔁 Lupa Password"])
 
-    # --- LOGIN ---
     with tabs[0]:
         with st.form("login_form_tab1"):
             email = st.text_input("Email", key="login_email_tab1")
@@ -183,7 +176,6 @@ def page_login():
             else:
                 st.error("Email atau password salah.")
 
-    # --- REGISTER ---
     with tabs[1]:
         with st.form("reg_form_tab2"):
             name = st.text_input("Nama Lengkap", key="reg_name_tab2")
@@ -195,7 +187,6 @@ def page_login():
             if register_user(name, email, pw, role):
                 st.success("Akun berhasil dibuat! Silakan login di tab pertama.")
 
-    # --- LUPA PASSWORD ---
     with tabs[2]:
         with st.form("forgot_pw_form_tab3"):
             email_fp = st.text_input("Masukkan email kamu", key="fp_email_tab3")
@@ -207,7 +198,6 @@ def page_login():
                 st.error("Password tidak sama.")
             elif reset_password(email_fp, new_pw):
                 st.success("Password berhasil direset! Silakan login ulang.")
-
     st.markdown("</div>", unsafe_allow_html=True)
 
 # ==============================
@@ -241,7 +231,6 @@ def page_courses():
     st.markdown("<div class='glass-box'>", unsafe_allow_html=True)
     st.title("📘 Kursus")
     st.caption("Daftar kursus yang tersedia di ThinkVerse.")
-
     try:
         courses = supabase.table("courses").select("*").execute()
         if len(courses.data) == 0:
@@ -304,4 +293,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
