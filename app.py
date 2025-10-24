@@ -112,10 +112,9 @@ def page_account():
     st.markdown("---")
 
     if st.button("Logout", type="primary"):
-        st.session_state.user = None
-        st.success("Berhasil logout.")
-        time.sleep(0.7)
-        st.rerun()
+        st.session_state.clear()  # kosongkan semua session state
+        st.success("Berhasil logout. Mengarahkan kembali...")
+        st.experimental_rerun()   # langsung rerun tanpa sleep()
 
 
 # ====== MAIN APP (lanjutan dari login system) ======
@@ -133,14 +132,6 @@ def main():
     elif page == "👤 Akun":
         page_account()
     elif page == "🚪 Logout":
-        st.session_state.user = None
-        st.success("Logout berhasil.")
-        time.sleep(0.7)
-        st.rerun()
-
-
-if __name__ == "__main__":
-    main()
-
-
-
+        st.session_state.clear()
+        st.success("Logout berhasil! Mengarahkan ulang...")
+        st.experimental_rerun()
