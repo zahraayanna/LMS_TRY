@@ -2,7 +2,6 @@ import streamlit as st
 from supabase import create_client, Client
 import hashlib
 import time
-from datetime import datetime
 
 # ==============================
 # KONFIGURASI SUPABASE
@@ -13,40 +12,91 @@ SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJ
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 # ==============================
-# STYLE DASAR
+# KONFIGURASI HALAMAN & TEMA
 # ==============================
-THEME_COLOR = "#635BFF"  # warna ungu modern ThinkVerse
 st.set_page_config(page_title="ThinkVerse LMS", page_icon="🎓", layout="wide")
 
 st.markdown(
-    f"""
+    """
     <style>
-        .stApp {{
-            background-color: #f8f9fc;
-        }}
-        h1, h2, h3, h4, h5 {{
-            color: #2f2f3a;
-        }}
-        div[data-testid="stSidebar"] {{
-            background-color: #eef0f8;
-        }}
-        button[kind="primary"] {{
-            background-color: {THEME_COLOR};
-            color: white !important;
-            border-radius: 8px;
+        /* ===== GLOBAL STYLE ===== */
+        .stApp {
+            background: linear-gradient(135deg, rgba(99,91,255,0.2), rgba(236,72,153,0.2));
+            background-attachment: fixed;
+            color: #fff;
+            font-family: "Poppins", sans-serif;
+        }
+
+        h1, h2, h3, h4 {
+            color: #f2f2f7 !important;
+        }
+
+        /* ===== CARD / CONTAINER ===== */
+        .glass-box {
+            background: rgba(255, 255, 255, 0.12);
+            border-radius: 20px;
+            backdrop-filter: blur(14px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            box-shadow: 0 4px 30px rgba(0,0,0,0.2);
+            padding: 32px 40px;
+            margin-bottom: 20px;
+        }
+
+        /* ===== SIDEBAR ===== */
+        [data-testid="stSidebar"] {
+            background: rgba(255,255,255,0.1);
+            backdrop-filter: blur(10px);
+            border-right: 1px solid rgba(255,255,255,0.2);
+        }
+
+        /* ===== BUTTON ===== */
+        button[kind="primary"] {
+            background: linear-gradient(90deg, #635BFF, #EC4899);
+            border-radius: 10px;
             font-weight: 600;
-        }}
+            color: white !important;
+            border: none;
+            transition: 0.3s ease;
+        }
+
+        button[kind="primary"]:hover {
+            filter: brightness(1.1);
+            transform: scale(1.02);
+        }
+
+        /* ===== INPUTS ===== */
+        input, select, textarea {
+            background-color: rgba(255,255,255,0.1) !important;
+            color: #f2f2f7 !important;
+        }
+
+        /* ===== FORM LABELS ===== */
+        label {
+            font-weight: 500;
+            color: #fdfdfd !important;
+        }
+
+        /* Tabs */
+        .stTabs [data-baseweb="tab"] {
+            background: rgba(255,255,255,0.15);
+            border-radius: 10px;
+            color: white !important;
+        }
+
+        /* Divider */
+        hr {
+            border-color: rgba(255,255,255,0.2);
+        }
     </style>
     """,
     unsafe_allow_html=True
 )
 
 # ==============================
-# UTILITAS DASAR
+# UTILITAS
 # ==============================
 def hash_pw(password):
     return hashlib.sha256(password.encode()).hexdigest()
-
 
 def register_user(name, email, password, role):
     hashed_pw = hash_pw(password)
@@ -62,7 +112,6 @@ def register_user(name, email, password, role):
         st.error(f"Gagal membuat akun: {e}")
         return False
 
-
 def login(email, password):
     hashed_pw = hash_pw(password)
     res = supabase.table("users").select("*").eq("email", email).execute()
@@ -73,7 +122,6 @@ def login(email, password):
         return user
     return None
 
-
 def reset_password(email, new_password):
     try:
         hashed_pw = hash_pw(new_password)
@@ -83,13 +131,13 @@ def reset_password(email, new_password):
         st.error(f"Gagal reset password: {e}")
         return False
 
-
 # ==============================
 # HALAMAN LOGIN / REGISTER
 # ==============================
 def page_login():
-    st.title("🎓 ThinkVerse LMS — Login Portal")
-    st.caption("Masuk untuk melanjutkan ke ruang belajar digital kamu.")
+    st.markdown("<div class='glass-box'>", unsafe_allow_html=True)
+    st.title("🎓 ThinkVerse LMS")
+    st.caption("Portal pembelajaran modern berbasis cloud Supabase")
 
     tabs = st.tabs(["🔑 Login", "🆕 Register", "🔁 Lupa Password"])
 
@@ -104,7 +152,7 @@ def page_login():
             if u:
                 st.session_state.user = u
                 st.success(f"Selamat datang, {u['name']} 👋")
-                time.sleep(0.6)
+                time.sleep(0.5)
                 st.rerun()
             else:
                 st.error("Email atau password salah.")
@@ -134,13 +182,14 @@ def page_login():
             elif reset_password(email_fp, new_pw):
                 st.success("Password berhasil direset! Silakan login ulang.")
 
+    st.markdown("</div>", unsafe_allow_html=True)
 
 # ==============================
-# SIDEBAR NAVIGASI
+# NAVIGASI & HALAMAN
 # ==============================
 def sidebar_nav():
     st.sidebar.image("https://cdn-icons-png.flaticon.com/512/906/906175.png", width=70)
-    st.sidebar.markdown(f"<h2 style='color:{THEME_COLOR};'>ThinkVerse LMS</h2>", unsafe_allow_html=True)
+    st.sidebar.markdown("<h2 style='color:white;'>ThinkVerse LMS</h2>", unsafe_allow_html=True)
     st.sidebar.markdown("---")
 
     user = st.session_state.get("user")
@@ -155,61 +204,54 @@ def sidebar_nav():
     page = st.sidebar.radio("Navigasi", ["🏠 Dashboard", "📘 Kursus", "👤 Akun"])
     return page
 
-
-# ==============================
-# HALAMAN DASHBOARD
-# ==============================
 def page_dashboard():
+    st.markdown("<div class='glass-box'>", unsafe_allow_html=True)
     st.title("🏠 Dashboard")
-    st.info("Selamat datang di ThinkVerse LMS! Pilih menu di sidebar untuk mulai belajar.")
+    st.write("Selamat datang di ThinkVerse LMS ✨")
+    st.info("Eksplor menu di sidebar untuk mulai belajar.")
+    st.markdown("</div>", unsafe_allow_html=True)
 
-
-# ==============================
-# HALAMAN KURSUS
-# ==============================
 def page_courses():
+    st.markdown("<div class='glass-box'>", unsafe_allow_html=True)
     st.title("📘 Kursus")
-    st.caption("Kelola kursus atau bergabung ke kelas sesuai peran kamu.")
-    st.divider()
-
+    st.caption("Daftar kursus yang tersedia di ThinkVerse.")
     try:
         courses = supabase.table("courses").select("*").execute()
         if len(courses.data) == 0:
-            st.info("Belum ada kursus yang terdaftar.")
+            st.info("Belum ada kursus terdaftar.")
+            st.markdown("</div>", unsafe_allow_html=True)
             return
 
         for c in courses.data:
-            with st.container(border=True):
+            with st.container():
                 st.markdown(f"### {c['title']}")
                 st.write(c.get("description", ""))
                 st.caption(f"👨‍🏫 Pengampu: {c.get('instructor_email', '-')}")
                 st.divider()
     except Exception as e:
-        st.error(f"Kesalahan mengambil data kursus: {e}")
+        st.error(f"Gagal mengambil data kursus: {e}")
+    st.markdown("</div>", unsafe_allow_html=True)
 
-
-# ==============================
-# HALAMAN AKUN
-# ==============================
 def page_account():
+    st.markdown("<div class='glass-box'>", unsafe_allow_html=True)
     st.title("👤 Akun")
     user = st.session_state.get("user")
 
     st.markdown(f"### Halo, {user['name']}!")
     st.write(f"📧 Email: {user['email']}")
     st.write(f"🧩 Role: {user['role']}")
-
     st.divider()
+
     st.subheader("Keluar dari Akun")
     if st.button("🚪 Logout", type="primary"):
         st.session_state.clear()
         st.success("Berhasil logout. Mengarahkan ke halaman login...")
         time.sleep(0.6)
         st.rerun()
-
+    st.markdown("</div>", unsafe_allow_html=True)
 
 # ==============================
-# MAIN APP
+# MAIN
 # ==============================
 def main():
     if "user" not in st.session_state or not st.session_state.user:
@@ -224,9 +266,5 @@ def main():
     elif page == "👤 Akun":
         page_account()
 
-
-# ==============================
-# JALANKAN APLIKASI
-# ==============================
 if __name__ == "__main__":
     main()
