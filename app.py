@@ -12,21 +12,39 @@ SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJ
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 # ==============================
-# KONFIGURASI HALAMAN & TEMA
+# HALAMAN & TEMA
 # ==============================
 st.set_page_config(page_title="ThinkVerse LMS", page_icon="🎓", layout="wide")
 
 st.markdown(
     """
     <style>
-        /* ===== GLOBAL STYLE ===== */
+        /* ===== GLOBAL RESET ===== */
         .stApp {
-            background: linear-gradient(135deg, #dcd6f7 0%, #f9d7e3 100%);
+            background: linear-gradient(135deg, #dcd6f7 0%, #f9d7e3 100%) !important;
             background-attachment: fixed;
-            color: #222;
             font-family: "Poppins", sans-serif;
+            color: #222 !important;
+            padding-top: 0rem !important;
+            margin-top: 0rem !important;
         }
 
+        /* Hilangkan header kosong bawaan Streamlit */
+        [data-testid="stHeader"] {
+            background: transparent !important;
+            height: 0rem !important;
+        }
+
+        [data-testid="stAppViewBlockContainer"] {
+            padding-top: 0rem !important;
+            margin-top: 0rem !important;
+        }
+
+        [data-testid="stToolbar"] {
+            top: -100px !important;
+        }
+
+        /* ===== TEKS & JUDUL ===== */
         h1, h2, h3, h4, h5 {
             color: #222 !important;
             font-weight: 700;
@@ -39,9 +57,9 @@ st.markdown(
             backdrop-filter: blur(14px);
             -webkit-backdrop-filter: blur(14px);
             border: 1px solid rgba(255, 255, 255, 0.3);
-            box-shadow: 0 6px 24px rgba(0,0,0,0.1);
+            box-shadow: 0 6px 24px rgba(0,0,0,0.08);
             padding: 40px;
-            margin-bottom: 25px;
+            margin: 20px 0 25px 0;
         }
 
         /* ===== SIDEBAR ===== */
@@ -61,7 +79,6 @@ st.markdown(
             border: none;
             transition: all 0.3s ease;
         }
-
         button[kind="primary"]:hover {
             filter: brightness(1.1);
             transform: scale(1.02);
@@ -69,17 +86,17 @@ st.markdown(
 
         /* ===== INPUTS ===== */
         input, select, textarea {
-            background-color: rgba(255,255,255,0.8) !important;
+            background-color: rgba(255,255,255,0.85) !important;
             color: #222 !important;
         }
 
-        /* ===== FORM LABELS ===== */
+        /* ===== LABEL ===== */
         label {
             font-weight: 600;
             color: #333 !important;
         }
 
-        /* Tabs */
+        /* ===== TABS ===== */
         .stTabs [data-baseweb="tab"] {
             background: rgba(255,255,255,0.7);
             border-radius: 12px;
@@ -87,12 +104,7 @@ st.markdown(
             padding: 8px 16px;
         }
 
-        /* Divider */
-        hr {
-            border-color: rgba(0,0,0,0.15);
-        }
-
-        /* Alerts */
+        /* ===== ALERT ===== */
         .stAlert {
             background: rgba(255,255,255,0.7) !important;
             color: #222 !important;
@@ -135,8 +147,8 @@ def login(email, password):
 def reset_password(email, new_password):
     try:
         hashed_pw = hash_pw(new_password)
-        res = supabase.table("users").update({"password_hash": hashed_pw}).eq("email", email).execute()
-        return res.data is not None
+        supabase.table("users").update({"password_hash": hashed_pw}).eq("email", email).execute()
+        return True
     except Exception as e:
         st.error(f"Gagal reset password: {e}")
         return False
@@ -234,7 +246,6 @@ def page_courses():
             return
 
         for c in courses.data:
-            # Ganti dari 'with st.container():' jadi card bergaya langsung
             st.markdown(f"""
                 <div style="
                     background: rgba(255,255,255,0.75);
@@ -245,9 +256,7 @@ def page_courses():
                 ">
                     <h4 style="margin-bottom: 4px;">{c['title']}</h4>
                     <p style="margin: 0;">{c.get('description', '')}</p>
-                    <p style="font-size: 14px; opacity: 0.7;">
-                        👩‍🏫 Pengampu: {c.get('instructor_email', '-')}
-                    </p>
+                    <p style="font-size: 14px; opacity: 0.7;">👩‍🏫 Pengampu: {c.get('instructor_email', '-')}</p>
                 </div>
             """, unsafe_allow_html=True)
     except Exception as e:
@@ -291,4 +300,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
