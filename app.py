@@ -1,11 +1,13 @@
 import streamlit as st
 import sqlite3
 import hashlib
+import psycopg2
 import os
 import io
 import re
 import time
 from datetime import datetime, timedelta
+
 
 # === CONFIG UTAMA ===
 st.set_page_config(page_title='ThinkVerse LMS', page_icon='🎓', layout='wide')
@@ -25,7 +27,7 @@ COOKIE_KEY = "thinkverse_login_token"
 
 # ---------- UTILITAS DASAR ----------
 def get_conn():
-    return sqlite3.connect(DB_PATH, check_same_thread=False)
+    return psycopg2.connect(os.environ.get("DB_URL"))
 
 def hash_pw(pw: str) -> str:
     return hashlib.sha256(pw.encode()).hexdigest()
@@ -1433,5 +1435,6 @@ def main():
 
 if __name__ == '__main__':
     main()
+
 
 
