@@ -1,16 +1,15 @@
 import streamlit as st
 from supabase import create_client, Client
-import os
+import hashlib
 
 # ====== Supabase Client ======
 SUPABASE_URL = "https://vdtxhoqizsehsfxrtxof.supabase.co"
 SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZkdHhob3FpenNlaHNmeHJ0eG9mIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2MTI0NDUxMSwiZXhwIjoyMDc2ODIwNTExfQ.zakgEoddamB15sJvzi96hXZ5Ef9rnT-Qn5w8XGRuTl0"
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-# ====== Warna Tema ======
-THEME_COLOR = "#4F46E5"  # ungu ke-biru elegan
-ACCENT_COLOR = "#E0E7FF"  # ungu muda lembut
-
+# ====== Tema UI ======
+THEME_COLOR = "#4F46E5"   # Ungu elegan
+ACCENT_COLOR = "#EEF2FF"  # Latar lembut
 
 # ====== Sidebar Navigasi ======
 def sidebar_nav():
@@ -30,7 +29,7 @@ def sidebar_nav():
     return page
 
 
-# ====== Dashboard Utama ======
+# ====== Dashboard ======
 def page_dashboard():
     st.markdown(
         f"""
@@ -57,7 +56,7 @@ def page_courses():
     st.markdown(f"<h2 style='color:{THEME_COLOR};'>📘 Kursus</h2>", unsafe_allow_html=True)
     user = st.session_state["user"]
 
-    # --- Jika instruktur ---
+    # === Buat Kursus (untuk Instruktur/Admin) ===
     if user["role"] in ["instructor", "admin"]:
         with st.expander("➕ Tambah Kursus Baru", expanded=False):
             title = st.text_input("Judul Kursus")
@@ -67,19 +66,19 @@ def page_courses():
             if ok and title.strip() and code.strip():
                 try:
                     supabase.table("courses").insert({
-                        "title": title,
-                        "code": code,
+                        "title": title.strip(),
+                        "code": code.strip(),
                         "description": desc,
                         "instructor_email": user["email"]
                     }).execute()
                     st.success("✅ Kursus berhasil dibuat!")
-                    st.rerun()
+                    st.experimental_rerun()
                 except Exception as e:
                     st.error(f"Gagal membuat kursus: {e}")
 
     st.markdown("---")
 
-    # --- Daftar kursus yang diampu / diikuti ---
+    # === Daftar Kursus yang Diampu / Diikuti ===
     st.subheader("📚 Daftar Kursus Saya")
     try:
         if user["role"] == "instructor":
@@ -111,19 +110,21 @@ def page_account():
     st.write(f"Role: **{user['role']}**")
     st.markdown("---")
 
-    if st.button("Logout", type="primary"):
-        st.session_state.clear()  # kosongkan semua session state
+    if st.button("Logout 🔒", type="primary"):
+        st.session_state.clear()
         st.success("Berhasil logout. Mengarahkan kembali...")
-        st.experimental_rerun()   # langsung rerun tanpa sleep()
+        st.experimental_rerun()
 
 
-# ====== MAIN APP (lanjutan dari login system) ======
+# ====== MAIN APP ======
 def main():
+    # Pastikan user login dulu
     if "user" not in st.session_state or not st.session_state.user:
         from app import page_login
         page_login()
         return
 
+    # Sidebar navigasi
     page = sidebar_nav()
     if page == "🏠 Dashboard":
         page_dashboard()
@@ -135,3 +136,7 @@ def main():
         st.session_state.clear()
         st.success("Logout berhasil! Mengarahkan ulang...")
         st.experimental_rerun()
+
+
+if __name__ == "__main__":
+    main()
