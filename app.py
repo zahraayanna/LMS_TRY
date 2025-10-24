@@ -29,7 +29,18 @@ COOKIE_KEY = "thinkverse_login_token"
 
 # ---------- UTILITAS DASAR ----------
 def get_conn():
-    return psycopg2.connect(os.environ.get("DB_URL"))
+    db_url = os.environ.get("DB_URL")
+    if not db_url:
+        st.error("❌ Tidak menemukan DB_URL di Secrets.")
+        st.stop()
+
+    try:
+        # tambahkan SSL mode agar Supabase mau nerima koneksi dari Streamlit Cloud
+        conn = psycopg2.connect(db_url, sslmode='require')
+        return conn
+    except Exception as e:
+        st.error(f"❌ Gagal konek ke database Supabase: {e}")
+        st.stop()
 
 def hash_pw(pw: str) -> str:
     return hashlib.sha256(pw.encode()).hexdigest()
@@ -1401,6 +1412,7 @@ def main():
 
 if __name__ == '__main__':
     main()
+
 
 
 
