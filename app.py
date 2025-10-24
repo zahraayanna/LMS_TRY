@@ -4,8 +4,6 @@ st.set_page_config(page_title='ThinkVerse LMS', page_icon='🎓', layout='wide')
 
 import sqlite3
 import hashlib
-import psycopg2
-import os
 import io
 import re
 import time
@@ -28,19 +26,14 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 COOKIE_KEY = "thinkverse_login_token"
 
 # ---------- UTILITAS DASAR ----------
-def get_conn():
-    db_url = os.environ.get("DB_URL")
-    if not db_url:
-        st.error("❌ Tidak menemukan DB_URL di Secrets.")
-        st.stop()
+from supabase import create_client, Client
+import os
 
-    try:
-        # tambahkan SSL mode agar Supabase mau nerima koneksi dari Streamlit Cloud
-        conn = psycopg2.connect(db_url, sslmode='require')
-        return conn
-    except Exception as e:
-        st.error(f"❌ Gagal konek ke database Supabase: {e}")
-        st.stop()
+def get_conn():
+    url = os.environ.get("SUPABASE_URL")
+    key = os.environ.get("SUPABASE_KEY")
+    supabase: Client = create_client(url, key)
+    return supabase
 
 def hash_pw(pw: str) -> str:
     return hashlib.sha256(pw.encode()).hexdigest()
@@ -1412,6 +1405,7 @@ def main():
 
 if __name__ == '__main__':
     main()
+
 
 
 
