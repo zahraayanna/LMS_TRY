@@ -12,6 +12,7 @@ import time
 from datetime import datetime, timedelta
 
 st.write("🔍 DB_URL ditemukan:", bool(os.environ.get("DB_URL")))
+st.write("🔗 Value starts with:", str(os.environ.get("DB_URL"))[:30])
 
 # =============================
 # ThinkVerse LMS — CORE SYSTEM
@@ -1400,6 +1401,7 @@ def main():
 
 if __name__ == '__main__':
     main()
+
 
 
 
