@@ -1,132 +1,221 @@
 import streamlit as st
 from supabase import create_client, Client
 import hashlib
+import time
+from datetime import datetime
 
-# ====== Supabase Client ======
+# ==============================
+# KONFIGURASI SUPABASE
+# ==============================
 SUPABASE_URL = "https://vdtxhoqizsehsfxrtxof.supabase.co"
 SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZkdHhob3FpenNlaHNmeHJ0eG9mIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2MTI0NDUxMSwiZXhwIjoyMDc2ODIwNTExfQ.zakgEoddamB15sJvzi96hXZ5Ef9rnT-Qn5w8XGRuTl0"
+
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-# ====== Tema UI ======
-THEME_COLOR = "#4F46E5"   # Ungu elegan
-ACCENT_COLOR = "#EEF2FF"  # Latar lembut
+# ==============================
+# STYLE DASAR
+# ==============================
+THEME_COLOR = "#635BFF"  # warna ungu modern ThinkVerse
+st.set_page_config(page_title="ThinkVerse LMS", page_icon="🎓", layout="wide")
 
-# ====== Sidebar Navigasi ======
+st.markdown(
+    f"""
+    <style>
+        .stApp {{
+            background-color: #f8f9fc;
+        }}
+        h1, h2, h3, h4, h5 {{
+            color: #2f2f3a;
+        }}
+        div[data-testid="stSidebar"] {{
+            background-color: #eef0f8;
+        }}
+        button[kind="primary"] {{
+            background-color: {THEME_COLOR};
+            color: white !important;
+            border-radius: 8px;
+            font-weight: 600;
+        }}
+    </style>
+    """,
+    unsafe_allow_html=True
+)
+
+# ==============================
+# UTILITAS DASAR
+# ==============================
+def hash_pw(password):
+    return hashlib.sha256(password.encode()).hexdigest()
+
+
+def register_user(name, email, password, role):
+    hashed_pw = hash_pw(password)
+    try:
+        supabase.table("users").insert({
+            "name": name,
+            "email": email,
+            "password_hash": hashed_pw,
+            "role": role
+        }).execute()
+        return True
+    except Exception as e:
+        st.error(f"Gagal membuat akun: {e}")
+        return False
+
+
+def login(email, password):
+    hashed_pw = hash_pw(password)
+    res = supabase.table("users").select("*").eq("email", email).execute()
+    if len(res.data) == 0:
+        return None
+    user = res.data[0]
+    if user["password_hash"] == hashed_pw:
+        return user
+    return None
+
+
+def reset_password(email, new_password):
+    try:
+        hashed_pw = hash_pw(new_password)
+        res = supabase.table("users").update({"password_hash": hashed_pw}).eq("email", email).execute()
+        return res.data is not None
+    except Exception as e:
+        st.error(f"Gagal reset password: {e}")
+        return False
+
+
+# ==============================
+# HALAMAN LOGIN / REGISTER
+# ==============================
+def page_login():
+    st.title("🎓 ThinkVerse LMS — Login Portal")
+    st.caption("Masuk untuk melanjutkan ke ruang belajar digital kamu.")
+
+    tabs = st.tabs(["🔑 Login", "🆕 Register", "🔁 Lupa Password"])
+
+    # --- LOGIN ---
+    with tabs[0]:
+        with st.form("login_form_tab1"):
+            email = st.text_input("Email", key="login_email_tab1")
+            pw = st.text_input("Password", type="password", key="login_pw_tab1")
+            ok = st.form_submit_button("Masuk")
+        if ok:
+            u = login(email, pw)
+            if u:
+                st.session_state.user = u
+                st.success(f"Selamat datang, {u['name']} 👋")
+                time.sleep(0.6)
+                st.rerun()
+            else:
+                st.error("Email atau password salah.")
+
+    # --- REGISTER ---
+    with tabs[1]:
+        with st.form("reg_form_tab2"):
+            name = st.text_input("Nama Lengkap", key="reg_name_tab2")
+            email = st.text_input("Email", key="reg_email_tab2")
+            pw = st.text_input("Password", type="password", key="reg_pw_tab2")
+            role = st.selectbox("Peran", ["student", "instructor"], key="reg_role_tab2")
+            ok2 = st.form_submit_button("Daftar Akun Baru")
+        if ok2:
+            if register_user(name, email, pw, role):
+                st.success("Akun berhasil dibuat! Silakan login di tab pertama.")
+
+    # --- LUPA PASSWORD ---
+    with tabs[2]:
+        with st.form("forgot_pw_form_tab3"):
+            email_fp = st.text_input("Masukkan email kamu", key="fp_email_tab3")
+            new_pw = st.text_input("Password baru", type="password", key="fp_pw_tab3")
+            new_pw2 = st.text_input("Ulangi password baru", type="password", key="fp_pw2_tab3")
+            ok3 = st.form_submit_button("Reset Password")
+        if ok3:
+            if new_pw != new_pw2:
+                st.error("Password tidak sama.")
+            elif reset_password(email_fp, new_pw):
+                st.success("Password berhasil direset! Silakan login ulang.")
+
+
+# ==============================
+# SIDEBAR NAVIGASI
+# ==============================
 def sidebar_nav():
     st.sidebar.image("https://cdn-icons-png.flaticon.com/512/906/906175.png", width=70)
     st.sidebar.markdown(f"<h2 style='color:{THEME_COLOR};'>ThinkVerse LMS</h2>", unsafe_allow_html=True)
     st.sidebar.markdown("---")
 
     user = st.session_state.get("user")
-    if user:
-        st.sidebar.markdown(f"👋 **{user['name']}**  \n📧 {user['email']}")
-        st.sidebar.markdown(f"🧩 Role: _{user['role']}_")
-        st.sidebar.markdown("---")
-    else:
+    if not user:
         st.sidebar.info("Silakan login terlebih dahulu.")
         return None
 
-    page = st.sidebar.radio("Navigasi", ["🏠 Dashboard", "📘 Kursus", "👤 Akun", "🚪 Logout"])
+    st.sidebar.markdown(f"👋 **{user['name']}**  \n📧 {user['email']}")
+    st.sidebar.markdown(f"🧩 Role: _{user['role']}_")
+    st.sidebar.markdown("---")
+
+    page = st.sidebar.radio("Navigasi", ["🏠 Dashboard", "📘 Kursus", "👤 Akun"])
     return page
 
 
-
-# ====== Dashboard ======
+# ==============================
+# HALAMAN DASHBOARD
+# ==============================
 def page_dashboard():
-    st.markdown(
-        f"""
-        <div style="background-color:{ACCENT_COLOR};padding:20px;border-radius:12px;">
-            <h2 style="color:{THEME_COLOR};">🎓 Selamat Datang di ThinkVerse LMS</h2>
-            <p>Platform pembelajaran modern untuk pengajar dan pelajar fisika 💡</p>
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
-
-    user = st.session_state["user"]
-    st.write("")
-    st.subheader("📊 Ringkasan Akun")
-    st.write(f"Nama: **{user['name']}**")
-    st.write(f"Email: **{user['email']}**")
-    st.write(f"Role: **{user['role']}**")
-
-    st.info("Gunakan tab *Kursus* di sidebar untuk membuat atau bergabung ke kelas.")
+    st.title("🏠 Dashboard")
+    st.info("Selamat datang di ThinkVerse LMS! Pilih menu di sidebar untuk mulai belajar.")
 
 
-# ====== Manajemen Kursus ======
+# ==============================
+# HALAMAN KURSUS
+# ==============================
 def page_courses():
-    st.markdown(f"<h2 style='color:{THEME_COLOR};'>📘 Kursus</h2>", unsafe_allow_html=True)
-    user = st.session_state["user"]
+    st.title("📘 Kursus")
+    st.caption("Kelola kursus atau bergabung ke kelas sesuai peran kamu.")
+    st.divider()
 
-    # === Buat Kursus (untuk Instruktur/Admin) ===
-    if user["role"] in ["instructor", "admin"]:
-        with st.expander("➕ Tambah Kursus Baru", expanded=False):
-            title = st.text_input("Judul Kursus")
-            code = st.text_input("Kode Kursus (unik, mis. PHY101)")
-            desc = st.text_area("Deskripsi")
-            ok = st.button("Buat Kursus", type="primary")
-            if ok and title.strip() and code.strip():
-                try:
-                    supabase.table("courses").insert({
-                        "title": title.strip(),
-                        "code": code.strip(),
-                        "description": desc,
-                        "instructor_email": user["email"]
-                    }).execute()
-                    st.success("✅ Kursus berhasil dibuat!")
-                    st.experimental_rerun()
-                except Exception as e:
-                    st.error(f"Gagal membuat kursus: {e}")
-
-    st.markdown("---")
-
-    # === Daftar Kursus yang Diampu / Diikuti ===
-    st.subheader("📚 Daftar Kursus Saya")
     try:
-        if user["role"] == "instructor":
-            res = supabase.table("courses").select("*").eq("instructor_email", user["email"]).execute()
-        else:
-            res = supabase.table("enrollments").select("*, courses(title, code, description, instructor_email)").eq("student_email", user["email"]).execute()
+        courses = supabase.table("courses").select("*").execute()
+        if len(courses.data) == 0:
+            st.info("Belum ada kursus yang terdaftar.")
+            return
 
-        if not res.data:
-            st.info("Belum ada kursus yang kamu ikuti atau buat.")
-        else:
-            for c in res.data:
-                course = c["courses"] if "courses" in c else c
-                with st.container(border=True):
-                    st.markdown(f"### {course['title']} ({course['code']})")
-                    st.caption(f"Pengampu: {course.get('instructor_email', '-')}")
-                    st.write(course.get("description", "-"))
-                    st.button("Masuk ke Kelas", key=f"enter_{course['code']}")
+        for c in courses.data:
+            with st.container(border=True):
+                st.markdown(f"### {c['title']}")
+                st.write(c.get("description", ""))
+                st.caption(f"👨‍🏫 Pengampu: {c.get('instructor_email', '-')}")
+                st.divider()
     except Exception as e:
         st.error(f"Kesalahan mengambil data kursus: {e}")
 
 
-# ====== Halaman Akun ======
+# ==============================
+# HALAMAN AKUN
+# ==============================
 def page_account():
-    st.markdown(f"<h2 style='color:{THEME_COLOR};'>👤 Akun Saya</h2>", unsafe_allow_html=True)
-    user = st.session_state["user"]
+    st.title("👤 Akun")
+    user = st.session_state.get("user")
 
-    st.write(f"Nama: **{user['name']}**")
-    st.write(f"Email: **{user['email']}**")
-    st.write(f"Role: **{user['role']}**")
-    st.markdown("---")
+    st.markdown(f"### Halo, {user['name']}!")
+    st.write(f"📧 Email: {user['email']}")
+    st.write(f"🧩 Role: {user['role']}")
 
-    if st.button("Logout 🔒", type="primary"):
+    st.divider()
+    st.subheader("Keluar dari Akun")
+    if st.button("🚪 Logout", type="primary"):
         st.session_state.clear()
-        st.success("Berhasil logout. Mengarahkan kembali...")
-        st.experimental_rerun()
+        st.success("Berhasil logout. Mengarahkan ke halaman login...")
+        time.sleep(0.6)
+        st.rerun()
 
 
-# ====== MAIN APP ======
+# ==============================
+# MAIN APP
+# ==============================
 def main():
-    # Pastikan user login dulu
     if "user" not in st.session_state or not st.session_state.user:
-        from app import page_login
         page_login()
         return
 
-    # Sidebar navigasi
     page = sidebar_nav()
     if page == "🏠 Dashboard":
         page_dashboard()
@@ -134,12 +223,10 @@ def main():
         page_courses()
     elif page == "👤 Akun":
         page_account()
-    elif page == "🚪 Logout":
-        st.session_state.clear()
-        st.success("Logout berhasil! Mengarahkan ulang...")
-        st.experimental_rerun()
 
 
+# ==============================
+# JALANKAN APLIKASI
+# ==============================
 if __name__ == "__main__":
     main()
-
