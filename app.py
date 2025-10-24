@@ -21,82 +21,81 @@ st.markdown(
     <style>
         /* ===== GLOBAL STYLE ===== */
         .stApp {
-            background: linear-gradient(135deg, #a18cd1 0%, #fbc2eb 100%);
+            background: linear-gradient(135deg, #dcd6f7 0%, #f9d7e3 100%);
             background-attachment: fixed;
-            color: #fff;
+            color: #222;
             font-family: "Poppins", sans-serif;
         }
 
-        h1, h2, h3, h4 {
-            color: #fff !important;
+        h1, h2, h3, h4, h5 {
+            color: #222 !important;
+            font-weight: 700;
         }
 
         /* ===== CARD / CONTAINER ===== */
         .glass-box {
-            background: rgba(255, 255, 255, 0.25);
+            background: rgba(255, 255, 255, 0.6);
             border-radius: 25px;
-            backdrop-filter: blur(15px);
-            -webkit-backdrop-filter: blur(15px);
+            backdrop-filter: blur(14px);
+            -webkit-backdrop-filter: blur(14px);
             border: 1px solid rgba(255, 255, 255, 0.3);
-            box-shadow: 0 8px 32px rgba(31, 38, 135, 0.3);
+            box-shadow: 0 6px 24px rgba(0,0,0,0.1);
             padding: 40px;
-            margin-bottom: 20px;
+            margin-bottom: 25px;
         }
 
         /* ===== SIDEBAR ===== */
         [data-testid="stSidebar"] {
-            background: rgba(255,255,255,0.18);
+            background: rgba(255,255,255,0.55);
             backdrop-filter: blur(10px);
-            border-right: 1px solid rgba(255,255,255,0.3);
-            color: white !important;
+            border-right: 1px solid rgba(255,255,255,0.4);
+            color: #222 !important;
         }
 
         /* ===== BUTTON ===== */
         button[kind="primary"] {
-            background: linear-gradient(90deg, #635BFF, #EC4899);
+            background: linear-gradient(90deg, #7c3aed, #ec4899);
             border-radius: 12px;
             font-weight: 600;
             color: white !important;
             border: none;
             transition: all 0.3s ease;
-            box-shadow: 0px 3px 10px rgba(0,0,0,0.2);
         }
 
         button[kind="primary"]:hover {
-            filter: brightness(1.2);
-            transform: scale(1.03);
-            box-shadow: 0px 5px 15px rgba(0,0,0,0.3);
+            filter: brightness(1.1);
+            transform: scale(1.02);
         }
 
         /* ===== INPUTS ===== */
         input, select, textarea {
-            background-color: rgba(255,255,255,0.3) !important;
-            color: #fff !important;
+            background-color: rgba(255,255,255,0.8) !important;
+            color: #222 !important;
         }
 
         /* ===== FORM LABELS ===== */
         label {
             font-weight: 600;
-            color: #fff !important;
+            color: #333 !important;
         }
 
         /* Tabs */
         .stTabs [data-baseweb="tab"] {
-            background: rgba(255,255,255,0.3);
+            background: rgba(255,255,255,0.7);
             border-radius: 12px;
-            color: white !important;
+            color: #222 !important;
             padding: 8px 16px;
         }
 
         /* Divider */
         hr {
-            border-color: rgba(255,255,255,0.4);
+            border-color: rgba(0,0,0,0.15);
         }
 
-        /* ===== INFO BOX ===== */
+        /* Alerts */
         .stAlert {
-            background: rgba(255,255,255,0.2) !important;
-            color: white !important;
+            background: rgba(255,255,255,0.7) !important;
+            color: #222 !important;
         }
     </style>
     """,
@@ -200,7 +199,7 @@ def page_login():
 # ==============================
 def sidebar_nav():
     st.sidebar.image("https://cdn-icons-png.flaticon.com/512/906/906175.png", width=70)
-    st.sidebar.markdown("<h2 style='color:white;'>ThinkVerse LMS</h2>", unsafe_allow_html=True)
+    st.sidebar.markdown("<h2 style='color:#333;'>ThinkVerse LMS</h2>", unsafe_allow_html=True)
     st.sidebar.markdown("---")
 
     user = st.session_state.get("user")
@@ -279,4 +278,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
