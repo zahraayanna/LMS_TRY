@@ -23,10 +23,12 @@ def sidebar_nav():
         st.sidebar.markdown(f"🧩 Role: _{user['role']}_")
         st.sidebar.markdown("---")
     else:
+        st.sidebar.info("Silakan login terlebih dahulu.")
         return None
 
     page = st.sidebar.radio("Navigasi", ["🏠 Dashboard", "📘 Kursus", "👤 Akun", "🚪 Logout"])
     return page
+
 
 
 # ====== Dashboard ======
@@ -140,3 +142,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
