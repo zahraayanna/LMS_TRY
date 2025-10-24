@@ -53,80 +53,48 @@ def render_user_chip():
 
 
 # ---------- INISIALISASI DATABASE ----------
+# ---------- INISIALISASI DATABASE ----------
 def init_db():
     with get_conn() as conn:
         c = conn.cursor()
 
-        c.execute('''CREATE TABLE IF NOT EXISTS users(
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+        # === USERS TABLE ===
+        c.execute('''
+        CREATE TABLE IF NOT EXISTS users (
+            id SERIAL PRIMARY KEY,
             name TEXT NOT NULL,
             email TEXT UNIQUE NOT NULL,
             password_hash TEXT NOT NULL,
-            role TEXT NOT NULL CHECK(role IN ('admin','instructor','student')),
+            role TEXT NOT NULL CHECK (role IN ('admin','instructor','student')),
             photo_path TEXT
-        )''')
+        )
+        ''')
 
-        c.execute('''CREATE TABLE IF NOT EXISTS courses(
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+        # === COURSES TABLE ===
+        c.execute('''
+        CREATE TABLE IF NOT EXISTS courses (
+            id SERIAL PRIMARY KEY,
             code TEXT UNIQUE NOT NULL,
             title TEXT NOT NULL,
             description TEXT,
             youtube_url TEXT,
             access_code TEXT,
-            instructor_id INTEGER
-        )''')
+            instructor_id INTEGER REFERENCES users(id)
+        )
+        ''')
 
-        c.execute('''CREATE TABLE IF NOT EXISTS enrollments(
-            user_id INTEGER,
-            course_id INTEGER,
-            role TEXT NOT NULL CHECK(role IN ('instructor','student')),
-            PRIMARY KEY(user_id,course_id)
-        )''')
-
-        c.execute('''CREATE TABLE IF NOT EXISTS modules(
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            course_id INTEGER NOT NULL,
-            title TEXT NOT NULL,
-            content TEXT,
-            youtube_url TEXT,
-            image_path TEXT,
-            order_index INTEGER DEFAULT 0
-        )''')
-
-        c.execute('''CREATE TABLE IF NOT EXISTS assignments(
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            course_id INTEGER NOT NULL,
-            module_id INTEGER,
-            title TEXT NOT NULL,
-            description TEXT,
-            due_at TEXT,
-            points INTEGER DEFAULT 100,
-            youtube_url TEXT,
-            image_path TEXT,
-            embed_url TEXT
-        )''')
-
-        c.execute('''CREATE TABLE IF NOT EXISTS quizzes(
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            course_id INTEGER NOT NULL,
-            module_id INTEGER,
-            title TEXT NOT NULL,
-            description TEXT,
-            time_limit_minutes INTEGER,
-            total_points INTEGER DEFAULT 0,
-            embed_url TEXT
-        )''')
-
-        c.execute('''CREATE TABLE IF NOT EXISTS announcements(
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            course_id INTEGER NOT NULL,
-            title TEXT NOT NULL,
-            message TEXT NOT NULL,
-            is_system INTEGER DEFAULT 0,
-            posted_at TEXT DEFAULT CURRENT_TIMESTAMP
-        )''')
+        # === ENROLLMENTS ===
+        c.execute('''
+        CREATE TABLE IF NOT EXISTS enrollments (
+            user_id INTEGER REFERENCES users(id),
+            course_id INTEGER REFERENCES courses(id),
+            role TEXT NOT NULL CHECK (role IN ('instructor','student')),
+            PRIMARY KEY (user_id, course_id)
+        )
+        ''')
 
         conn.commit()
+
 
 
 # ---------- SEED DEMO ----------
@@ -1438,6 +1406,7 @@ def main():
 
 if __name__ == '__main__':
     main()
+
 
 
 
