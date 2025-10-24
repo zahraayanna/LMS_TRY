@@ -220,11 +220,11 @@ def page_course_detail():
 
     tabs = st.tabs(["🏠 Home", "📝 Assignments", "🧪 Quizzes"])
     with tabs[0]:
-        st.info("Selamat datang di halaman kursus! Fitur ini akan diperluas di tahap berikutnya.")
+        st.info("Selamat datang di halaman kursus ini!")
     with tabs[1]:
-        st.warning("Bagian tugas belum aktif (akan diaktifkan di Part 2).")
+        page_assignments(course["id"])
     with tabs[2]:
-        st.warning("Bagian kuis belum aktif (akan diaktifkan di Part 3).")
+        page_quizzes(course["id"])
 
 # =========================
 # MAIN APP
@@ -256,3 +256,95 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+# =========================
+# ASSIGNMENTS (TUGAS)
+# =========================
+def page_assignments(course_id):
+    st.subheader("📝 Daftar Tugas")
+    u = st.session_state.user
+
+    # --- Tambah tugas (instruktur) ---
+    if u["role"] in ["instructor", "admin"]:
+        with st.expander("➕ Tambah Tugas Baru"):
+            title = st.text_input("Judul Tugas")
+            desc = st.text_area("Deskripsi Tugas")
+            due = st.date_input("Batas Waktu")
+            points = st.number_input("Poin", 0, 100, 10)
+            if st.button("Simpan Tugas"):
+                if title:
+                    supabase.table("assignments").insert({
+                        "course_id": course_id,
+                        "title": title,
+                        "description": desc,
+                        "due_date": str(due),
+                        "points": int(points)
+                    }).execute()
+                    st.success("Tugas berhasil ditambahkan!")
+                    st.rerun()
+                else:
+                    st.error("Judul wajib diisi!")
+
+    # --- Daftar tugas ---
+    rows = supabase.table("assignments").select("*").eq("course_id", course_id).execute().data
+    if not rows:
+        st.info("Belum ada tugas.")
+        return
+
+    for a in rows:
+        with st.container(border=True):
+            st.markdown(f"### {a['title']}")
+            st.caption(f"Batas waktu: {a.get('due_date', '-')}, Poin: {a.get('points', 0)}")
+            st.write(a.get("description", "-"))
+
+            if u["role"] in ["instructor", "admin"]:
+                if st.button("🗑️ Hapus Tugas", key=f"del_asg_{a['id']}"):
+                    supabase.table("assignments").delete().eq("id", a["id"]).execute()
+                    st.warning("Tugas dihapus.")
+                    st.rerun()
+
+# =========================
+# QUIZZES (KUIS)
+# =========================
+def page_quizzes(course_id):
+    st.subheader("🧪 Daftar Kuis")
+    u = st.session_state.user
+
+    # --- Tambah kuis (instruktur) ---
+    if u["role"] in ["instructor", "admin"]:
+        with st.expander("➕ Tambah Kuis Baru"):
+            title = st.text_input("Judul Kuis")
+            desc = st.text_area("Deskripsi Kuis")
+            tlim = st.number_input("Waktu (menit)", 0, 300, 0)
+            if st.button("Simpan Kuis"):
+                if title:
+                    supabase.table("quizzes").insert({
+                        "course_id": course_id,
+                        "title": title,
+                        "description": desc,
+                        "time_limit": int(tlim)
+                    }).execute()
+                    st.success("Kuis berhasil dibuat!")
+                    st.rerun()
+                else:
+                    st.error("Judul wajib diisi!")
+
+    # --- Daftar kuis ---
+    rows = supabase.table("quizzes").select("*").eq("course_id", course_id).execute().data
+    if not rows:
+        st.info("Belum ada kuis.")
+        return
+
+    for q in rows:
+        with st.container(border=True):
+            st.markdown(f"### {q['title']}")
+            st.caption(f"Durasi: {q.get('time_limit', 0)} menit")
+            st.write(q.get("description", "-"))
+
+            if u["role"] in ["instructor", "admin"]:
+                if st.button("🗑️ Hapus Kuis", key=f"del_qz_{q['id']}"):
+                    supabase.table("quizzes").delete().eq("id", q["id"]).execute()
+                    st.warning("Kuis dihapus.")
+                    st.rerun()
+
+
