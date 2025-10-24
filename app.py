@@ -1,12 +1,11 @@
 import streamlit as st
+
+# 🚀 HARUS PALING ATAS!
+st.set_page_config(page_title="ThinkVerse LMS", page_icon="🎓", layout="wide")
+
 from supabase import create_client, Client
 import hashlib
 import time
-
-# ======================
-# PAGE CONFIG
-# ======================
-st.set_page_config(page_title="ThinkVerse LMS", page_icon="🎓", layout="wide")
 
 # ======================
 # SUPABASE SETUP
@@ -577,3 +576,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
