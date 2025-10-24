@@ -1,4 +1,7 @@
 import streamlit as st
+
+st.set_page_config(page_title='ThinkVerse LMS', page_icon='🎓', layout='wide')
+
 import sqlite3
 import hashlib
 import psycopg2
@@ -9,11 +12,6 @@ import time
 from datetime import datetime, timedelta
 
 st.write("🔍 DB_URL ditemukan:", bool(os.environ.get("DB_URL")))
-
-
-
-# === CONFIG UTAMA ===
-st.set_page_config(page_title='ThinkVerse LMS', page_icon='🎓', layout='wide')
 
 # =============================
 # ThinkVerse LMS — CORE SYSTEM
@@ -51,8 +49,6 @@ def render_user_chip():
         )
         st.markdown("</div>", unsafe_allow_html=True)
 
-
-# ---------- INISIALISASI DATABASE ----------
 # ---------- INISIALISASI DATABASE ----------
 def init_db():
     with get_conn() as conn:
@@ -94,8 +90,6 @@ def init_db():
         ''')
 
         conn.commit()
-
-
 
 # ---------- SEED DEMO ----------
 def seed_demo():
@@ -1406,6 +1400,7 @@ def main():
 
 if __name__ == '__main__':
     main()
+
 
 
 
