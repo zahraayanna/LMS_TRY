@@ -75,3 +75,103 @@ def seed_demo():
 if __name__ == "__main__":
     init_db()
     seed_demo()
+
+import time
+
+# ========= AUTENTIKASI DASAR =========
+def login(email, pw):
+    """Login user dari Supabase"""
+    try:
+        res = supabase.table("users").select("*").eq("email", email).execute()
+        if len(res.data) == 0:
+            return None
+        user = res.data[0]
+        if user["password_hash"] == hash_pw(pw):
+            return user
+    except Exception as e:
+        st.error(f"Login error: {e}")
+    return None
+
+
+def register_user(name, email, pw, role):
+    """Daftarkan user baru"""
+    try:
+        user = {
+            "name": name.strip(),
+            "email": email.strip(),
+            "password_hash": hash_pw(pw),
+            "role": role,
+        }
+        supabase.table("users").insert(user).execute()
+        return True
+    except Exception as e:
+        st.error(f"Gagal daftar: {e}")
+        return False
+
+
+def reset_password(email, new_pw):
+    """Reset password lewat tab 'Lupa Password'"""
+    hashed = hash_pw(new_pw)
+    try:
+        supabase.table("users").update({"password_hash": hashed}).eq("email", email).execute()
+        return True
+    except Exception as e:
+        st.error(f"Gagal reset password: {e}")
+        return False
+
+
+# ========= HALAMAN LOGIN =========
+def page_login():
+    st.title("🎓 ThinkVerse LMS — Login Portal")
+    st.caption("Masuk untuk melanjutkan ke ruang belajar digital kamu.")
+
+    tabs = st.tabs(["🔑 Login", "🆕 Register", "🔁 Lupa Password"])
+
+    # --- LOGIN ---
+    with tabs[0]:
+        with st.form("login_form"):
+            email = st.text_input("Email", key="login_email")
+            pw = st.text_input("Password", type="password", key="login_pw")
+            ok = st.form_submit_button("Masuk")
+        if ok:
+            u = login(email, pw)
+            if u:
+                st.session_state.user = u
+                st.success(f"Selamat datang, {u['name']} 👋")
+                time.sleep(0.7)
+                st.rerun()
+            else:
+                st.error("Email atau password salah.")
+
+    # --- REGISTER ---
+    with tabs[1]:
+        with st.form("reg_form"):
+            name = st.text_input("Nama Lengkap")
+            email = st.text_input("Email")
+            pw = st.text_input("Password", type="password")
+            role = st.selectbox("Peran", ["student", "instructor"])
+            ok2 = st.form_submit_button("Daftar Akun Baru")
+        if ok2:
+            if register_user(name, email, pw, role):
+                st.success("Akun berhasil dibuat! Silakan login di tab pertama.")
+
+    # --- LUPA PASSWORD ---
+    with tabs[2]:
+        with st.form("forgot_pw_form"):
+            email_fp = st.text_input("Masukkan email kamu")
+            new_pw = st.text_input("Password baru", type="password")
+            new_pw2 = st.text_input("Ulangi password baru", type="password")
+            ok3 = st.form_submit_button("Reset Password")
+        if ok3:
+            if new_pw != new_pw2:
+                st.error("Password tidak sama.")
+            elif reset_password(email_fp, new_pw):
+                st.success("Password berhasil direset! Silakan login ulang.")
+
+if "user" not in st.session_state:
+    st.session_state.user = None
+
+if not st.session_state.user:
+    page_login()
+else:
+    st.success(f"Sudah login sebagai {st.session_state.user['name']} ({st.session_state.user['role']})")
