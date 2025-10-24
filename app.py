@@ -25,19 +25,23 @@ st.markdown(
             background-attachment: fixed;
             font-family: "Poppins", sans-serif;
             color: #222 !important;
-            padding-top: 0rem !important;
-            margin-top: 0rem !important;
+            padding-top: 0 !important;
+            margin-top: 0 !important;
         }
 
-        /* Hilangkan header kosong bawaan Streamlit */
-        [data-testid="stHeader"] {
+        /* Hilangkan header kosong & padding aneh bawaan */
+        [data-testid="stHeader"], [data-testid="stAppViewBlockContainer"], section[data-testid="block-container"] > div:first-child {
             background: transparent !important;
-            height: 0rem !important;
+            height: 0 !important;
+            padding-top: 0 !important;
+            margin-top: 0 !important;
         }
 
-        [data-testid="stAppViewBlockContainer"] {
-            padding-top: 0rem !important;
-            margin-top: 0rem !important;
+        /* Sembunyikan kotak kosong besar paling atas */
+        section.main > div:nth-child(1),
+        section[data-testid="block-container"] > div:nth-child(1),
+        [data-testid="stAppViewBlockContainer"] > div:first-of-type {
+            display: none !important;
         }
 
         [data-testid="stToolbar"] {
@@ -300,3 +304,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
