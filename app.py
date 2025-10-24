@@ -8,6 +8,9 @@ import re
 import time
 from datetime import datetime, timedelta
 
+st.write("🔍 DB_URL ditemukan:", bool(os.environ.get("DB_URL")))
+
+
 
 # === CONFIG UTAMA ===
 st.set_page_config(page_title='ThinkVerse LMS', page_icon='🎓', layout='wide')
@@ -1435,6 +1438,7 @@ def main():
 
 if __name__ == '__main__':
     main()
+
 
 
 
