@@ -4,6 +4,7 @@ st.set_page_config(page_title='ThinkVerse LMS', page_icon='🎓', layout='wide')
 
 import sqlite3
 import hashlib
+import os
 import io
 import re
 import time
@@ -1405,6 +1406,7 @@ def main():
 
 if __name__ == '__main__':
     main()
+
 
 
 
