@@ -175,3 +175,122 @@ if not st.session_state.user:
     page_login()
 else:
     st.success(f"Sudah login sebagai {st.session_state.user['name']} ({st.session_state.user['role']})")
+
+# =========================================
+# ============= DASHBOARD ================
+# =========================================
+
+def sidebar_nav():
+    """Sidebar utama LMS"""
+    u = st.session_state.user
+    st.sidebar.title("📚 ThinkVerse LMS")
+    if u:
+        st.sidebar.markdown(f"**{u['name']}**")
+        st.sidebar.caption(f"({u['role']}) - {u['email']}")
+        if st.sidebar.button("🚪 Logout"):
+            st.session_state.user = None
+            st.rerun()
+
+    section = st.sidebar.radio("Navigasi", ["🏠 Beranda", "📘 Kursus Saya", "👤 Akun"])
+    return section
+
+
+# ---------- GET COURSES ----------
+def get_courses_for_user(user_id, role):
+    """Ambil daftar kursus dari Supabase"""
+    if role == "student":
+        res = supabase.table("enrollments").select("course_id, courses(title,code,description,instructor_id)").eq("user_id", user_id).execute()
+        return [r["courses"] for r in res.data] if res.data else []
+    else:
+        res = supabase.table("courses").select("*").eq("instructor_id", user_id).execute()
+        return res.data
+
+
+# ---------- PAGE HOME ----------
+def page_home():
+    u = st.session_state.user
+    st.title(f"Selamat datang, {u['name']} 👋")
+    st.write("ThinkVerse LMS adalah platform pembelajaran digital interaktif.")
+    st.info("Gunakan sidebar untuk navigasi ke kursus atau profil kamu.")
+
+
+# ---------- PAGE COURSES ----------
+def page_courses():
+    u = st.session_state.user
+    st.header("📘 Kursus Saya")
+
+    # Bagian 1 — daftar kursus user
+    courses = get_courses_for_user(u["id"], u["role"])
+    if not courses:
+        st.warning("Belum ada kursus.")
+    else:
+        for c in courses:
+            st.markdown(f"### {c['title']}")
+            st.caption(f"Kode: {c['code']}")
+            st.write(c.get("description") or "-")
+            st.divider()
+
+    # Bagian 2 — instruktur bisa buat kursus
+    if u["role"] in ["instructor", "admin"]:
+        st.subheader("➕ Buat Kursus Baru")
+        with st.form("new_course"):
+            code = st.text_input("Kode Kursus (unik)")
+            title = st.text_input("Judul Kursus")
+            desc = st.text_area("Deskripsi Kursus")
+            ok = st.form_submit_button("Buat Kursus")
+        if ok and code and title:
+            try:
+                supabase.table("courses").insert({
+                    "code": code,
+                    "title": title,
+                    "description": desc,
+                    "instructor_id": u["id"],
+                }).execute()
+                st.success("Kursus berhasil dibuat!")
+                st.rerun()
+            except Exception as e:
+                st.error(f"Gagal membuat kursus: {e}")
+
+    # Bagian 3 — siswa bisa join
+    if u["role"] == "student":
+        st.subheader("🔑 Gabung ke Kursus")
+        with st.form("join_course"):
+            code = st.text_input("Masukkan Kode Kursus")
+            ok = st.form_submit_button("Gabung")
+        if ok and code:
+            res = supabase.table("courses").select("id").eq("code", code).execute()
+            if res.data:
+                cid = res.data[0]["id"]
+                supabase.table("enrollments").insert({
+                    "user_id": u["id"],
+                    "course_id": cid,
+                    "role": "student",
+                }).execute()
+                st.success("Berhasil bergabung ke kursus!")
+                st.rerun()
+            else:
+                st.error("Kode kursus tidak ditemukan.")
+
+
+# ---------- PAGE ACCOUNT ----------
+def page_account():
+    u = st.session_state.user
+    st.header("👤 Profil Saya")
+    st.write(f"Nama: {u['name']}")
+    st.write(f"Email: {u['email']}")
+    st.write(f"Peran: {u['role']}")
+    st.caption("(Pengaturan profil akan ditambahkan di versi berikutnya)")
+
+if "user" not in st.session_state:
+    st.session_state.user = None
+
+if not st.session_state.user:
+    page_login()
+else:
+    section = sidebar_nav()
+    if section == "🏠 Beranda":
+        page_home()
+    elif section == "📘 Kursus Saya":
+        page_courses()
+    elif section == "👤 Akun":
+        page_account()
