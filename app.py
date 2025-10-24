@@ -10,6 +10,9 @@ from supabase import create_client, Client
 # ========= PAGE CONFIG (WAJIB DI ATAS SENDIRI) =========
 st.set_page_config(page_title='ThinkVerse LMS', page_icon='🎓', layout='wide')
 
+st.write("🔍 SUPABASE_URL ditemukan:", bool(SUPABASE_URL))
+st.write("🔍 SUPABASE_KEY ditemukan:", bool(SUPABASE_KEY))
+
 # ========= CEK ENVIRONMENT VARIABLE =========
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
@@ -66,6 +69,7 @@ def seed_demo():
             st.success("✅ Demo accounts created in Supabase.")
     except Exception as e:
         st.warning(f"Gagal seed demo: {e}")
+
 
 
 
