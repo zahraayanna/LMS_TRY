@@ -272,8 +272,10 @@ def page_course_detail():
     # ===================================================
     with tabs[1]:
         st.subheader("🧩 Daftar Tugas")
+        user = st.session_state.user
         tasks = supabase.table("assignments").select("*").eq("course_id", cid).execute().data
 
+        # === Tampilkan semua tugas ===
         if not tasks:
             st.info("Belum ada tugas di kursus ini.")
         else:
@@ -281,61 +283,103 @@ def page_course_detail():
                 with st.container(border=True):
                     st.markdown(f"### {t['title']}")
                     st.markdown(t.get("description", ""))
+
+                    # tampilkan embed konten
+                    if t.get("embed_url"):
+                        if "youtube" in t["embed_url"]:
+                            st.video(t["embed_url"])
+                        else:
+                            st.components.v1.iframe(t["embed_url"], height=400)
+
                     if t.get("image_url"):
                         st.image(t["image_url"], width=400)
+
                     if t.get("due_date"):
                         st.caption(f"🕒 Deadline: {t['due_date']}")
 
+                    st.markdown(f"**Tipe Pengumpulan:** `{t.get('submission_type', 'Teks/Upload')}`")
+
                     # === Mode siswa ===
-                    if st.session_state.user["role"] == "student":
+                    if user["role"] == "student":
                         st.markdown("#### Kirim Jawaban")
-                        answer = st.text_area("Tulis jawaban kamu:", key=f"ans_{t['id']}")
-                        file = st.file_uploader("Atau unggah file/gambar:", key=f"file_{t['id']}")
+
+                        # cek tipe pengumpulan
+                        submission_type = t.get("submission_type", "text")
+
+                        if submission_type == "text":
+                            answer = st.text_area("Tulis jawaban di sini:", key=f"ans_{t['id']}")
+                            file = None
+
+                        elif submission_type == "pdf":
+                            file = st.file_uploader("Unggah file PDF jawaban kamu:", type=["pdf"], key=f"file_{t['id']}")
+                            answer = None
+
+                        elif submission_type == "image":
+                            file = st.file_uploader("Unggah gambar jawaban kamu:", type=["jpg", "png"], key=f"file_{t['id']}")
+                            answer = None
+
+                        elif submission_type == "mixed":
+                            answer = st.text_area("Tulis jawaban (opsional):", key=f"ans_{t['id']}")
+                            file = st.file_uploader("Unggah file tambahan (PDF/Gambar):", type=["pdf", "jpg", "png"], key=f"file_{t['id']}")
+
                         if st.button("📤 Kirim Jawaban", key=f"submit_{t['id']}"):
                             file_url = upload_to_supabase(file) if file else None
                             supabase.table("submissions").insert({
                                 "assignment_id": t["id"],
-                                "student_id": st.session_state.user["id"],
+                                "student_id": user["id"],
                                 "answer_text": answer,
                                 "file_url": file_url,
                                 "submitted_at": str(datetime.now())
                             }).execute()
-                            st.success("✅ Jawaban berhasil dikirim!")
+                            st.success("✅ Jawaban kamu berhasil dikirim!")
+                            st.rerun()
 
                     # === Mode guru ===
-                    elif st.session_state.user["role"] == "instructor":
+                    elif user["role"] == "instructor":
+                        st.divider()
+                        st.markdown("#### Kiriman Siswa:")
                         subs = supabase.table("submissions").select("*").eq("assignment_id", t["id"]).execute().data
                         if not subs:
-                            st.caption("Belum ada kiriman dari siswa.")
+                            st.caption("Belum ada jawaban siswa.")
                         else:
                             for s in subs:
-                                st.write(f"👤 Siswa ID: {s['student_id']}")
+                                st.markdown(f"👤 **Siswa ID:** {s['student_id']}")
                                 if s.get("answer_text"):
                                     st.markdown(f"📝 **Jawaban:** {s['answer_text']}")
                                 if s.get("file_url"):
                                     st.markdown(f"[📎 Lihat File]({s['file_url']})")
+                                st.caption(f"🕒 {s.get('submitted_at', '-')}")
                                 st.divider()
 
-        # Tambah tugas (guru)
-        if st.session_state.user["role"] == "instructor":
-            with st.expander("➕ Tambah Tugas"):
+        # === Tambah tugas (guru) ===
+        if user["role"] == "instructor":
+            with st.expander("➕ Tambah Tugas Baru"):
                 title = st.text_input("Judul Tugas", key="asg_title")
                 desc = st.text_area("Deskripsi Tugas", key="asg_desc")
-                due = st.date_input("Batas Waktu", key="asg_due")
-                img = st.file_uploader("Gambar Pendukung", key="asg_img")
+                embed_url = st.text_input("Link Embed (YouTube/LiveWorksheet/dsb)", key="asg_embed")
+                submission_type = st.selectbox(
+                    "Tipe Pengumpulan:",
+                    ["text", "pdf", "image", "mixed"],
+                    key="asg_type"
+                )
+                due = st.date_input("Batas Waktu (opsional)", key="asg_due")
+                img = st.file_uploader("Gambar Pendukung (opsional)", key="asg_img")
+
                 if st.button("💾 Simpan Tugas", key="asg_save"):
                     img_url = upload_to_supabase(img) if img else None
                     supabase.table("assignments").insert({
                         "course_id": cid,
                         "title": title,
                         "description": desc,
-                        "due_date": str(due),
+                        "embed_url": embed_url,
+                        "submission_type": submission_type,
+                        "due_date": str(due) if due else None,
                         "image_url": img_url
                     }).execute()
-                    st.success("Tugas berhasil ditambahkan!")
+                    st.success("Tugas baru berhasil ditambahkan!")
                     st.rerun()
 
-       # ===================================================
+    # ===================================================
     # 3️⃣ TAB KUIS
     # ===================================================
     with tabs[2]:
@@ -491,6 +535,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
