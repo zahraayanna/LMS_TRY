@@ -339,81 +339,146 @@ def page_course_detail():
     # 3️⃣ TAB KUIS
     # ===================================================
     with tabs[2]:
-        st.subheader("🧠 Kuis Kursus")
-        quizzes = supabase.table("quizzes").select("*").eq("course_id", cid).execute().data
+       st.subheader("🧠 Kuis Kursus")
+    user = st.session_state.user
+    quizzes = supabase.table("quizzes").select("*").eq("course_id", course_id).execute().data
 
-        if not quizzes:
-            st.info("Belum ada kuis untuk kursus ini.")
-        else:
-            for q in quizzes:
-                with st.container(border=True):
-                    st.markdown(f"### {q['title']}")
-                    st.caption(q.get("description", ""))
+    # --- Tampilkan daftar kuis yang ada ---
+    if not quizzes:
+        st.info("Belum ada kuis untuk kursus ini.")
+    else:
+        for q in quizzes:
+            with st.container(border=True):
+                st.markdown(f"### {q['title']}")
+                st.caption(q.get("description", ""))
 
-                    # === Mode siswa ===
-                    if st.session_state.user["role"] == "student":
-                        questions = supabase.table("quiz_questions").select("*").eq("quiz_id", q["id"]).execute().data
-                        for ques in questions:
-                            st.markdown(f"**{ques['prompt']}**")
-                            if ques.get("image_url"):
-                                st.image(ques["image_url"], width=350)
-                            if ques["type"] == "mcq":
-                                opts = supabase.table("quiz_choices").select("*").eq("question_id", ques["id"]).execute().data
-                                chosen = st.radio("Pilih jawaban:", [o["choice_text"] for o in opts], key=f"opt_{ques['id']}")
-                                if st.button("Kirim Jawaban", key=f"send_{ques['id']}"):
-                                    correct = any(o["is_correct"] and o["choice_text"] == chosen for o in opts)
+                # Jika user adalah instruktur
+                if user["role"] == "instructor":
+                    st.markdown("**Daftar Soal:**")
+                    qs = supabase.table("quiz_questions").select("*").eq("quiz_id", q["id"]).execute().data
+                    if qs:
+                        for qq in qs:
+                            st.markdown(f"- {qq['prompt']} ({qq['type']})")
+                    else:
+                        st.caption("_Belum ada soal dalam kuis ini._")
+
+                    with st.expander("➕ Tambah Soal Baru"):
+                        qtype = st.selectbox("Tipe Soal", ["mcq", "short"], key=f"qtype_{q['id']}")
+                        prompt = st.text_area("Pertanyaan", key=f"prompt_{q['id']}")
+                        image = st.file_uploader("Gambar (opsional)", key=f"img_{q['id']}")
+                        correct_answer = st.text_input("Jawaban benar (untuk short answer)", key=f"corr_{q['id']}")
+                        img_url = upload_to_supabase(image) if image else None
+                        if st.button("💾 Simpan Soal", key=f"saveq_{q['id']}"):
+                            data = {
+                                "quiz_id": q["id"],
+                                "prompt": prompt,
+                                "type": qtype,
+                                "image_url": img_url,
+                                "correct_answer": correct_answer if qtype == "short" else None
+                            }
+                            supabase.table("quiz_questions").insert(data).execute()
+                            st.success("Soal berhasil ditambahkan!")
+                            st.rerun()
+
+                        # Jika MCQ, tambahkan pilihan
+                        if qtype == "mcq":
+                            st.markdown("**Tambahkan Pilihan Jawaban**")
+                            opt_list = []
+                          num_choices = st.number_input("Jumlah pilihan jawaban", min_value=2, max_value=10, value=4, key=f"num_{q['id']}")
+                        for i in range(num_choices):
+                            text = st.text_input(f"Pilihan {chr(65+i)}", key=f"opt_{i}_{q['id']}") 
+                            correct = st.checkbox(f"Benar?", key=f"corr_{i}_{q['id']}")
+                                if text:
+                                    opt_list.append({"choice_text": text, "is_correct": correct})
+                            if st.button("💾 Simpan Pilihan", key=f"saveopts_{q['id']}"):
+                                qq = supabase.table("quiz_questions").select("id").eq("quiz_id", q["id"]).order("id", desc=True).limit(1).execute().data
+                                if qq:
+                                    qnid = qq[0]["id"]
+                                    for opt in opt_list:
+                                        opt["question_id"] = qnid
+                                    supabase.table("quiz_choices").insert(opt_list).execute()
+                                    st.success("Pilihan berhasil disimpan!")
+                                    st.rerun()
+
+                # Jika user adalah siswa
+                elif user["role"] == "student":
+                    st.markdown("**Kerjakan Kuis Ini:**")
+                    qs = supabase.table("quiz_questions").select("*").eq("quiz_id", q["id"]).execute().data
+                    if not qs:
+                        st.caption("Belum ada soal untuk kuis ini.")
+                    else:
+                        total_score = 0
+                        correct_count = 0
+                        total_questions = len(qs)
+
+                        for qq in qs:
+                            st.markdown(f"**{qq['prompt']}**")
+                            if qq.get("image_url"):
+                                st.image(qq["image_url"], width=400)
+
+                            # Multiple Choice
+                            if qq["type"] == "mcq":
+                                choices = supabase.table("quiz_choices").select("*").eq("question_id", qq["id"]).execute().data
+                                answer = st.radio(
+                                    "Pilih jawaban:",
+                                    [c["choice_text"] for c in choices],
+                                    key=f"mcq_{qq['id']}"
+                                )
+                                if st.button("Kirim Jawaban", key=f"submit_{qq['id']}"):
+                                    correct = any(c["is_correct"] and c["choice_text"] == answer for c in choices)
                                     supabase.table("quiz_responses").insert({
                                         "quiz_id": q["id"],
-                                        "student_id": st.session_state.user["id"],
-                                        "question_id": ques["id"],
-                                        "answer_text": chosen,
+                                        "student_id": user["id"],
+                                        "question_id": qq["id"],
+                                        "answer_text": answer,
                                         "is_correct": correct,
                                         "submitted_at": str(datetime.now())
                                     }).execute()
                                     if correct:
                                         st.success("✅ Benar!")
+                                        correct_count += 1
+                                        total_score += 1
                                     else:
                                         st.error("❌ Salah.")
-                            elif ques["type"] == "short":
-                                ans = st.text_input("Jawaban kamu:", key=f"short_{ques['id']}")
-                                if st.button("Kirim", key=f"send_short_{ques['id']}"):
+
+                            # Short Answer
+                            elif qq["type"] == "short":
+                                ans = st.text_input("Jawaban kamu:", key=f"short_{qq['id']}")
+                                if st.button("Kirim", key=f"submit_short_{qq['id']}"):
                                     correct = False
-                                    if ques.get("correct_answer"):
-                                        correct = ans.strip().lower() == ques["correct_answer"].strip().lower()
+                                    if qq.get("correct_answer"):
+                                        correct = ans.strip().lower() == qq["correct_answer"].strip().lower()
                                     supabase.table("quiz_responses").insert({
                                         "quiz_id": q["id"],
-                                        "student_id": st.session_state.user["id"],
-                                        "question_id": ques["id"],
+                                        "student_id": user["id"],
+                                        "question_id": qq["id"],
                                         "answer_text": ans,
                                         "is_correct": correct,
                                         "submitted_at": str(datetime.now())
                                     }).execute()
                                     if correct:
                                         st.success("✅ Jawaban Benar!")
+                                        correct_count += 1
+                                        total_score += 1
                                     else:
                                         st.error("❌ Jawaban Salah.")
 
-                    # === Mode guru ===
-                    elif st.session_state.user["role"] == "instructor":
-                        st.markdown("#### Pertanyaan dalam kuis ini:")
-                        qs = supabase.table("quiz_questions").select("*").eq("quiz_id", q["id"]).execute().data
-                        for qq in qs:
-                            st.markdown(f"- {qq['prompt']}")
-                        st.divider()
+                        st.markdown("---")
+                        st.info(f"**Skor sementara kamu:** {correct_count} / {total_questions}")
 
-        # Tambah kuis (guru)
-        if st.session_state.user["role"] == "instructor":
-            with st.expander("➕ Tambah Kuis"):
-                title = st.text_input("Judul Kuis", key="quiz_title")
-                desc = st.text_area("Deskripsi Kuis", key="quiz_desc")
-                if st.button("💾 Simpan Kuis", key="quiz_save"):
-                    supabase.table("quizzes").insert({
-                        "course_id": cid,
-                        "title": title,
-                        "description": desc
-                    }).execute()
-                    st.success("Kuis baru berhasil ditambahkan!")
-                    st.rerun()
+    # --- Tambah kuis (guru) ---
+    if user["role"] == "instructor":
+        with st.expander("➕ Buat Kuis Baru"):
+            title = st.text_input("Judul Kuis", key="quiz_title_new")
+            desc = st.text_area("Deskripsi", key="quiz_desc_new")
+            if st.button("💾 Simpan Kuis", key="quiz_save_new"):
+                supabase.table("quizzes").insert({
+                    "course_id": course_id,
+                    "title": title,
+                    "description": desc
+                }).execute()
+                st.success("Kuis baru berhasil dibuat!")
+                st.rerun()
 
 # ======================
 # === ROUTING ===
@@ -430,6 +495,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
