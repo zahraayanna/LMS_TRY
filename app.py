@@ -18,8 +18,6 @@ supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 # =====================
 import hashlib
 
-import hashlib
-
 def login(email, password):
     res = supabase.table("users").select("*").eq("email", email).execute()
     if not res.data:
@@ -313,5 +311,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
