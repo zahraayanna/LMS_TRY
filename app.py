@@ -18,6 +18,8 @@ supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 # =====================
 import hashlib
 
+import hashlib
+
 def login(email, password):
     res = supabase.table("users").select("*").eq("email", email).execute()
     if not res.data:
@@ -25,20 +27,21 @@ def login(email, password):
 
     user = res.data[0]
     stored_pw = user.get("password_hash")
-
-    # Cek apakah password tersimpan sebagai hash atau plaintext
-    if stored_pw is None:
+    if not stored_pw:
         return None
 
-    # Kalau hash — cocokkan dengan SHA256
-    try:
-        hashed_input = hashlib.sha256(password.encode()).hexdigest()
-        if stored_pw == hashed_input:
-            return user
-    except:
-        pass
+    # --- Coba cek apakah cocok dalam 3 format ---
+    # 1️⃣ MD5
+    md5_hash = hashlib.md5(password.encode()).hexdigest()
+    if stored_pw == md5_hash:
+        return user
 
-    # Kalau plaintext — cocokkan langsung
+    # 2️⃣ SHA256
+    sha_hash = hashlib.sha256(password.encode()).hexdigest()
+    if stored_pw == sha_hash:
+        return user
+
+    # 3️⃣ Plaintext (kalau belum di-hash)
     if stored_pw == password:
         return user
 
@@ -310,4 +313,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
