@@ -18,44 +18,64 @@ supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 # =====================
 import hashlib
 
+def hash_sha256(password: str) -> str:
+    """Buat hash SHA256 dari password."""
+    return hashlib.sha256(password.encode()).hexdigest()
+
+
 def login(email, password):
+    # Ambil data user dari Supabase
     res = supabase.table("users").select("*").eq("email", email).execute()
     if not res.data:
         return None
 
     user = res.data[0]
     stored_pw = user.get("password_hash")
+
     if not stored_pw:
         return None
 
-    # --- Coba cek apakah cocok dalam 3 format ---
-    # 1️⃣ MD5
+    # Hash input user dalam 2 format buat deteksi otomatis
     md5_hash = hashlib.md5(password.encode()).hexdigest()
-    if stored_pw == md5_hash:
-        return user
+    sha_hash = hash_sha256(password)
 
-    # 2️⃣ SHA256
-    sha_hash = hashlib.sha256(password.encode()).hexdigest()
+    # --- LOGIN OTOMATIS ---
+    # 1️⃣ Kalau cocok SHA256 → login aman
     if stored_pw == sha_hash:
         return user
 
-    # 3️⃣ Plaintext (kalau belum di-hash)
-    if stored_pw == password:
+    # 2️⃣ Kalau cocok MD5 → ubah ke SHA256 biar aman
+    elif stored_pw == md5_hash:
+        supabase.table("users").update({"password_hash": sha_hash}).eq("email", email).execute()
+        print(f"🔒 Password {email} otomatis diupgrade ke SHA256")
+        return user
+
+    # 3️⃣ Kalau cocok plaintext → ubah ke SHA256 juga
+    elif stored_pw == password:
+        supabase.table("users").update({"password_hash": sha_hash}).eq("email", email).execute()
+        print(f"🔒 Password {email} otomatis diupgrade ke SHA256")
         return user
 
     return None
 
 
-def register_user(name, email, password, role="student"):
-    res = supabase.table("users").select("email").eq("email", email).execute()
+def register_user(name, email, password, role):
+    """Registrasi user baru dengan password langsung di-hash SHA256."""
+    hashed_pw = hash_sha256(password)
+
+    res = supabase.table("users").select("*").eq("email", email).execute()
     if res.data:
+        st.error("Email sudah terdaftar.")
         return False
+
     supabase.table("users").insert({
         "name": name,
         "email": email,
-        "password_hash": password,
+        "password_hash": hashed_pw,
         "role": role
     }).execute()
+
+    st.success("Akun berhasil dibuat!")
     return True
 
 # =====================
@@ -311,6 +331,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
