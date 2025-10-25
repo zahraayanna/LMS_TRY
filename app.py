@@ -16,11 +16,34 @@ supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 # =====================
 # === AUTH FUNCTION ===
 # =====================
+import hashlib
+
 def login(email, password):
     res = supabase.table("users").select("*").eq("email", email).execute()
-    if res.data and res.data[0]["password_hash"] == password:
-        return res.data[0]
+    if not res.data:
+        return None
+
+    user = res.data[0]
+    stored_pw = user.get("password_hash")
+
+    # Cek apakah password tersimpan sebagai hash atau plaintext
+    if stored_pw is None:
+        return None
+
+    # Kalau hash — cocokkan dengan SHA256
+    try:
+        hashed_input = hashlib.sha256(password.encode()).hexdigest()
+        if stored_pw == hashed_input:
+            return user
+    except:
+        pass
+
+    # Kalau plaintext — cocokkan langsung
+    if stored_pw == password:
+        return user
+
     return None
+
 
 def register_user(name, email, password, role="student"):
     res = supabase.table("users").select("email").eq("email", email).execute()
@@ -287,3 +310,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
