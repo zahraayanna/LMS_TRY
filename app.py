@@ -198,123 +198,222 @@ def page_courses():
 # ======================
 # === COURSE DETAIL ===
 # ======================
+from io import BytesIO
+import base64
+import re
+from datetime import datetime
+
+# --- upload helper ---
+def upload_to_supabase(file):
+    """Upload file ke bucket thinkverse_uploads di Supabase."""
+    if not file:
+        return None
+    file_bytes = file.read()
+    file_path = f"uploads/{int(datetime.now().timestamp())}_{file.name}"
+    supabase.storage.from_("thinkverse_uploads").upload(file_path, file_bytes)
+    return f"{SUPABASE_URL}/storage/v1/object/public/thinkverse_uploads/{file_path}"
+
+
+# --- halaman detail course ---
 def page_course_detail():
     cid = st.session_state.course_id
-    c = supabase.table("courses").select("*").eq("id", cid).execute().data[0]
+    res = supabase.table("courses").select("*").eq("id", cid).execute()
+    if not res.data:
+        st.error("Kursus tidak ditemukan.")
+        return
+
+    c = res.data[0]
     st.title(f"📘 {c['title']}")
-    st.caption(c["description"])
+    st.caption(c.get("description", ""))
 
-    tabs = st.tabs(["📄 Materi", "🧩 Tugas", "🧠 Kuis"])
+    tabs = st.tabs(["📚 Materi", "🧩 Tugas", "🧠 Kuis"])
 
-    # --- ASSIGNMENTS ---
+    # ===================================================
+    # 1️⃣ TAB MATERI
+    # ===================================================
+    with tabs[0]:
+        st.subheader("📚 Materi Kursus")
+        materials = supabase.table("materials").select("*").eq("course_id", cid).execute().data
+
+        if not materials:
+            st.info("Belum ada materi untuk kursus ini.")
+        else:
+            for m in materials:
+                with st.container(border=True):
+                    st.markdown(f"### {m['title']}")
+                    st.markdown(m.get("content", ""))
+                    if m.get("youtube_url"):
+                        st.video(m["youtube_url"])
+                    if m.get("image_url"):
+                        st.image(m["image_url"], width=500)
+                    st.divider()
+
+        # Tambah materi (guru)
+        if st.session_state.user["role"] == "instructor":
+            with st.expander("➕ Tambah Materi"):
+                title = st.text_input("Judul Materi", key="mat_title")
+                content = st.text_area("Isi Materi", key="mat_content")
+                yt = st.text_input("YouTube URL (opsional)", key="mat_yt")
+                img = st.file_uploader("Gambar (opsional)", key="mat_img")
+                if st.button("💾 Simpan Materi", key="mat_save"):
+                    img_url = upload_to_supabase(img) if img else None
+                    supabase.table("materials").insert({
+                        "course_id": cid,
+                        "title": title,
+                        "content": content,
+                        "youtube_url": yt or None,
+                        "image_url": img_url
+                    }).execute()
+                    st.success("Materi berhasil ditambahkan!")
+                    st.rerun()
+
+    # ===================================================
+    # 2️⃣ TAB TUGAS
+    # ===================================================
     with tabs[1]:
         st.subheader("🧩 Daftar Tugas")
         tasks = supabase.table("assignments").select("*").eq("course_id", cid).execute().data
-        for t in tasks:
-            with st.container(border=True):
-                st.write(f"### {t['title']}")
-                st.caption(t["description"])
-                if "due_date" in t and t["due_date"]:
-                    st.info(f"Deadline: {t['due_date']}")
-                if st.session_state.user["role"] == "student":
-                    answer = st.text_area(f"Jawaban kamu ({t['title']})", key=f"ans_{t['id']}")
-                    if st.button("Kirim Jawaban", key=f"send_{t['id']}"):
-                        supabase.table("submissions").insert({
-                            "assignment_id": t["id"],
-                            "student_id": st.session_state.user["id"],
-                            "answer_text": answer
-                        }).execute()
-                        st.success("Jawaban dikirim!")
 
+        if not tasks:
+            st.info("Belum ada tugas di kursus ini.")
+        else:
+            for t in tasks:
+                with st.container(border=True):
+                    st.markdown(f"### {t['title']}")
+                    st.markdown(t.get("description", ""))
+                    if t.get("image_url"):
+                        st.image(t["image_url"], width=400)
+                    if t.get("due_date"):
+                        st.caption(f"🕒 Deadline: {t['due_date']}")
+
+                    # === Mode siswa ===
+                    if st.session_state.user["role"] == "student":
+                        st.markdown("#### Kirim Jawaban")
+                        answer = st.text_area("Tulis jawaban kamu:", key=f"ans_{t['id']}")
+                        file = st.file_uploader("Atau unggah file/gambar:", key=f"file_{t['id']}")
+                        if st.button("📤 Kirim Jawaban", key=f"submit_{t['id']}"):
+                            file_url = upload_to_supabase(file) if file else None
+                            supabase.table("submissions").insert({
+                                "assignment_id": t["id"],
+                                "student_id": st.session_state.user["id"],
+                                "answer_text": answer,
+                                "file_url": file_url,
+                                "submitted_at": str(datetime.now())
+                            }).execute()
+                            st.success("✅ Jawaban berhasil dikirim!")
+
+                    # === Mode guru ===
+                    elif st.session_state.user["role"] == "instructor":
+                        subs = supabase.table("submissions").select("*").eq("assignment_id", t["id"]).execute().data
+                        if not subs:
+                            st.caption("Belum ada kiriman dari siswa.")
+                        else:
+                            for s in subs:
+                                st.write(f"👤 Siswa ID: {s['student_id']}")
+                                if s.get("answer_text"):
+                                    st.markdown(f"📝 **Jawaban:** {s['answer_text']}")
+                                if s.get("file_url"):
+                                    st.markdown(f"[📎 Lihat File]({s['file_url']})")
+                                st.divider()
+
+        # Tambah tugas (guru)
         if st.session_state.user["role"] == "instructor":
-            with st.expander("➕ Tambah Tugas Baru"):
-                title = st.text_input("Judul Tugas")
-                desc = st.text_area("Deskripsi")
-                if st.button("Simpan Tugas"):
+            with st.expander("➕ Tambah Tugas"):
+                title = st.text_input("Judul Tugas", key="asg_title")
+                desc = st.text_area("Deskripsi Tugas", key="asg_desc")
+                due = st.date_input("Batas Waktu", key="asg_due")
+                img = st.file_uploader("Gambar Pendukung", key="asg_img")
+                if st.button("💾 Simpan Tugas", key="asg_save"):
+                    img_url = upload_to_supabase(img) if img else None
                     supabase.table("assignments").insert({
                         "course_id": cid,
                         "title": title,
-                        "description": desc
+                        "description": desc,
+                        "due_date": str(due),
+                        "image_url": img_url
                     }).execute()
                     st.success("Tugas berhasil ditambahkan!")
                     st.rerun()
 
-    # --- QUIZZES ---
+    # ===================================================
+    # 3️⃣ TAB KUIS
+    # ===================================================
     with tabs[2]:
-        st.subheader("🧠 Kuis")
+        st.subheader("🧠 Kuis Kursus")
         quizzes = supabase.table("quizzes").select("*").eq("course_id", cid).execute().data
-        for q in quizzes:
-            st.write(f"### {q['title']}")
-            st.caption(q["description"])
-            if st.button(f"Kerjakan {q['title']}", key=f"quiz_{q['id']}"):
-                st.session_state.quiz_id = q["id"]
-                st.session_state.page = "quiz_page"
-                st.rerun()
 
+        if not quizzes:
+            st.info("Belum ada kuis untuk kursus ini.")
+        else:
+            for q in quizzes:
+                with st.container(border=True):
+                    st.markdown(f"### {q['title']}")
+                    st.caption(q.get("description", ""))
+
+                    # === Mode siswa ===
+                    if st.session_state.user["role"] == "student":
+                        questions = supabase.table("quiz_questions").select("*").eq("quiz_id", q["id"]).execute().data
+                        for ques in questions:
+                            st.markdown(f"**{ques['prompt']}**")
+                            if ques.get("image_url"):
+                                st.image(ques["image_url"], width=350)
+                            if ques["type"] == "mcq":
+                                opts = supabase.table("quiz_choices").select("*").eq("question_id", ques["id"]).execute().data
+                                chosen = st.radio("Pilih jawaban:", [o["choice_text"] for o in opts], key=f"opt_{ques['id']}")
+                                if st.button("Kirim Jawaban", key=f"send_{ques['id']}"):
+                                    correct = any(o["is_correct"] and o["choice_text"] == chosen for o in opts)
+                                    supabase.table("quiz_responses").insert({
+                                        "quiz_id": q["id"],
+                                        "student_id": st.session_state.user["id"],
+                                        "question_id": ques["id"],
+                                        "answer_text": chosen,
+                                        "is_correct": correct,
+                                        "submitted_at": str(datetime.now())
+                                    }).execute()
+                                    if correct:
+                                        st.success("✅ Benar!")
+                                    else:
+                                        st.error("❌ Salah.")
+                            elif ques["type"] == "short":
+                                ans = st.text_input("Jawaban kamu:", key=f"short_{ques['id']}")
+                                if st.button("Kirim", key=f"send_short_{ques['id']}"):
+                                    correct = False
+                                    if ques.get("correct_answer"):
+                                        correct = ans.strip().lower() == ques["correct_answer"].strip().lower()
+                                    supabase.table("quiz_responses").insert({
+                                        "quiz_id": q["id"],
+                                        "student_id": st.session_state.user["id"],
+                                        "question_id": ques["id"],
+                                        "answer_text": ans,
+                                        "is_correct": correct,
+                                        "submitted_at": str(datetime.now())
+                                    }).execute()
+                                    if correct:
+                                        st.success("✅ Jawaban Benar!")
+                                    else:
+                                        st.error("❌ Jawaban Salah.")
+
+                    # === Mode guru ===
+                    elif st.session_state.user["role"] == "instructor":
+                        st.markdown("#### Pertanyaan dalam kuis ini:")
+                        qs = supabase.table("quiz_questions").select("*").eq("quiz_id", q["id"]).execute().data
+                        for qq in qs:
+                            st.markdown(f"- {qq['prompt']}")
+                        st.divider()
+
+        # Tambah kuis (guru)
         if st.session_state.user["role"] == "instructor":
-            with st.expander("➕ Tambah Kuis Baru"):
-                title = st.text_input("Judul Kuis")
-                desc = st.text_area("Deskripsi")
-                if st.button("Simpan Kuis"):
+            with st.expander("➕ Tambah Kuis"):
+                title = st.text_input("Judul Kuis", key="quiz_title")
+                desc = st.text_area("Deskripsi Kuis", key="quiz_desc")
+                if st.button("💾 Simpan Kuis", key="quiz_save"):
                     supabase.table("quizzes").insert({
                         "course_id": cid,
                         "title": title,
                         "description": desc
                     }).execute()
-                    st.success("Kuis berhasil ditambahkan!")
+                    st.success("Kuis baru berhasil ditambahkan!")
                     st.rerun()
-
-
-# ======================
-# === QUIZ PAGE ===
-# ======================
-def page_quiz():
-    qid = st.session_state.quiz_id
-    quiz = supabase.table("quizzes").select("*").eq("id", qid).execute().data[0]
-    st.title(f"🧠 {quiz['title']}")
-    st.caption(quiz["description"])
-
-    questions = supabase.table("quiz_questions").select("*").eq("quiz_id", qid).execute().data
-
-    score = 0
-    for q in questions:
-        st.write(f"### {q['question_text']}")
-        if q["question_type"] == "mcq":
-            options = json.loads(q["options"])
-            choice = st.radio("Pilih jawaban:", options, key=f"q_{q['id']}")
-            if st.button("Kirim Jawaban", key=f"ans_btn_{q['id']}"):
-                correct = choice == q["correct_answer"]
-                points = q["points"] if correct else 0
-                supabase.table("quiz_responses").insert({
-                    "quiz_id": qid,
-                    "student_id": st.session_state.user["id"],
-                    "question_id": q["id"],
-                    "selected_option": choice,
-                    "is_correct": correct,
-                    "points_earned": points
-                }).execute()
-                if correct:
-                    st.success("Jawaban benar!")
-                else:
-                    st.error(f"Jawaban salah. Jawaban benar: {q['correct_answer']}")
-        else:
-            ans = st.text_input("Jawaban singkat:", key=f"short_{q['id']}")
-            if st.button("Kirim Jawaban", key=f"short_btn_{q['id']}"):
-                correct = ans.strip().lower() == q["correct_answer"].strip().lower()
-                points = q["points"] if correct else 0
-                supabase.table("quiz_responses").insert({
-                    "quiz_id": qid,
-                    "student_id": st.session_state.user["id"],
-                    "question_id": q["id"],
-                    "answer_text": ans,
-                    "is_correct": correct,
-                    "points_earned": points
-                }).execute()
-                if correct:
-                    st.success("✅ Benar!")
-                else:
-                    st.error(f"❌ Salah. Jawaban benar: {q['correct_answer']}")
-
 
 # ======================
 # === ROUTING ===
@@ -331,6 +430,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
