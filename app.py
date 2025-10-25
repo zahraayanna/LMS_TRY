@@ -384,10 +384,9 @@ def page_course_detail():
                         if qtype == "mcq":
                             st.markdown("**Tambahkan Pilihan Jawaban**")
                             opt_list = []
-                          num_choices = st.number_input("Jumlah pilihan jawaban", min_value=2, max_value=10, value=4, key=f"num_{q['id']}")
-                        for i in range(num_choices):
-                            text = st.text_input(f"Pilihan {chr(65+i)}", key=f"opt_{i}_{q['id']}") 
-                            correct = st.checkbox(f"Benar?", key=f"corr_{i}_{q['id']}")
+                          for i in range(5):  # sekarang A sampai E
+                              text = st.text_input(f"Pilihan {chr(65+i)}", key=f"opt_{i}_{q['id']}")
+                              correct = st.checkbox(f"Benar?", key=f"corr_{i}_{q['id']}")
                                 if text:
                                     opt_list.append({"choice_text": text, "is_correct": correct})
                             if st.button("💾 Simpan Pilihan", key=f"saveopts_{q['id']}"):
@@ -495,6 +494,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
