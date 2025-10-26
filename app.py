@@ -204,6 +204,7 @@ def page_dashboard():
 # ======================
 def page_courses():
     import uuid
+    import random, string
     st.title("🎓 My Courses")
 
     user = st.session_state.get("user")
@@ -235,7 +236,6 @@ def page_courses():
                 if existing:
                     st.warning("⚠️ You already have a course with this code!")
                 else:
-                    import random, string
                     if not access_code.strip():
                         access_code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
 
@@ -256,8 +256,8 @@ def page_courses():
                     st.session_state.page = "courses"
                     st.rerun()
 
+    # === STUDENT SECTION ===
     else:
-        # === STUDENT JOIN SECTION ===
         st.subheader("📥 Join Course with Access Code")
 
         with st.form("join_form", clear_on_submit=True):
@@ -292,33 +292,33 @@ def page_courses():
     st.divider()
     st.subheader("📘 My Courses")
 
+    # === LOAD COURSES ===
+    if user["role"] == "instructor":
+        courses = supabase.table("courses").select("*").eq("instructor_email", user["email"]).execute().data
+    else:
+        enrolled = supabase.table("enrollments").select("course_id").eq("user_id", user["id"]).execute().data
+        course_ids = [c["course_id"] for c in enrolled]
+        courses = supabase.table("courses").select("*").in_("id", course_ids).execute().data if course_ids else []
 
-# === LOAD COURSES ===
-if user["role"] == "instructor":
-    courses = supabase.table("courses").select("*").eq("instructor_email", user["email"]).execute().data
-else:
-    enrolled = supabase.table("enrollments").select("course_id").eq("user_id", user["id"]).execute().data
-    course_ids = [c["course_id"] for c in enrolled]
-    courses = supabase.table("courses").select("*").in_("id", course_ids).execute().data if course_ids else []
+    if not courses:
+        st.info("📭 No courses found yet.")
+        return
 
-if not courses:
-    st.info("📭 No courses found yet.")
-    return
+    # === DISPLAY COURSE LIST ===
+    for c in courses:
+        with st.container():
+            st.markdown(f"### 🎓 {c['title']}")
+            st.caption(c.get("description", "No description provided."))
+            st.markdown(f"**Course Code:** `{c['code']}`")
+            st.markdown(f"**Access Code:** `{c.get('access_code', '-')}`")
 
-# === DISPLAY COURSE LIST ===
-for c in courses:
-    with st.container():
-        st.markdown(f"### 🎓 {c['title']}")
-        st.caption(c.get("description", "No description provided."))
-        st.markdown(f"**Course Code:** `{c['code']}`")
-        st.markdown(f"**Access Code:** `{c.get('access_code', '-')}`")
+            if st.button("📖 Open Course", key=f"open_{c['id']}"):
+                st.session_state.current_course = c["id"]
+                st.session_state.page = "course_detail"
+                st.rerun()
 
-        if st.button("📖 Open Course", key=f"open_{c['id']}"):
-            st.session_state.current_course = c["id"]
-            st.session_state.page = "course_detail"
-            st.rerun()
+            st.markdown("---")
 
-        st.markdown("---")
                     
 # ======================
 # === COURSE DETAIL ===
@@ -678,6 +678,7 @@ def main():
 # jalankan aplikasi
 if __name__ == "__main__":
     main()
+
 
 
 
