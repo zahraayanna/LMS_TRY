@@ -130,64 +130,54 @@ def register_user(name, email, password, role):
 # === PAGE: LOGIN ===
 # =====================
 def page_login():
-    st.markdown(
-        """
-        <style>
-        .main { background: linear-gradient(145deg, #F6E6FF, #F8D3E2); color:#222 }
-        h1, h2, h3, h4 { color: #3b2063; }
-        </style>
-        """,
-        unsafe_allow_html=True
-    )
+    st.title("🎓 ThinkVerse LMS — Login Portal")
+    st.caption("Masuk untuk melanjutkan ke ruang belajar digital kamu.")
 
-    st.title("🎓 ThinkVerse LMS")
-    st.caption("Portal pembelajaran modern berbasis cloud Supabase")
-
-    tabs = st.tabs(["🔑 Login", "🆕 Register", "🔁 Lupa Password"])
+    tabs = st.tabs(["🔑 Login", "🆕 Register", "🔁 Forgot Password"])
 
     # --- LOGIN ---
     with tabs[0]:
-        with st.form("login_form_tab1"):
-            email = st.text_input("Email", key="login_email_tab1")
-            pw = st.text_input("Password", type="password", key="login_pw_tab1")
-            ok = st.form_submit_button("Masuk")
+        with st.form("login_form"):
+            email = st.text_input("Email")
+            pw = st.text_input("Password", type="password")
+            ok = st.form_submit_button("Login")
+
         if ok:
-            u = login(email, pw)
-            if u:
-                st.session_state.user = u
-                st.success(f"Selamat datang, {u['name']} 👋")
-                time.sleep(0.8)
-                st.rerun()
+            user = login(email, pw)
+            if user:
+                st.session_state.user = user
+                st.session_state.page = "dashboard"  # ⬅ pindah halaman otomatis
+                st.success(f"Selamat datang, {user['name']} 👋")
+                st.experimental_rerun()
             else:
-                st.error("Email atau password salah.")
+                st.error("❌ Email atau password salah.")
 
     # --- REGISTER ---
     with tabs[1]:
-        with st.form("reg_form_tab2"):
-            name = st.text_input("Nama Lengkap", key="reg_name_tab2")
-            email = st.text_input("Email", key="reg_email_tab2")
-            pw = st.text_input("Password", type="password", key="reg_pw_tab2")
-            role = st.selectbox("Peran", ["student", "instructor"], key="reg_role_tab2")
+        with st.form("reg_form"):
+            name = st.text_input("Nama Lengkap")
+            email = st.text_input("Email")
+            pw = st.text_input("Password", type="password")
+            role = st.selectbox("Peran", ["student", "instructor"])
             ok2 = st.form_submit_button("Daftar Akun Baru")
+
         if ok2:
             if register_user(name, email, pw, role):
-                st.success("Akun berhasil dibuat! Silakan login di tab pertama.")
-            else:
-                st.error("Email sudah terdaftar.")
+                st.success("✅ Akun berhasil dibuat! Silakan login di tab pertama.")
 
-    # --- RESET PASSWORD ---
+    # --- LUPA PASSWORD ---
     with tabs[2]:
-        with st.form("forgot_pw_form_tab3"):
-            email_fp = st.text_input("Email akun", key="fp_email_tab3")
-            new_pw = st.text_input("Password baru", type="password", key="fp_pw_tab3")
+        with st.form("forgot_pw_form"):
+            email_fp = st.text_input("Masukkan email kamu")
+            new_pw = st.text_input("Password baru", type="password")
+            new_pw2 = st.text_input("Ulangi password baru", type="password")
             ok3 = st.form_submit_button("Reset Password")
-        if ok3:
-            res = supabase.table("users").update({"password_hash": new_pw}).eq("email", email_fp).execute()
-            if res.data:
-                st.success("Password berhasil direset!")
-            else:
-                st.error("Email tidak ditemukan.")
 
+        if ok3:
+            if new_pw != new_pw2:
+                st.error("Password tidak sama.")
+            elif reset_password(email_fp, new_pw):
+                st.success("✅ Password berhasil direset! Silakan login ulang.")
 
 # ======================
 # === DASHBOARD ===
@@ -689,6 +679,7 @@ def main():
 # jalankan aplikasi
 if __name__ == "__main__":
     main()
+
 
 
 
