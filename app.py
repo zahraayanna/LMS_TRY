@@ -679,30 +679,3 @@ def main():
 # jalankan aplikasi
 if __name__ == "__main__":
     main()
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
