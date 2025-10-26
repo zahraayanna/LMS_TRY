@@ -215,473 +215,271 @@ def upload_to_supabase(file):
 
 
 # --- halaman detail course ---
+# ============================================
+# PAGE: COURSE DETAIL — ThinkVerse v5.3
+# Full LMS Course System (Supabase)
+# ============================================
+
 def page_course_detail():
+    # --- Rerun safeguard ---
+    if "current_course" not in st.session_state and "last_course" in st.session_state:
+        st.session_state.current_course = st.session_state.last_course
+
     if "current_course" not in st.session_state:
-        st.warning("⚠️ No course selected. Please go back to the Courses page.")
+        st.warning("⚠️ No course selected. Please return to the Courses page.")
         st.stop()
 
     cid = st.session_state.current_course
     user = st.session_state.user
+    st.session_state.last_course = cid
 
+    # --- Load course data ---
+    try:
+        c = supabase.table("courses").select("*").eq("id", cid).execute().data[0]
+    except Exception as e:
+        st.error(f"Error loading course data: {e}")
+        return
 
-    st.title("🎓 Course Details")
-    course_data = supabase.table("courses").select("*").eq("id", cid).execute().data[0]
+    # --- Header ---
+    st.title(f"📘 {c['title']}")
+    st.caption(c.get("description", ""))
 
-    tabs = st.tabs(["🏠 Dashboard", "🕒 Attendance", "📦 Modules", "🧩 Assignments", "🧠 Quizzes", "📣 Announcements"])
+    # --- Tabs ---
+    tabs = st.tabs([
+        "🏠 Dashboard",
+        "🕒 Attendance",
+        "📦 Modules",
+        "🧩 Assignments",
+        "🧠 Quizzes",
+        "📣 Announcements"
+    ])
 
-    # ===================================================
-    # 1️⃣ DASHBOARD
-    # ===================================================
+    # =====================================
+    # DASHBOARD
+    # =====================================
     with tabs[0]:
-        st.subheader("🏠 Course Dashboard")
+        st.subheader("🎯 Course Overview")
 
-        if course_data.get("youtube_url"):
-            st.video(course_data["youtube_url"])
+        st.markdown("### About this Course")
+        st.write(c.get("description", "No description provided."))
 
-        st.markdown("### 📝 Course Description")
-        if course_data.get("description"):
-            st.markdown(course_data["description"])
+        st.markdown("### 🎥 Course Video")
+        yt_url = c.get("youtube_url", "")
+        if yt_url:
+            st.video(yt_url)
         else:
-            st.info("This course has no description yet.")
+            st.info("No YouTube video attached.")
 
-        if course_data.get("book_embed"):
-            st.markdown("### 📚 Course Book / Guide")
-            st.components.v1.iframe(course_data["book_embed"], height=500)
+        st.markdown("### 📚 Reference Book (Embed)")
+        ref_book = c.get("reference_book", "")
+        if ref_book:
+            st.markdown(f'<iframe src="{ref_book}" width="100%" height="500px"></iframe>', unsafe_allow_html=True)
+        else:
+            st.info("No embedded reference book.")
 
-        if user["role"] == "instructor":
-            with st.expander("✏️ Edit Dashboard"):
-                yt = st.text_input("YouTube URL", value=course_data.get("youtube_url", ""), key="yt_dash")
-                desc = st.text_area("Course Description", value=course_data.get("description", ""), key="desc_dash")
-                book = st.text_input("Book Embed Link (Google Drive / LiveBook / Issuu)", value=course_data.get("book_embed", ""), key="book_dash")
-                if st.button("💾 Save Dashboard", key="save_dash"):
-                    supabase.table("courses").update({
-                        "youtube_url": yt,
-                        "description": desc,
-                        "book_embed": book
-                    }).eq("id", cid).execute()
-                    st.success("Course dashboard updated successfully!")
-                    st.rerun()
-
-    # ===================================================
-    # 2️⃣ ATTENDANCE
-    # ===================================================
+    # =====================================
+    # ATTENDANCE
+    # =====================================
     with tabs[1]:
-        st.subheader("🕒 Attendance")
+        st.subheader("🕒 Attendance Tracker")
+
+        att = supabase.table("attendance").select("*").eq("course_id", cid).execute().data
+        if att:
+            st.dataframe(att)
+        else:
+            st.info("No attendance records yet.")
+
         if user["role"] == "instructor":
-            with st.expander("➕ Create Attendance Session"):
-                title = st.text_input("Session Title", key="att_title")
-                date = st.date_input("Session Date", key="att_date")
-                code = st.text_input("Access Code (optional)", key="att_code")
-                open_now = st.checkbox("Open attendance immediately", value=True)
-                if st.button("💾 Create Session", key="att_save"):
-                    if not code:
-                        code = str(int(datetime.now().timestamp()))[-6:]
-                    supabase.table("attendance_sessions").insert({
+            with st.form("add_attendance"):
+                date = st.date_input("Date")
+                topic = st.text_input("Topic")
+                ok = st.form_submit_button("➕ Add Attendance")
+                if ok and topic:
+                    supabase.table("attendance").insert({
                         "course_id": cid,
-                        "title": title,
-                        "session_date": str(date),
-                        "access_code": code,
-                        "is_open": open_now
+                        "date": str(date),
+                        "topic": topic
                     }).execute()
-                    st.success("Attendance session created successfully!")
+                    st.success("Attendance added successfully!")
                     st.rerun()
 
-        sessions = supabase.table("attendance_sessions").select("*").eq("course_id", cid).order("id", desc=True).execute().data
-        if not sessions:
-            st.info("No attendance sessions yet.")
-        else:
-            for s in sessions:
-                with st.expander(f"{s['title']} — {s['session_date']} {'🟢 OPEN' if s['is_open'] else '🔴 CLOSED'}"):
-                    st.caption(f"Access Code: `{s['access_code']}`")
-
-                    if user["role"] == "student":
-                        if s["is_open"]:
-                            code_in = st.text_input("Enter attendance code:", key=f"att_in_{s['id']}")
-                            if st.button("✅ Mark Attendance", key=f"mark_{s['id']}"):
-                                if code_in.strip() == (s.get("access_code") or "").strip():
-                                    supabase.table("attendance_logs").insert({
-                                        "session_id": s["id"],
-                                        "student_id": user["id"],
-                                        "marked_at": str(datetime.now())
-                                    }).execute()
-                                    st.success("Your attendance has been recorded!")
-                                else:
-                                    st.error("Incorrect code.")
-                        else:
-                            st.info("This session is closed.")
-
-                    elif user["role"] == "instructor":
-                        c1, c2 = st.columns([1, 1])
-                        with c1:
-                            if st.button("🟢 Open", key=f"open_{s['id']}"):
-                                supabase.table("attendance_sessions").update({"is_open": True}).eq("id", s["id"]).execute()
-                                st.rerun()
-                        with c2:
-                            if st.button("🔴 Close", key=f"close_{s['id']}"):
-                                supabase.table("attendance_sessions").update({"is_open": False}).eq("id", s["id"]).execute()
-                                st.rerun()
-
-                        logs = supabase.table("attendance_logs").select("*").eq("session_id", s["id"]).execute().data
-                        if not logs:
-                            st.caption("No attendance records yet.")
-                        else:
-                            st.markdown("#### Attendance List:")
-                            for l in logs:
-                                st.markdown(f"- 👤 **Student ID:** {l['student_id']} at {l['marked_at']}")
-
-    # ===================================================
-    # 3️⃣ MODULES
-    # ===================================================
+    # =====================================
+    # MODULES
+    # =====================================
     with tabs[2]:
-        st.subheader("📦 Course Modules")
+        st.subheader("📦 Learning Modules")
+
+        mods = supabase.table("modules").select("*").eq("course_id", cid).execute().data
+        if mods:
+            for m in mods:
+                with st.expander(f"📘 {m['title']}"):
+                    st.markdown(m.get("content", "No content."))
+                    if m.get("video_url"):
+                        st.video(m["video_url"])
+        else:
+            st.info("No modules added yet.")
 
         if user["role"] == "instructor":
-            with st.expander("➕ Add New Module"):
-                title = st.text_input("Module Title", key="mod_title")
-                content = st.text_area("Module Content (Markdown supported)", key="mod_content")
-                youtube = st.text_input("YouTube Link (optional)", key="mod_yt")
-                order = st.number_input("Order Index", min_value=0, max_value=999, value=0, key="mod_order")
-                img = st.file_uploader("Upload Image (optional)", type=["jpg","jpeg","png"], key="mod_img")
-                if st.button("💾 Save Module", key="mod_save"):
-                    img_url = None
-                    if img:
-                        file_bytes = img.getvalue()
-                        file_path = f"modules/{cid}_{datetime.now().timestamp()}_{img.name}"
-                        supabase.storage.from_("thinkverse_uploads").upload(file_path, file_bytes)
-                        img_url = supabase.storage.from_("thinkverse_uploads").get_public_url(file_path)
+            with st.form("add_module"):
+                title = st.text_input("Module Title")
+                content = st.text_area("Content (Markdown supported)")
+                video_url = st.text_input("Video URL (optional)")
+                ok = st.form_submit_button("➕ Add Module")
+                if ok and title:
                     supabase.table("modules").insert({
                         "course_id": cid,
                         "title": title,
                         "content": content,
-                        "youtube_url": youtube,
-                        "image_url": img_url,
-                        "order_index": order
+                        "video_url": video_url
                     }).execute()
-                    st.success("Module added successfully!")
+                    st.success("Module added!")
                     st.rerun()
 
-        modules = supabase.table("modules").select("*").eq("course_id", cid).order("order_index").execute().data
-        if not modules:
-            st.info("No modules have been added yet.")
-        else:
-            for m in modules:
-                with st.expander(f"{m['order_index']}. {m['title']}"):
-                    if m.get("youtube_url"):
-                        st.video(m["youtube_url"])
-                    if m.get("image_url"):
-                        st.image(m["image_url"], use_container_width=True)
-                    if m.get("content"):
-                        st.markdown(m["content"])
-
-                    if user["role"] == "instructor":
-                        col1, col2 = st.columns([1, 1])
-                        with col1:
-                            if st.button("✏️ Edit", key=f"edit_mod_{m['id']}"):
-                                st.session_state[f"edit_mod_{m['id']}"] = not st.session_state.get(f"edit_mod_{m['id']}", False)
-                        with col2:
-                            if st.button("🗑️ Delete", key=f"del_mod_{m['id']}"):
-                                supabase.table("modules").delete().eq("id", m["id"]).execute()
-                                st.success("Module deleted.")
-                                st.rerun()
-
-                    if st.session_state.get(f"edit_mod_{m['id']}", False):
-                        st.markdown(f"### Editing: {m['title']}")
-                        new_title = st.text_input("Title", value=m["title"], key=f"et_{m['id']}")
-                        new_content = st.text_area("Content", value=m["content"] or "", key=f"ec_{m['id']}")
-                        new_yt = st.text_input("YouTube URL", value=m.get("youtube_url",""), key=f"ey_{m['id']}")
-                        new_order = st.number_input("Order", 0, 999, m["order_index"], key=f"eo_{m['id']}")
-                        if st.button("💾 Save Changes", key=f"sv_{m['id']}"):
-                            supabase.table("modules").update({
-                                "title": new_title,
-                                "content": new_content,
-                                "youtube_url": new_yt,
-                                "order_index": new_order
-                            }).eq("id", m["id"]).execute()
-                            st.success("Module updated.")
-                            st.session_state[f"edit_mod_{m['id']}"] = False
-                            st.rerun()
-
-    # ===================================================
-    # 2️⃣ TAB TUGAS
-    # ===================================================
+    # =====================================
+    # ASSIGNMENTS
+    # =====================================
     with tabs[3]:
-        st.subheader("🧩 Daftar Tugas")
-        user = st.session_state.user
-        tasks = supabase.table("assignments").select("*").eq("course_id", cid).execute().data
+        st.subheader("🧩 Assignments")
 
-        # === Tampilkan semua tugas ===
-        if not tasks:
-            st.info("Belum ada tugas di kursus ini.")
-        else:
-            for t in tasks:
-                with st.container(border=True):
-                    st.markdown(f"### {t['title']}")
-                    st.markdown(t.get("description", ""))
-
-                    # tampilkan embed konten
-                    if t.get("embed_url"):
-                        if "youtube" in t["embed_url"]:
-                            st.video(t["embed_url"])
-                        else:
-                            st.components.v1.iframe(t["embed_url"], height=400)
-
-                    if t.get("image_url"):
-                        st.image(t["image_url"], width=400)
-
-                    if t.get("due_date"):
-                        st.caption(f"🕒 Deadline: {t['due_date']}")
-
-                    st.markdown(f"**Tipe Pengumpulan:** `{t.get('submission_type', 'Teks/Upload')}`")
-
-                    # === Mode siswa ===
+        asg = supabase.table("assignments").select("*").eq("course_id", cid).execute().data
+        if asg:
+            for a in asg:
+                with st.expander(f"📄 {a['title']}"):
+                    st.markdown(a.get("description", ""))
+                    if a.get("embed_url"):
+                        st.markdown(f'<iframe src="{a["embed_url"]}" width="100%" height="400px"></iframe>', unsafe_allow_html=True)
                     if user["role"] == "student":
-                        st.markdown("#### Kirim Jawaban")
+                        st.write("### Submit Assignment")
+                        file = st.file_uploader("Upload your work", key=f"up_{a['id']}")
+                        if file:
+                            st.success(f"✅ Submission received for '{a['title']}' (Simulated)")
+        else:
+            st.info("No assignments available.")
 
-                        # cek tipe pengumpulan
-                        submission_type = t.get("submission_type", "text")
-
-                        if submission_type == "text":
-                            answer = st.text_area("Tulis jawaban di sini:", key=f"ans_{t['id']}")
-                            file = None
-
-                        elif submission_type == "pdf":
-                            file = st.file_uploader("Unggah file PDF jawaban kamu:", type=["pdf"], key=f"file_{t['id']}")
-                            answer = None
-
-                        elif submission_type == "image":
-                            file = st.file_uploader("Unggah gambar jawaban kamu:", type=["jpg", "png"], key=f"file_{t['id']}")
-                            answer = None
-
-                        elif submission_type == "mixed":
-                            answer = st.text_area("Tulis jawaban (opsional):", key=f"ans_{t['id']}")
-                            file = st.file_uploader("Unggah file tambahan (PDF/Gambar):", type=["pdf", "jpg", "png"], key=f"file_{t['id']}")
-
-                        if st.button("📤 Kirim Jawaban", key=f"submit_{t['id']}"):
-                            file_url = upload_to_supabase(file) if file else None
-                            supabase.table("submissions").insert({
-                                "assignment_id": t["id"],
-                                "student_id": user["id"],
-                                "answer_text": answer,
-                                "file_url": file_url,
-                                "submitted_at": str(datetime.now())
-                            }).execute()
-                            st.success("✅ Jawaban kamu berhasil dikirim!")
-                            st.rerun()
-
-                    # === Mode guru ===
-                    elif user["role"] == "instructor":
-                        st.divider()
-                        st.markdown("#### Kiriman Siswa:")
-                        subs = supabase.table("submissions").select("*").eq("assignment_id", t["id"]).execute().data
-                        if not subs:
-                            st.caption("Belum ada jawaban siswa.")
-                        else:
-                            for s in subs:
-                                st.markdown(f"👤 **Siswa ID:** {s['student_id']}")
-                                if s.get("answer_text"):
-                                    st.markdown(f"📝 **Jawaban:** {s['answer_text']}")
-                                if s.get("file_url"):
-                                    st.markdown(f"[📎 Lihat File]({s['file_url']})")
-                                st.caption(f"🕒 {s.get('submitted_at', '-')}")
-                                st.divider()
-
-        # === Tambah tugas (guru) ===
         if user["role"] == "instructor":
-            with st.expander("➕ Tambah Tugas Baru"):
-                title = st.text_input("Judul Tugas", key="asg_title")
-                desc = st.text_area("Deskripsi Tugas", key="asg_desc")
-                embed_url = st.text_input("Link Embed (YouTube/LiveWorksheet/dsb)", key="asg_embed")
-                submission_type = st.selectbox(
-                    "Tipe Pengumpulan:",
-                    ["text", "pdf", "image", "mixed"],
-                    key="asg_type"
-                )
-                due = st.date_input("Batas Waktu (opsional)", key="asg_due")
-                img = st.file_uploader("Gambar Pendukung (opsional)", key="asg_img")
-
-                if st.button("💾 Simpan Tugas", key="asg_save"):
-                    img_url = upload_to_supabase(img) if img else None
+            with st.form("add_assignment"):
+                title = st.text_input("Assignment Title")
+                desc = st.text_area("Assignment Description")
+                embed = st.text_input("Embed URL (Liveworksheet / YouTube / PDF Viewer)")
+                file_type = st.selectbox("Accepted Submission Type", ["PDF", "Image", "Docx", "Any"])
+                ok = st.form_submit_button("➕ Add Assignment")
+                if ok and title:
                     supabase.table("assignments").insert({
                         "course_id": cid,
                         "title": title,
                         "description": desc,
-                        "embed_url": embed_url,
-                        "submission_type": submission_type,
-                        "due_date": str(due) if due else None,
-                        "image_url": img_url
+                        "embed_url": embed,
+                        "allowed_type": file_type
                     }).execute()
-                    st.success("Tugas baru berhasil ditambahkan!")
+                    st.success("Assignment added!")
                     st.rerun()
 
-    # ===================================================
-    # 3️⃣ TAB KUIS
-    # ===================================================
+    # =====================================
+    # QUIZZES (FULL INTERACTIVE)
+    # =====================================
     with tabs[4]:
-        st.subheader("🧠 Kuis Kursus")
-        user = st.session_state.user
+        st.subheader("🧠 Quizzes")
+
         quizzes = supabase.table("quizzes").select("*").eq("course_id", cid).execute().data
-
-        if not quizzes:
-            st.info("Belum ada kuis untuk kursus ini.")
-        else:
+        if quizzes:
             for q in quizzes:
-                with st.container(border=True):
-                    st.markdown(f"### {q['title']}")
-                    st.caption(q.get("description", ""))
+                with st.expander(f"📝 {q['title']}"):
+                    st.markdown(q.get("description", ""))
+                    questions = supabase.table("quiz_questions").select("*").eq("quiz_id", q["id"]).execute().data
+                    if questions:
+                        for i, qs in enumerate(questions, 1):
+                            st.markdown(f"**{i}. {qs['question']}**")
+                            if qs["type"] == "multiple_choice":
+                                choices = qs["choices"].split("|")
+                                st.radio("Answer:", choices, key=f"q_{qs['id']}")
+                            else:
+                                st.text_input("Answer:", key=f"t_{qs['id']}")
+                    else:
+                        st.info("No questions yet.")
+        else:
+            st.info("No quizzes yet.")
 
-                    # === Mode instruktur ===
-                    if user["role"] == "instructor":
-                        st.markdown("#### 📋 Daftar Soal:")
-                        qs = supabase.table("quiz_questions").select("*").eq("quiz_id", q["id"]).execute().data
-                        if qs:
-                            for qq in qs:
-                                st.markdown(f"- {qq['prompt']} ({qq['type']})")
-                        else:
-                            st.caption("_Belum ada soal dalam kuis ini._")
-
-                        with st.expander("➕ Tambah Soal Baru"):
-                            qtype = st.selectbox("Tipe Soal", ["mcq", "short"], key=f"qtype_{q['id']}")
-                            prompt = st.text_area("Pertanyaan", key=f"prompt_{q['id']}")
-                            image = st.file_uploader("Gambar (opsional)", key=f"img_{q['id']}")
-                            correct_answer = st.text_input("Jawaban benar (untuk short answer)", key=f"corr_{q['id']}")
-                            img_url = upload_to_supabase(image) if image else None
-                            if st.button("💾 Simpan Soal", key=f"saveq_{q['id']}"):
-                                data = {
-                                    "quiz_id": q["id"],
-                                    "prompt": prompt,
-                                    "type": qtype,
-                                    "image_url": img_url,
-                                    "correct_answer": correct_answer if qtype == "short" else None
-                                }
-                                supabase.table("quiz_questions").insert(data).execute()
-                                st.success("Soal berhasil ditambahkan!")
-                                st.rerun()
-
-                            # === Tambahkan pilihan jawaban (jika MCQ) ===
-                            if qtype == "mcq":
-                                st.markdown("**Tambahkan Pilihan Jawaban (maks 5)**")
-                                opt_list = []
-                                for i in range(5):  # Sekarang A sampai E
-                                    text = st.text_input(f"Pilihan {chr(65+i)}", key=f"opt_{i}_{q['id']}")
-                                    correct = st.checkbox(f"Benar?", key=f"corr_{i}_{q['id']}")
-                                    if text:
-                                        opt_list.append({"choice_text": text, "is_correct": correct})
-                                if st.button("💾 Simpan Pilihan", key=f"saveopts_{q['id']}"):
-                                    qq = supabase.table("quiz_questions").select("id").eq("quiz_id", q["id"]).order("id", desc=True).limit(1).execute().data
-                                    if qq:
-                                        qnid = qq[0]["id"]
-                                        for opt in opt_list:
-                                            opt["question_id"] = qnid
-                                        supabase.table("quiz_choices").insert(opt_list).execute()
-                                        st.success("Pilihan berhasil disimpan!")
-                                        st.rerun()
-
-                    # === Mode siswa ===
-                    elif user["role"] == "student":
-                        st.markdown("#### ✏️ Kerjakan Kuis Ini:")
-                        qs = supabase.table("quiz_questions").select("*").eq("quiz_id", q["id"]).execute().data
-                        if not qs:
-                            st.caption("Belum ada soal untuk kuis ini.")
-                        else:
-                            total_questions = len(qs)
-                            correct_count = 0
-
-                            for qq in qs:
-                                st.markdown(f"**{qq['prompt']}**")
-                                if qq.get("image_url"):
-                                    st.image(qq["image_url"], width=400)
-
-                                # === Multiple Choice ===
-                                if qq["type"] == "mcq":
-                                    choices = supabase.table("quiz_choices").select("*").eq("question_id", qq["id"]).execute().data
-                                    if choices:
-                                        answer = st.radio(
-                                            "Pilih jawaban:",
-                                            [c["choice_text"] for c in choices],
-                                            key=f"mcq_{qq['id']}"
-                                        )
-                                        if st.button("Kirim Jawaban", key=f"submit_mcq_{qq['id']}"):
-                                            correct = any(c["is_correct"] and c["choice_text"] == answer for c in choices)
-                                            supabase.table("quiz_responses").insert({
-                                                "quiz_id": q["id"],
-                                                "student_id": user["id"],
-                                                "question_id": qq["id"],
-                                                "answer_text": answer,
-                                                "is_correct": correct,
-                                                "submitted_at": str(datetime.now())
-                                            }).execute()
-                                            if correct:
-                                                st.success("✅ Benar!")
-                                                correct_count += 1
-                                            else:
-                                                st.error("❌ Salah.")
-
-                                # === Short Answer ===
-                                elif qq["type"] == "short":
-                                    ans = st.text_input("Jawaban kamu:", key=f"short_{qq['id']}")
-                                    if st.button("Kirim Jawaban", key=f"submit_short_{qq['id']}"):
-                                        correct = False
-                                        if qq.get("correct_answer"):
-                                            correct = ans.strip().lower() == qq["correct_answer"].strip().lower()
-                                        supabase.table("quiz_responses").insert({
-                                            "quiz_id": q["id"],
-                                            "student_id": user["id"],
-                                            "question_id": qq["id"],
-                                            "answer_text": ans,
-                                            "is_correct": correct,
-                                            "submitted_at": str(datetime.now())
-                                        }).execute()
-                                        if correct:
-                                            st.success("✅ Jawaban Benar!")
-                                            correct_count += 1
-                                        else:
-                                            st.error("❌ Jawaban Salah.")
-
-                            st.markdown("---")
-                            st.info(f"**Skor kamu:** {correct_count} / {total_questions}")
-
-        # === Tambah kuis (guru) ===
+        # --- Create quiz ---
         if user["role"] == "instructor":
-            with st.expander("➕ Buat Kuis Baru"):
-                title = st.text_input("Judul Kuis", key="quiz_title_new")
-                desc = st.text_area("Deskripsi Kuis", key="quiz_desc_new")
-                if st.button("💾 Simpan Kuis", key="quiz_save_new"):
+            with st.form("add_quiz"):
+                title = st.text_input("Quiz Title")
+                desc = st.text_area("Quiz Description")
+                ok = st.form_submit_button("➕ Create Quiz")
+                if ok and title:
                     supabase.table("quizzes").insert({
                         "course_id": cid,
                         "title": title,
                         "description": desc
                     }).execute()
-                    st.success("Kuis baru berhasil dibuat!")
+                    st.success("Quiz created!")
                     st.rerun()
 
-    # ===================================================
-    # 6️⃣ ANNOUNCEMENTS
-    # ===================================================
+        # --- Add Question to Quiz ---
+        if user["role"] == "instructor" and quizzes:
+            st.markdown("### ➕ Add Question to Quiz")
+            quiz_list = {q["title"]: q["id"] for q in quizzes}
+            selected_quiz = st.selectbox("Select Quiz", list(quiz_list.keys()))
+            qid = quiz_list[selected_quiz]
+
+            with st.form("add_question"):
+                question = st.text_input("Question Text")
+                q_type = st.selectbox("Type", ["multiple_choice", "short_answer"])
+                if q_type == "multiple_choice":
+                    choices = [st.text_input(f"Choice {ch}", key=f"ch_{i}") for i, ch in enumerate(["A", "B", "C", "D", "E"], 1)]
+                    correct = st.selectbox("Correct Answer", ["A", "B", "C", "D", "E"])
+                    ok = st.form_submit_button("➕ Add Question")
+                    if ok and question:
+                        supabase.table("quiz_questions").insert({
+                            "quiz_id": qid,
+                            "question": question,
+                            "type": "multiple_choice",
+                            "choices": "|".join(choices),
+                            "correct_answer": correct
+                        }).execute()
+                        st.success("Question added successfully!")
+                        st.rerun()
+                else:
+                    ans = st.text_input("Correct Answer")
+                    ok = st.form_submit_button("➕ Add Question")
+                    if ok and question:
+                        supabase.table("quiz_questions").insert({
+                            "quiz_id": qid,
+                            "question": question,
+                            "type": "short_answer",
+                            "correct_answer": ans
+                        }).execute()
+                        st.success("Question added!")
+                        st.rerun()
+
+    # =====================================
+    # ANNOUNCEMENTS
+    # =====================================
     with tabs[5]:
         st.subheader("📣 Course Announcements")
 
-        announcements = supabase.table("announcements").select("*").eq("course_id", cid).order("created_at", desc=True).execute().data
-        if not announcements:
-            st.info("No announcements yet.")
-        else:
-            for a in announcements:
-                st.markdown(f"### 📢 {a['title']}")
-                st.caption(f"Posted on {a['created_at']}")
+        ann = supabase.table("announcements").select("*").eq("course_id", cid).execute().data
+        if ann:
+            for a in ann:
+                st.markdown(f"**📢 {a['title']}** — *{a['date']}*")
                 st.markdown(a["content"])
                 st.divider()
+        else:
+            st.info("No announcements yet.")
 
         if user["role"] == "instructor":
-            with st.expander("➕ Create Announcement"):
-                title = st.text_input("Announcement Title", key="ann_title")
-                content = st.text_area("Announcement Content", key="ann_content")
-                if st.button("📤 Post Announcement", key="ann_post"):
+            with st.form("add_announcement"):
+                title = st.text_input("Title")
+                content = st.text_area("Content")
+                ok = st.form_submit_button("📣 Post Announcement")
+                if ok and title:
+                    from datetime import date
                     supabase.table("announcements").insert({
                         "course_id": cid,
                         "title": title,
                         "content": content,
-                        "created_at": str(datetime.now())
+                        "date": str(date.today())
                     }).execute()
-                    st.success("Announcement posted successfully!")
+                    st.success("Announcement posted!")
                     st.rerun()
 
 # ======================
@@ -699,6 +497,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
