@@ -216,61 +216,190 @@ def upload_to_supabase(file):
 
 # --- halaman detail course ---
 def page_course_detail():
-    cid = st.session_state.course_id
-    res = supabase.table("courses").select("*").eq("id", cid).execute()
-    if not res.data:
-        st.error("Kursus tidak ditemukan.")
-        return
+    cid = st.session_state.current_course
+    user = st.session_state.user
 
-    c = res.data[0]
-    st.title(f"📘 {c['title']}")
-    st.caption(c.get("description", ""))
+    st.title("🎓 Course Details")
+    course_data = supabase.table("courses").select("*").eq("id", cid).execute().data[0]
 
-    tabs = st.tabs(["📚 Materi", "🧩 Tugas", "🧠 Kuis"])
+    tabs = st.tabs(["🏠 Dashboard", "🕒 Attendance", "📦 Modules", "🧩 Assignments", "🧠 Quizzes", "📣 Announcements"])
 
     # ===================================================
-    # 1️⃣ TAB MATERI
+    # 1️⃣ DASHBOARD
     # ===================================================
     with tabs[0]:
-        st.subheader("📚 Materi Kursus")
-        materials = supabase.table("materials").select("*").eq("course_id", cid).execute().data
+        st.subheader("🏠 Course Dashboard")
 
-        if not materials:
-            st.info("Belum ada materi untuk kursus ini.")
+        if course_data.get("youtube_url"):
+            st.video(course_data["youtube_url"])
+
+        st.markdown("### 📝 Course Description")
+        if course_data.get("description"):
+            st.markdown(course_data["description"])
         else:
-            for m in materials:
-                with st.container(border=True):
-                    st.markdown(f"### {m['title']}")
-                    st.markdown(m.get("content", ""))
-                    if m.get("youtube_url"):
-                        st.video(m["youtube_url"])
-                    if m.get("image_url"):
-                        st.image(m["image_url"], width=500)
-                    st.divider()
+            st.info("This course has no description yet.")
 
-        # Tambah materi (guru)
-        if st.session_state.user["role"] == "instructor":
-            with st.expander("➕ Tambah Materi"):
-                title = st.text_input("Judul Materi", key="mat_title")
-                content = st.text_area("Isi Materi", key="mat_content")
-                yt = st.text_input("YouTube URL (opsional)", key="mat_yt")
-                img = st.file_uploader("Gambar (opsional)", key="mat_img")
-                if st.button("💾 Simpan Materi", key="mat_save"):
-                    img_url = upload_to_supabase(img) if img else None
-                    supabase.table("materials").insert({
+        if course_data.get("book_embed"):
+            st.markdown("### 📚 Course Book / Guide")
+            st.components.v1.iframe(course_data["book_embed"], height=500)
+
+        if user["role"] == "instructor":
+            with st.expander("✏️ Edit Dashboard"):
+                yt = st.text_input("YouTube URL", value=course_data.get("youtube_url", ""), key="yt_dash")
+                desc = st.text_area("Course Description", value=course_data.get("description", ""), key="desc_dash")
+                book = st.text_input("Book Embed Link (Google Drive / LiveBook / Issuu)", value=course_data.get("book_embed", ""), key="book_dash")
+                if st.button("💾 Save Dashboard", key="save_dash"):
+                    supabase.table("courses").update({
+                        "youtube_url": yt,
+                        "description": desc,
+                        "book_embed": book
+                    }).eq("id", cid).execute()
+                    st.success("Course dashboard updated successfully!")
+                    st.rerun()
+
+    # ===================================================
+    # 2️⃣ ATTENDANCE
+    # ===================================================
+    with tabs[1]:
+        st.subheader("🕒 Attendance")
+        if user["role"] == "instructor":
+            with st.expander("➕ Create Attendance Session"):
+                title = st.text_input("Session Title", key="att_title")
+                date = st.date_input("Session Date", key="att_date")
+                code = st.text_input("Access Code (optional)", key="att_code")
+                open_now = st.checkbox("Open attendance immediately", value=True)
+                if st.button("💾 Create Session", key="att_save"):
+                    if not code:
+                        code = str(int(datetime.now().timestamp()))[-6:]
+                    supabase.table("attendance_sessions").insert({
+                        "course_id": cid,
+                        "title": title,
+                        "session_date": str(date),
+                        "access_code": code,
+                        "is_open": open_now
+                    }).execute()
+                    st.success("Attendance session created successfully!")
+                    st.rerun()
+
+        sessions = supabase.table("attendance_sessions").select("*").eq("course_id", cid).order("id", desc=True).execute().data
+        if not sessions:
+            st.info("No attendance sessions yet.")
+        else:
+            for s in sessions:
+                with st.expander(f"{s['title']} — {s['session_date']} {'🟢 OPEN' if s['is_open'] else '🔴 CLOSED'}"):
+                    st.caption(f"Access Code: `{s['access_code']}`")
+
+                    if user["role"] == "student":
+                        if s["is_open"]:
+                            code_in = st.text_input("Enter attendance code:", key=f"att_in_{s['id']}")
+                            if st.button("✅ Mark Attendance", key=f"mark_{s['id']}"):
+                                if code_in.strip() == (s.get("access_code") or "").strip():
+                                    supabase.table("attendance_logs").insert({
+                                        "session_id": s["id"],
+                                        "student_id": user["id"],
+                                        "marked_at": str(datetime.now())
+                                    }).execute()
+                                    st.success("Your attendance has been recorded!")
+                                else:
+                                    st.error("Incorrect code.")
+                        else:
+                            st.info("This session is closed.")
+
+                    elif user["role"] == "instructor":
+                        c1, c2 = st.columns([1, 1])
+                        with c1:
+                            if st.button("🟢 Open", key=f"open_{s['id']}"):
+                                supabase.table("attendance_sessions").update({"is_open": True}).eq("id", s["id"]).execute()
+                                st.rerun()
+                        with c2:
+                            if st.button("🔴 Close", key=f"close_{s['id']}"):
+                                supabase.table("attendance_sessions").update({"is_open": False}).eq("id", s["id"]).execute()
+                                st.rerun()
+
+                        logs = supabase.table("attendance_logs").select("*").eq("session_id", s["id"]).execute().data
+                        if not logs:
+                            st.caption("No attendance records yet.")
+                        else:
+                            st.markdown("#### Attendance List:")
+                            for l in logs:
+                                st.markdown(f"- 👤 **Student ID:** {l['student_id']} at {l['marked_at']}")
+
+    # ===================================================
+    # 3️⃣ MODULES
+    # ===================================================
+    with tabs[2]:
+        st.subheader("📦 Course Modules")
+
+        if user["role"] == "instructor":
+            with st.expander("➕ Add New Module"):
+                title = st.text_input("Module Title", key="mod_title")
+                content = st.text_area("Module Content (Markdown supported)", key="mod_content")
+                youtube = st.text_input("YouTube Link (optional)", key="mod_yt")
+                order = st.number_input("Order Index", min_value=0, max_value=999, value=0, key="mod_order")
+                img = st.file_uploader("Upload Image (optional)", type=["jpg","jpeg","png"], key="mod_img")
+                if st.button("💾 Save Module", key="mod_save"):
+                    img_url = None
+                    if img:
+                        file_bytes = img.getvalue()
+                        file_path = f"modules/{cid}_{datetime.now().timestamp()}_{img.name}"
+                        supabase.storage.from_("thinkverse_uploads").upload(file_path, file_bytes)
+                        img_url = supabase.storage.from_("thinkverse_uploads").get_public_url(file_path)
+                    supabase.table("modules").insert({
                         "course_id": cid,
                         "title": title,
                         "content": content,
-                        "youtube_url": yt or None,
-                        "image_url": img_url
+                        "youtube_url": youtube,
+                        "image_url": img_url,
+                        "order_index": order
                     }).execute()
-                    st.success("Materi berhasil ditambahkan!")
+                    st.success("Module added successfully!")
                     st.rerun()
+
+        modules = supabase.table("modules").select("*").eq("course_id", cid).order("order_index").execute().data
+        if not modules:
+            st.info("No modules have been added yet.")
+        else:
+            for m in modules:
+                with st.expander(f"{m['order_index']}. {m['title']}"):
+                    if m.get("youtube_url"):
+                        st.video(m["youtube_url"])
+                    if m.get("image_url"):
+                        st.image(m["image_url"], use_container_width=True)
+                    if m.get("content"):
+                        st.markdown(m["content"])
+
+                    if user["role"] == "instructor":
+                        col1, col2 = st.columns([1, 1])
+                        with col1:
+                            if st.button("✏️ Edit", key=f"edit_mod_{m['id']}"):
+                                st.session_state[f"edit_mod_{m['id']}"] = not st.session_state.get(f"edit_mod_{m['id']}", False)
+                        with col2:
+                            if st.button("🗑️ Delete", key=f"del_mod_{m['id']}"):
+                                supabase.table("modules").delete().eq("id", m["id"]).execute()
+                                st.success("Module deleted.")
+                                st.rerun()
+
+                    if st.session_state.get(f"edit_mod_{m['id']}", False):
+                        st.markdown(f"### Editing: {m['title']}")
+                        new_title = st.text_input("Title", value=m["title"], key=f"et_{m['id']}")
+                        new_content = st.text_area("Content", value=m["content"] or "", key=f"ec_{m['id']}")
+                        new_yt = st.text_input("YouTube URL", value=m.get("youtube_url",""), key=f"ey_{m['id']}")
+                        new_order = st.number_input("Order", 0, 999, m["order_index"], key=f"eo_{m['id']}")
+                        if st.button("💾 Save Changes", key=f"sv_{m['id']}"):
+                            supabase.table("modules").update({
+                                "title": new_title,
+                                "content": new_content,
+                                "youtube_url": new_yt,
+                                "order_index": new_order
+                            }).eq("id", m["id"]).execute()
+                            st.success("Module updated.")
+                            st.session_state[f"edit_mod_{m['id']}"] = False
+                            st.rerun()
 
     # ===================================================
     # 2️⃣ TAB TUGAS
     # ===================================================
-    with tabs[1]:
+    with tabs[3]:
         st.subheader("🧩 Daftar Tugas")
         user = st.session_state.user
         tasks = supabase.table("assignments").select("*").eq("course_id", cid).execute().data
@@ -382,7 +511,7 @@ def page_course_detail():
     # ===================================================
     # 3️⃣ TAB KUIS
     # ===================================================
-    with tabs[2]:
+    with tabs[4]:
         st.subheader("🧠 Kuis Kursus")
         user = st.session_state.user
         quizzes = supabase.table("quizzes").select("*").eq("course_id", cid).execute().data
@@ -520,6 +649,36 @@ def page_course_detail():
                     st.success("Kuis baru berhasil dibuat!")
                     st.rerun()
 
+    # ===================================================
+    # 6️⃣ ANNOUNCEMENTS
+    # ===================================================
+    with tabs[5]:
+        st.subheader("📣 Course Announcements")
+
+        announcements = supabase.table("announcements").select("*").eq("course_id", cid).order("created_at", desc=True).execute().data
+        if not announcements:
+            st.info("No announcements yet.")
+        else:
+            for a in announcements:
+                st.markdown(f"### 📢 {a['title']}")
+                st.caption(f"Posted on {a['created_at']}")
+                st.markdown(a["content"])
+                st.divider()
+
+        if user["role"] == "instructor":
+            with st.expander("➕ Create Announcement"):
+                title = st.text_input("Announcement Title", key="ann_title")
+                content = st.text_area("Announcement Content", key="ann_content")
+                if st.button("📤 Post Announcement", key="ann_post"):
+                    supabase.table("announcements").insert({
+                        "course_id": cid,
+                        "title": title,
+                        "content": content,
+                        "created_at": str(datetime.now())
+                    }).execute()
+                    st.success("Announcement posted successfully!")
+                    st.rerun()
+
 # ======================
 # === ROUTING ===
 # ======================
@@ -535,6 +694,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
