@@ -148,7 +148,7 @@ def page_login():
                 st.session_state.user = user
                 st.session_state.page = "dashboard"  # ⬅ pindah halaman otomatis
                 st.success(f"Selamat datang, {user['name']} 👋")
-                st.experimental_rerun()
+                st.rerun()
             else:
                 st.error("❌ Email atau password salah.")
 
@@ -316,7 +316,7 @@ def page_courses():
             if st.button("📖 Open Course", key=unique_key):
                 st.session_state.current_course = c["id"]
                 st.session_state.page = "course_detail"
-                st.experimental_rerun()  # ⬅ ini penting banget biar langsung pindah
+                st.rerun()  # ⬅ ini penting banget biar langsung pindah
 
             st.markdown("---")
                     
@@ -633,6 +633,10 @@ def page_course_detail():
                     }).execute()
                     st.success("Announcement posted!")
                     st.rerun()
+                    
+def page_account():
+    st.header("👤 Account Page")
+    st.info("This section is under construction.")
 
 # ======================
 # === ROUTING ===
@@ -673,9 +677,10 @@ def main():
 
     else:
         st.session_state.page = "login"
-        st.experimental_rerun()
+        st.rerun()
 
 
 # jalankan aplikasi
 if __name__ == "__main__":
     main()
+
