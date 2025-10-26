@@ -210,53 +210,94 @@ def page_dashboard():
 # ======================
 # === COURSE PAGE ===
 # ======================
+# ============================
+# PAGE: COURSES
+# ============================
 def page_courses():
-    user = st.session_state.user  # ✅ Ambil user aktif
-    st.header("🎓 My Courses")
+    st.title("🎓 My Courses")
 
-    data = supabase.table("courses").select("*").execute().data
-    if not data:
-        st.info("No courses yet.")
+    user = st.session_state.get("user")
+    if not user:
+        st.warning("Please log in to continue.")
         return
 
-    for c in data:
-        st.markdown(f"### {c['title']}")
-        st.caption(c.get("description", ""))
-        col1, col2 = st.columns([5, 1])
-        with col2:
-          open_course_id = None  # penanda sementara
-    for c in data:
-        st.markdown(f"### {c['title']}")
-        st.caption(c.get("description", ""))
-        col1, col2 = st.columns([5, 1])
-        with col2:
-            if st.button("📖 Open Course", key=f"open_{c['id']}"):
-                open_course_id = c["id"]
+    # =======================
+    # Hanya guru (instructor) bisa buat course
+    # =======================
+    if user["role"] == "instructor":
+        st.subheader("➕ Create New Course")
 
-    # Jalankan pindah halaman setelah loop selesai
-    if open_course_id:
-        st.session_state.current_course = open_course_id
-        st.session_state.page = "course_detail"
-        st.rerun()
+        with st.form("create_course_form", clear_on_submit=True):
+            new_title = st.text_input("Course Title")
+            new_desc = st.text_area("Course Description")
+            submit = st.form_submit_button("Create Course")
+
+        if submit:
+            if not new_title.strip():
+                st.warning("Course title cannot be empty.")
+            else:
+                if "course_created" not in st.session_state:
+                    st.session_state.course_created = False
+
+                if not st.session_state.course_created:
+                    # Cek duplikasi: apakah course dengan nama sama sudah ada
+                    existing = supabase.table("courses").select("*") \
+                        .eq("title", new_title.strip()) \
+                        .eq("instructor_email", user["email"]).execute().data
+
+                    if existing:
+                        st.warning("⚠️ Course with this title already exists!")
+                    else:
+                        supabase.table("courses").insert({
+                            "title": new_title.strip(),
+                            "description": new_desc.strip(),
+                            "instructor_email": user["email"]
+                        }).execute()
+                        st.session_state.course_created = True
+                        st.success("✅ Course created successfully!")
+                        st.rerun()
+                else:
+                    st.info("Course already created, please refresh the page.")
+    else:
+        st.info("👀 Only instructors can create courses.")
+
+    # =======================
+    # Menampilkan daftar course
+    # =======================
+    st.divider()
+    st.subheader("📘 My Courses")
 
     if user["role"] == "instructor":
-        with st.expander("➕ Create New Course"):
-            with st.form("new_course_form"):
-                title = st.text_input("Course Title")
-                desc = st.text_area("Description")
-                yt = st.text_input("YouTube URL (optional)")
-                ref = st.text_input("Reference Book URL (optional)")
-                ok = st.form_submit_button("Create Course")
-                if ok and title:
-                    supabase.table("courses").insert({
-                        "title": title,
-                        "description": desc,
-                        "youtube_url": yt,
-                        "reference_book": ref,
-                        "instructor_id": user["id"]
-                    }).execute()
-                    st.success("✅ New course created successfully!")
+        courses = supabase.table("courses").select("*") \
+            .eq("instructor_email", user["email"]).execute().data
+    else:
+        # Untuk student, tampilkan course di mana dia terdaftar
+        enrolled = supabase.table("enrollments").select("course_id") \
+            .eq("student_email", user["email"]).execute().data
+        course_ids = [c["course_id"] for c in enrolled]
+        courses = supabase.table("courses").select("*").in_("id", course_ids).execute().data
+
+    if not courses:
+        st.write("📭 No courses found yet.")
+        return
+
+    # =======================
+    # Tampilan daftar course
+    # =======================
+    for c in courses:
+        with st.container():
+            st.markdown(f"### 🎓 {c['title']}")
+            st.caption(c["description"] or "No description provided.")
+            col1, col2 = st.columns([6, 1])
+
+            with col2:
+                if st.button("📖 Open Course", key=f"open_{c['id']}"):
+                    st.session_state.current_course = c["id"]
+                    st.session_state.page = "course_detail"
                     st.rerun()
+
+            st.markdown("---")
+
                     
 # ======================
 # === COURSE DETAIL ===
@@ -565,6 +606,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
