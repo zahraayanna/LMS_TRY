@@ -165,20 +165,23 @@ def page_dashboard():
 # === COURSE PAGE ===
 # ======================
 def page_courses():
-    u = st.session_state.user
-    st.header("📘 Kursus")
-    st.write("Daftar kursus yang tersedia di ThinkVerse.")
+    st.header("🎓 My Courses")
 
-    res = supabase.table("courses").select("*").execute()
-    courses = res.data
+    data = supabase.table("courses").select("*").execute().data
+    if not data:
+        st.info("No courses yet.")
+        return
 
-    for c in courses:
-        with st.container(border=True):
-            st.subheader(c["title"])
-            st.caption(c["description"] or "Tanpa deskripsi.")
-            if st.button(f"Masuk ke {c['title']}", key=f"enter_{c['id']}"):
-                st.session_state.page = "course_detail"
-                st.session_state.course_id = c["id"]
+    for c in data:
+        st.markdown(f"### {c['title']}")
+        st.caption(c.get("description", ""))
+        col1, col2 = st.columns([5, 1])
+        with col2:
+            if st.button("📖 Open Course", key=f"open_{c['id']}"):
+                # 🔒 Simpan ID course agar tidak hilang saat rerun
+                st.session_state.current_course = c["id"]
+                st.session_state.last_course = c["id"]
+                st.session_state.page = "detail"
                 st.rerun()
 
     if u["role"] == "instructor":
@@ -497,6 +500,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
