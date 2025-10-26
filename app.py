@@ -1,4 +1,7 @@
 import streamlit as st
+st.set_page_config(page_title="ThinkVerse LMS", page_icon="🎓", layout="wide")
+
+
 from supabase import create_client
 import time
 from datetime import datetime
@@ -7,7 +10,6 @@ import json
 # =========================
 # === KONFIGURASI AWAL ===
 # =========================
-st.set_page_config(page_title="ThinkVerse LMS", page_icon="🎓", layout="wide")
 
 st.markdown("""
     <style>
@@ -646,8 +648,6 @@ def page_course_detail():
 # === ROUTING ===
 # ======================
 def main():
-    # === SETUP PAGE ===
-    st.set_page_config(page_title="ThinkVerse LMS", page_icon="🎓", layout="wide")
 
     # === INISIALISASI SESSION STATE ===
     if "page" not in st.session_state:
@@ -689,6 +689,7 @@ def main():
 # jalankan aplikasi
 if __name__ == "__main__":
     main()
+
 
 
 
