@@ -657,11 +657,12 @@ def main():
         page_dashboard()
     elif st.session_state.page == "courses":
         page_courses()
-    elif st.session_state.page == "course_detail":
+    elif st.session_state.get("page") == "course_detail":
         page_course_detail()
 
 if __name__ == "__main__":
     main()
+
 
 
 
