@@ -646,22 +646,50 @@ def page_course_detail():
 # === ROUTING ===
 # ======================
 def main():
-    if "user" not in st.session_state:
-        page_login()
-        return
+    # === SETUP PAGE ===
+    st.set_page_config(page_title="ThinkVerse LMS", page_icon="🎓", layout="wide")
 
+    # === INISIALISASI SESSION STATE ===
     if "page" not in st.session_state:
-        st.session_state.page = "dashboard"
+        st.session_state.page = "login"
+    if "user" not in st.session_state:
+        st.session_state.user = None
+    if "current_course" not in st.session_state:
+        st.session_state.current_course = None
 
-    if st.session_state.page == "dashboard":
+    # === ROUTER HALAMAN ===
+    page = st.session_state.page
+
+    if page == "login":
+        page_login()
+
+    elif page == "dashboard":
         page_dashboard()
-    elif st.session_state.page == "courses":
-        page_courses()
-    elif st.session_state.get("page") == "course_detail":
-        page_course_detail()
 
+    elif page == "courses":
+        page_courses()
+
+    elif page == "account":
+        page_account()
+
+    elif page == "course_detail":
+        # 🧠 ini penting: pastikan ada course yang sedang aktif
+        if st.session_state.get("current_course") is None:
+            st.warning("⚠️ No course selected. Please return to the Courses page.")
+            st.session_state.page = "courses"
+            st.experimental_rerun()
+        else:
+            page_course_detail()
+
+    else:
+        st.session_state.page = "login"
+        st.experimental_rerun()
+
+
+# jalankan aplikasi
 if __name__ == "__main__":
     main()
+
 
 
 
