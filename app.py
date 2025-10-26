@@ -216,8 +216,13 @@ def upload_to_supabase(file):
 
 # --- halaman detail course ---
 def page_course_detail():
+    if "current_course" not in st.session_state:
+        st.warning("⚠️ No course selected. Please go back to the Courses page.")
+        st.stop()
+
     cid = st.session_state.current_course
     user = st.session_state.user
+
 
     st.title("🎓 Course Details")
     course_data = supabase.table("courses").select("*").eq("id", cid).execute().data[0]
@@ -694,6 +699,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
