@@ -224,10 +224,20 @@ def page_courses():
         st.caption(c.get("description", ""))
         col1, col2 = st.columns([5, 1])
         with col2:
+          open_course_id = None  # penanda sementara
+    for c in data:
+        st.markdown(f"### {c['title']}")
+        st.caption(c.get("description", ""))
+        col1, col2 = st.columns([5, 1])
+        with col2:
             if st.button("📖 Open Course", key=f"open_{c['id']}"):
-                st.session_state.current_course = c["id"]
-                st.session_state.page = "course_detail"
-                st.experimental_rerun()  # Penting banget biar langsung pindah halaman
+                open_course_id = c["id"]
+
+    # Jalankan pindah halaman setelah loop selesai
+    if open_course_id:
+        st.session_state.current_course = open_course_id
+        st.session_state.page = "course_detail"
+        st.rerun()
 
     if user["role"] == "instructor":
         with st.expander("➕ Create New Course"):
@@ -555,6 +565,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
