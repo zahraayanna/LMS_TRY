@@ -642,8 +642,6 @@ def page_account():
 # === ROUTING ===
 # ======================
 def main():
-
-    # === INISIALISASI SESSION STATE ===
     if "page" not in st.session_state:
         st.session_state.page = "login"
     if "user" not in st.session_state:
@@ -651,7 +649,6 @@ def main():
     if "current_course" not in st.session_state:
         st.session_state.current_course = None
 
-    # === ROUTER HALAMAN ===
     page = st.session_state.page
 
     if page == "login":
@@ -678,10 +675,10 @@ def main():
         st.session_state.page = "login"
         st.rerun()
 
-
 # jalankan aplikasi
 if __name__ == "__main__":
     main()
+
 
 
 
