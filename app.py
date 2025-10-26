@@ -369,6 +369,32 @@ def page_course_detail():
     st.title(f"📘 {c['title']}")
     st.caption(c.get("description", ""))
 
+    # === ACTION BUTTONS ===
+    col1, col2 = st.columns([0.25, 0.75])
+
+    # 🔙 Tombol Kembali ke Courses
+    with col1:
+        if st.button("🔙 Back to Courses"):
+            st.session_state.page = "courses"
+            st.session_state.current_course = None
+            st.rerun()
+
+    # 🚪 Tombol Resign dari Course (hanya untuk student)
+    with col2:
+        user = st.session_state.get("user")
+        if user and user["role"] == "student":
+            if st.button("🚪 Leave this Course"):
+                confirm = st.checkbox("Yes, I really want to leave this course")
+                if confirm:
+                    # hapus dari tabel enrollments
+                    supabase.table("enrollments").delete().eq("user_id", user["id"]).eq("course_id", cid).execute()
+                    st.success("✅ You have successfully left this course.")
+                    time.sleep(1)
+                    st.session_state.page = "courses"
+                    st.session_state.current_course = None
+                    st.rerun()
+
+
     # --- Tabs ---
     tabs = st.tabs([
         "🏠 Dashboard",
@@ -678,6 +704,7 @@ def main():
 # jalankan aplikasi
 if __name__ == "__main__":
     main()
+
 
 
 
