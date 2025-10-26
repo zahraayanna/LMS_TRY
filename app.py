@@ -165,6 +165,7 @@ def page_dashboard():
 # === COURSE PAGE ===
 # ======================
 def page_courses():
+    user = st.session_state.user  # ✅ Ambil user aktif
     st.header("🎓 My Courses")
 
     data = supabase.table("courses").select("*").execute().data
@@ -178,26 +179,30 @@ def page_courses():
         col1, col2 = st.columns([5, 1])
         with col2:
             if st.button("📖 Open Course", key=f"open_{c['id']}"):
-                # 🔒 Simpan ID course agar tidak hilang saat rerun
                 st.session_state.current_course = c["id"]
                 st.session_state.last_course = c["id"]
                 st.session_state.page = "detail"
                 st.rerun()
 
-    if u["role"] == "instructor":
-        with st.expander("➕ Tambah Kursus Baru"):
-            title = st.text_input("Judul Kursus")
-            desc = st.text_area("Deskripsi Kursus")
-            if st.button("Simpan Kursus"):
-                supabase.table("courses").insert({
-                    "title": title,
-                    "description": desc,
-                    "instructor_id": u["id"]
-                }).execute()
-                st.success("Kursus berhasil ditambahkan!")
-                st.rerun()
-
-
+    if user["role"] == "instructor":
+        with st.expander("➕ Create New Course"):
+            with st.form("new_course_form"):
+                title = st.text_input("Course Title")
+                desc = st.text_area("Description")
+                yt = st.text_input("YouTube URL (optional)")
+                ref = st.text_input("Reference Book URL (optional)")
+                ok = st.form_submit_button("Create Course")
+                if ok and title:
+                    supabase.table("courses").insert({
+                        "title": title,
+                        "description": desc,
+                        "youtube_url": yt,
+                        "reference_book": ref,
+                        "instructor_id": user["id"]
+                    }).execute()
+                    st.success("✅ New course created successfully!")
+                    st.rerun()
+                    
 # ======================
 # === COURSE DETAIL ===
 # ======================
@@ -500,6 +505,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
