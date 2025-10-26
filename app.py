@@ -219,7 +219,7 @@ def page_courses():
         st.warning("Please log in to continue.")
         return
 
-    # ============ INSTRUCTOR ONLY SECTION ============
+    # === INSTRUCTOR ONLY SECTION ===
     if user["role"] == "instructor":
         st.subheader("➕ Create New Course")
 
@@ -235,7 +235,6 @@ def page_courses():
             if not new_code.strip() or not new_title.strip():
                 st.warning("Course code and title cannot be empty.")
             else:
-                # Cek apakah course dengan code & instructor_email ini sudah ada
                 existing = supabase.table("courses").select("*") \
                     .eq("code", new_code.strip()) \
                     .eq("instructor_email", user["email"]) \
@@ -248,11 +247,9 @@ def page_courses():
                     if not access_code.strip():
                         access_code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
 
-                    # Dapatkan instructor_id
                     instr_row = supabase.table("users").select("id").eq("email", user["email"]).execute().data
                     instructor_id = instr_row[0]["id"] if instr_row else None
 
-                    # Simpan course baru
                     supabase.table("courses").insert({
                         "code": new_code.strip(),
                         "title": new_title.strip(),
@@ -264,10 +261,11 @@ def page_courses():
                     }).execute()
 
                     st.success(f"✅ Course '{new_title}' created successfully! Access code: {access_code}")
+                    st.session_state.page = "courses"
                     st.rerun()
 
     else:
-        # ============ STUDENT SECTION ============
+        # === STUDENT JOIN SECTION ===
         st.subheader("📥 Join Course with Access Code")
 
         with st.form("join_form", clear_on_submit=True):
@@ -296,29 +294,25 @@ def page_courses():
                             "role": "student"
                         }).execute()
                         st.success("✅ Successfully joined the course!")
+                        st.session_state.page = "courses"
                         st.rerun()
 
-    # ============ COURSE LIST SECTION ============
     st.divider()
     st.subheader("📘 My Courses")
 
+    # === LOAD COURSES ===
     if user["role"] == "instructor":
-        courses = supabase.table("courses").select("*") \
-            .eq("instructor_email", user["email"]).execute().data
+        courses = supabase.table("courses").select("*").eq("instructor_email", user["email"]).execute().data
     else:
-        enrolled = supabase.table("enrollments").select("course_id") \
-            .eq("user_id", user["id"]).execute().data
+        enrolled = supabase.table("enrollments").select("course_id").eq("user_id", user["id"]).execute().data
         course_ids = [c["course_id"] for c in enrolled]
-        if course_ids:
-            courses = supabase.table("courses").select("*").in_("id", course_ids).execute().data
-        else:
-            courses = []
+        courses = supabase.table("courses").select("*").in_("id", course_ids).execute().data if course_ids else []
 
     if not courses:
         st.info("📭 No courses found yet.")
         return
 
-    # ============ DISPLAY COURSES ============
+    # === DISPLAY COURSE LIST ===
     for c in courses:
         with st.container():
             st.markdown(f"### 🎓 {c['title']}")
@@ -326,14 +320,11 @@ def page_courses():
             st.markdown(f"**Course Code:** `{c['code']}`")
             st.markdown(f"**Access Code:** `{c.get('access_code', '-')}`")
 
-            col1, col2 = st.columns([6, 1])
-            with col2:
-                # Gunakan UUID agar tombol selalu punya key unik
-                unique_key = f"open_{c['id']}_{uuid.uuid4().hex[:6]}"
-                if st.button("📖 Open Course", key=unique_key):
-                    st.session_state.current_course = c["id"]
-                    st.session_state.page = "course_detail"
-                    st.rerun()
+            unique_key = f"open_{c['id']}_{uuid.uuid4().hex[:6]}"
+            if st.button("📖 Open Course", key=unique_key):
+                st.session_state.current_course = c["id"]
+                st.session_state.page = "course_detail"
+                st.experimental_rerun()  # ⬅ ini penting banget biar langsung pindah
 
             st.markdown("---")
                     
@@ -671,6 +662,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
