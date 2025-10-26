@@ -424,25 +424,52 @@ def page_course_detail():
     # =====================================
     # DASHBOARD
     # =====================================
+    # === TAB DASHBOARD ===
     with tabs[0]:
-        st.subheader("🎯 Course Overview")
+        st.markdown("## 🎯 Course Overview")
+        # ambil data course dari Supabase
+        course = supabase.table("courses").select("*").eq("id", cid).execute().data
+        if not course:
+            st.error("Course not found.")
+            st.stop()
+        c = course[0]
 
         st.markdown("### About this Course")
-        st.write(c.get("description", "No description provided."))
+        st.write(c.get("description") or "_No description provided._")
 
         st.markdown("### 🎥 Course Video")
-        yt_url = c.get("youtube_url", "")
+        yt_url = c.get("youtube_url")
         if yt_url:
             st.video(yt_url)
         else:
             st.info("No YouTube video attached.")
 
         st.markdown("### 📚 Reference Book (Embed)")
-        ref_book = c.get("reference_book", "")
-        if ref_book:
-            st.markdown(f'<iframe src="{ref_book}" width="100%" height="500px"></iframe>', unsafe_allow_html=True)
+        if c.get("reference_book"):
+            st.components.v1.iframe(c["reference_book"], height=400)
         else:
             st.info("No embedded reference book.")
+        # ======== EDIT SECTION (Instructor Only) ========
+        user = st.session_state.get("user")
+        if user and user["role"] == "instructor":
+            st.divider()
+            st.subheader("🛠️ Edit Course Dashboard")
+
+            with st.form("edit_course_dashboard"):
+                new_desc = st.text_area("Update Course Description", c.get("description", ""), height=150)
+                new_yt = st.text_input("YouTube Video URL", c.get("youtube_url", ""))
+                new_book = st.text_input("Reference Book Embed URL (iframe link)", c.get("reference_book", ""))
+                save_btn = st.form_submit_button("💾 Save Changes")
+
+            if save_btn:
+                supabase.table("courses").update({
+                    "description": new_desc,
+                    "youtube_url": new_yt,
+                    "reference_book": new_book
+                }).eq("id", cid).execute()
+
+                st.success("✅ Course dashboard updated successfully!")
+                st.rerun()
 
     # =====================================
     # ATTENDANCE
@@ -669,6 +696,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
