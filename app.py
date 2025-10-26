@@ -292,19 +292,20 @@ def page_courses():
     st.divider()
     st.subheader("📘 My Courses")
 
-    # === LOAD COURSES ===
-    if user["role"] == "instructor":
-        courses = supabase.table("courses").select("*").eq("instructor_email", user["email"]).execute().data
-    else:
-        enrolled = supabase.table("enrollments").select("course_id").eq("user_id", user["id"]).execute().data
-        course_ids = [c["course_id"] for c in enrolled]
-        courses = supabase.table("courses").select("*").in_("id", course_ids).execute().data if course_ids else []
 
-    if not courses:
-        st.info("📭 No courses found yet.")
-        return
+# === LOAD COURSES ===
+if user["role"] == "instructor":
+    courses = supabase.table("courses").select("*").eq("instructor_email", user["email"]).execute().data
+else:
+    enrolled = supabase.table("enrollments").select("course_id").eq("user_id", user["id"]).execute().data
+    course_ids = [c["course_id"] for c in enrolled]
+    courses = supabase.table("courses").select("*").in_("id", course_ids).execute().data if course_ids else []
 
-  # === DISPLAY COURSE LIST ===
+if not courses:
+    st.info("📭 No courses found yet.")
+    return
+
+# === DISPLAY COURSE LIST ===
 for c in courses:
     with st.container():
         st.markdown(f"### 🎓 {c['title']}")
@@ -312,11 +313,10 @@ for c in courses:
         st.markdown(f"**Course Code:** `{c['code']}`")
         st.markdown(f"**Access Code:** `{c.get('access_code', '-')}`")
 
-        # 🟢 tombol open course — versi fix
         if st.button("📖 Open Course", key=f"open_{c['id']}"):
             st.session_state.current_course = c["id"]
             st.session_state.page = "course_detail"
-            st.rerun()  # ⬅️ rerun baru & fix
+            st.rerun()
 
         st.markdown("---")
                     
@@ -678,6 +678,7 @@ def main():
 # jalankan aplikasi
 if __name__ == "__main__":
     main()
+
 
 
 
