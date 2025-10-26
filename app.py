@@ -9,6 +9,52 @@ import json
 # =========================
 st.set_page_config(page_title="ThinkVerse LMS", page_icon="🎓", layout="wide")
 
+st.markdown("""
+    <style>
+    /* Background gradient */
+    .main {
+        background: linear-gradient(to bottom right, #f3e8ff, #ffe4f3);
+        padding: 2rem;
+        border-radius: 20px;
+    }
+
+    /* Card styling */
+    div[data-testid="stExpander"] {
+        background-color: rgba(255, 255, 255, 0.7);
+        border-radius: 15px;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+        padding: 1rem;
+    }
+
+    /* Button */
+    div.stButton > button {
+        background: linear-gradient(90deg, #a855f7, #ec4899);
+        color: white !important;
+        border: none;
+        border-radius: 10px;
+        font-weight: 600;
+        transition: all 0.3s ease-in-out;
+    }
+    div.stButton > button:hover {
+        transform: scale(1.05);
+        box-shadow: 0 4px 12px rgba(168,85,247,0.3);
+    }
+
+    /* Tabs */
+    div[data-baseweb="tab-list"] button {
+        font-weight: 600;
+        color: #6b21a8;
+    }
+
+    /* Sidebar */
+    section[data-testid="stSidebar"] {
+        background-color: #f6f3ff;
+    }
+
+    </style>
+""", unsafe_allow_html=True)
+
+
 SUPABASE_URL = st.secrets["SUPABASE_URL"]
 SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
@@ -180,9 +226,8 @@ def page_courses():
         with col2:
             if st.button("📖 Open Course", key=f"open_{c['id']}"):
                 st.session_state.current_course = c["id"]
-                st.session_state.last_course = c["id"]
-                st.session_state.page = "detail"
-                st.rerun()
+                st.session_state.page = "course_detail"
+                st.experimental_rerun()  # Penting banget biar langsung pindah halaman
 
     if user["role"] == "instructor":
         with st.expander("➕ Create New Course"):
@@ -496,15 +541,21 @@ def page_course_detail():
 def main():
     if "user" not in st.session_state:
         page_login()
-    elif st.session_state.get("page") == "course_detail":
-        page_course_detail()
-    elif st.session_state.get("page") == "quiz_page":
-        page_quiz()
-    else:
+        return
+
+    if "page" not in st.session_state:
+        st.session_state.page = "dashboard"
+
+    if st.session_state.page == "dashboard":
         page_dashboard()
+    elif st.session_state.page == "courses":
+        page_courses()
+    elif st.session_state.page == "course_detail":
+        page_course_detail()
 
 if __name__ == "__main__":
     main()
+
 
 
 
