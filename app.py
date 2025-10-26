@@ -667,12 +667,12 @@ def main():
         page_account()
 
     elif page == "course_detail":
-    if st.session_state.get("current_course") is None:
-        st.warning("⚠️ No course selected. Please return to the Courses page.")
-        st.session_state.page = "courses"
-        st.rerun()
-    else:
-        page_course_detail()
+        if st.session_state.get("current_course") is None:
+            st.warning("⚠️ No course selected. Please return to the Courses page.")
+            st.session_state.page = "courses"
+            st.rerun()
+        else:
+            page_course_detail()
 
     else:
         st.session_state.page = "login"
@@ -682,5 +682,6 @@ def main():
 # jalankan aplikasi
 if __name__ == "__main__":
     main()
+
 
 
