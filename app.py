@@ -304,21 +304,21 @@ def page_courses():
         st.info("📭 No courses found yet.")
         return
 
-    # === DISPLAY COURSE LIST ===
-    for c in courses:
-        with st.container():
-            st.markdown(f"### 🎓 {c['title']}")
-            st.caption(c.get("description", "No description provided."))
-            st.markdown(f"**Course Code:** `{c['code']}`")
-            st.markdown(f"**Access Code:** `{c.get('access_code', '-')}`")
+  # === DISPLAY COURSE LIST ===
+for c in courses:
+    with st.container():
+        st.markdown(f"### 🎓 {c['title']}")
+        st.caption(c.get("description", "No description provided."))
+        st.markdown(f"**Course Code:** `{c['code']}`")
+        st.markdown(f"**Access Code:** `{c.get('access_code', '-')}`")
 
-            unique_key = f"open_{c['id']}_{uuid.uuid4().hex[:6]}"
-            if st.button("📖 Open Course", key=unique_key):
-                st.session_state.current_course = c["id"]
-                st.session_state.page = "course_detail"
-                st.rerun()  # ⬅ ini penting banget biar langsung pindah
+        # 🟢 tombol open course — versi fix
+        if st.button("📖 Open Course", key=f"open_{c['id']}"):
+            st.session_state.current_course = c["id"]
+            st.session_state.page = "course_detail"
+            st.rerun()  # ⬅️ rerun baru & fix
 
-            st.markdown("---")
+        st.markdown("---")
                     
 # ======================
 # === COURSE DETAIL ===
@@ -667,13 +667,12 @@ def main():
         page_account()
 
     elif page == "course_detail":
-        # 🧠 ini penting: pastikan ada course yang sedang aktif
-        if st.session_state.get("current_course") is None:
-            st.warning("⚠️ No course selected. Please return to the Courses page.")
-            st.session_state.page = "courses"
-            st.experimental_rerun()
-        else:
-            page_course_detail()
+    if st.session_state.get("current_course") is None:
+        st.warning("⚠️ No course selected. Please return to the Courses page.")
+        st.session_state.page = "courses"
+        st.rerun()
+    else:
+        page_course_detail()
 
     else:
         st.session_state.page = "login"
@@ -683,4 +682,5 @@ def main():
 # jalankan aplikasi
 if __name__ == "__main__":
     main()
+
 
