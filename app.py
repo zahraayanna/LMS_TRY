@@ -477,19 +477,24 @@ def page_course_detail():
             st.divider()
         else:
             st.info("No attendance records yet.")
+            
         if user["role"] == "instructor":
             with st.form("add_attendance"):
                 date = st.date_input("Date")
-                topic = st.text_input("Topic")
+                status = st.selectbox("Status", ["Present", "Absent", "Excused"])
+                note = st.text_input("Note (optional)")
                 ok = st.form_submit_button("➕ Add Attendance")
-                if ok and topic:
-                    supabase.table("attendance").insert({
-                        "course_id": cid,
-                        "date": str(date),
-                        "topic": topic
-                    }).execute()
-                    st.success("Attendance added successfully!")
-                    st.rerun()
+
+            if ok:
+                supabase.table("attendance").insert({
+                    "course_id": cid,
+                    "user_id": user["id"],   # siapa yang absen
+                    "status": status,
+                    "date": str(date),
+                    "note": note
+                }).execute()
+                st.success("✅ Attendance added successfully!")
+                st.rerun()
 
     # =====================================
     # MODULES
@@ -727,6 +732,7 @@ def main():
 # jalankan aplikasi
 if __name__ == "__main__":
     main()
+
 
 
 
