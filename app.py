@@ -252,25 +252,26 @@ def page_courses():
                         "instructor_email": user["email"]
                     }).execute()
 
-                    st.success(f"✅ Course '{new_title}' created successfully! Access code: {access_code}")
-                    st.session_state.page = "courses"
+                    st.success(f"✅ Course '{new_title}' created successfully! Access code: `{access_code}`")
                     st.rerun()
 
     # === STUDENT SECTION ===
     else:
         st.subheader("📥 Join Course with Access Code")
 
+        # siswa wajib masukin kode akses
         with st.form("join_form", clear_on_submit=True):
-            join_code = st.text_input("Enter Course Access Code")
+            join_code = st.text_input("Enter Course Access Code", placeholder="e.g. X7J9Q2")
             join_submit = st.form_submit_button("Join")
 
         if join_submit:
             if not join_code.strip():
-                st.warning("Please enter a course code.")
+                st.warning("Please enter a course access code.")
             else:
+                # cek apakah access code valid
                 course = supabase.table("courses").select("*").eq("access_code", join_code.strip()).execute().data
                 if not course:
-                    st.error("❌ Invalid course access code.")
+                    st.error("❌ Invalid access code. Please check with your instructor.")
                 else:
                     course_id = course[0]["id"]
                     enrolled = supabase.table("enrollments").select("*") \
@@ -285,8 +286,7 @@ def page_courses():
                             "course_id": course_id,
                             "role": "student"
                         }).execute()
-                        st.success("✅ Successfully joined the course!")
-                        st.session_state.page = "courses"
+                        st.success(f"✅ Successfully joined the course '{course[0]['title']}'!")
                         st.rerun()
 
     st.divider()
@@ -294,14 +294,19 @@ def page_courses():
 
     # === LOAD COURSES ===
     if user["role"] == "instructor":
+        # tampilkan semua course yang dibuat instruktur
         courses = supabase.table("courses").select("*").eq("instructor_email", user["email"]).execute().data
     else:
+        # siswa cuma bisa lihat course yang SUDAH dia join
         enrolled = supabase.table("enrollments").select("course_id").eq("user_id", user["id"]).execute().data
         course_ids = [c["course_id"] for c in enrolled]
         courses = supabase.table("courses").select("*").in_("id", course_ids).execute().data if course_ids else []
 
     if not courses:
-        st.info("📭 No courses found yet.")
+        if user["role"] == "instructor":
+            st.info("📭 You haven't created any courses yet.")
+        else:
+            st.info("📭 You haven't joined any courses yet.")
         return
 
     # === DISPLAY COURSE LIST ===
@@ -310,15 +315,18 @@ def page_courses():
             st.markdown(f"### 🎓 {c['title']}")
             st.caption(c.get("description", "No description provided."))
             st.markdown(f"**Course Code:** `{c['code']}`")
-            st.markdown(f"**Access Code:** `{c.get('access_code', '-')}`")
 
-            if st.button("📖 Open Course", key=f"open_{c['id']}"):
+            # kode akses hanya ditampilkan untuk instruktur (rahasia!)
+            if user["role"] == "instructor":
+                st.markdown(f"**Access Code:** `{c.get('access_code', '-')}`")
+
+            # tombol masuk ke course
+            if st.button("📖 Open Course", key=f"open_{c['id']}_{uuid.uuid4().hex[:6]}"):
                 st.session_state.current_course = c["id"]
                 st.session_state.page = "course_detail"
                 st.rerun()
 
             st.markdown("---")
-
                     
 # ======================
 # === COURSE DETAIL ===
@@ -771,6 +779,7 @@ def main():
 # jalankan aplikasi
 if __name__ == "__main__":
     main()
+
 
 
 
