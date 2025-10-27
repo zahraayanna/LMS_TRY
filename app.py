@@ -704,45 +704,47 @@ def page_course_detail():
     # =====================================
     with tabs[3]:
         import streamlit.components.v1 as components
+
         st.subheader("🧩 Assignments")
 
-        # === Ambil data assignment dari Supabase ===
-        asg = supabase.table("assignments").select("*").eq("course_id", cid).execute().data
+        # === Load Assignments dari Supabase ===
+        try:
+            asg_response = supabase.table("assignments").select("*").eq("course_id", cid).execute()
+            asg = asg_response.data or []
+        except Exception as e:
+            st.error(f"❌ Failed to load assignments: {e}")
+            asg = []
 
+        # === Tampilkan daftar assignment ===
         if asg:
             for a in asg:
                 with st.expander(f"📄 {a['title']}"):
-                    st.markdown(a.get("description", ""))
+                    st.markdown(a.get("description", "No description provided."))
 
-                    embed_url = a.get("embed_url")
-                    if embed_url:
-                        st.markdown("#### 📎 Embedded Worksheet / Resource:")
-
-                        # Smart Embed — coba tampilkan iframe langsung
+                    # === Tampilkan embed worksheet / resource ===
+                    if a.get("embed_url"):
+                        st.markdown("### 📎 Embedded Worksheet / Resource:")
                         try:
-                            components.iframe(embed_url, height=500, scrolling=True)
-                        except Exception:
-                            # Fallback otomatis kalau iframe diblokir (misalnya Liveworksheet)
-                            st.warning("⚠️ This resource cannot be embedded directly.")
-                            st.markdown(
-                                f"[🔗 Open in New Tab instead]({embed_url})",
-                                unsafe_allow_html=True
-                            )
+                            components.iframe(a["embed_url"], height=600, scrolling=True)
+                        except Exception as e:
+                            st.warning(f"⚠️ Could not load embed: {e}")
 
-                    # === Fitur upload tugas untuk siswa ===
+                    # === Bagian student (upload tugas) ===
                     if user["role"] == "student":
-                        st.write("### 📤 Submit Assignment")
-                        file = st.file_uploader("Upload your work", key=f"up_{a['id']}")
+                        st.markdown("### ✏️ Submit Assignment")
+                        file = st.file_uploader("Upload your work (PDF, DOCX, ZIP, etc.)", key=f"up_{a['id']}")
                         if file:
                             st.success(f"✅ Submission received for '{a['title']}' (Simulated)")
 
-                    # === Fitur hapus tugas untuk instruktur ===
+                    # === Bagian instructor (hapus assignment) ===
                     if user["role"] == "instructor":
                         if st.button(f"🗑️ Delete Assignment '{a['title']}'", key=f"del_asg_{a['id']}"):
-                            supabase.table("assignments").delete().eq("id", a["id"]).execute()
-                            st.success("Assignment deleted!")
-                            st.rerun()
-
+                            try:
+                                supabase.table("assignments").delete().eq("id", a["id"]).execute()
+                                st.success("✅ Assignment deleted!")
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"❌ Failed to delete assignment: {e}")
         else:
             st.info("📭 No assignments available.")
 
@@ -753,23 +755,29 @@ def page_course_detail():
 
             with st.form("add_assignment", clear_on_submit=True):
                 title = st.text_input("Assignment Title")
-                desc = st.text_area("Assignment Description")
-                embed = st.text_input("Embed URL (Liveworksheet / YouTube / PDF Viewer / Docs, etc.)")
-                file_type = st.selectbox("Accepted Submission Type", ["PDF", "Image", "Docx", "Any"])
-                ok = st.form_submit_button("💾 Add Assignment")
+                desc = st.text_area("Assignment Description", height=100)
+                embed_url = st.text_input(
+                    "Embed URL (Public HTML link — e.g., redirect file for Liveworksheet or external resource)"
+                )
 
-            if ok and title:
-                supabase.table("assignments").insert({
-                    "course_id": cid,
-                    "title": title,
-                    "description": desc,
-                    "embed_url": embed,
-                    "allowed_type": file_type
-                }).execute()
-                st.success("✅ Assignment added successfully!")
-                st.rerun()
+                submit_asg = st.form_submit_button("💾 Add Assignment")
+                if submit_asg:
+                    if not title.strip():
+                        st.warning("⚠️ Please enter a title.")
+                    else:
+                        try:
+                            supabase.table("assignments").insert({
+                                "course_id": cid,
+                                "title": title.strip(),
+                                "description": desc.strip() if desc else "",
+                                "embed_url": embed_url.strip() if embed_url else None
+                            }).execute()
 
-
+                            st.success(f"✅ Assignment '{title}' added successfully!")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"❌ Failed to add assignment: {e}")
+                            
     # =====================================
     # QUIZZES (FULL INTERACTIVE)
     # =====================================
@@ -1018,6 +1026,7 @@ def main():
 # jalankan aplikasi
 if __name__ == "__main__":
     main()
+
 
 
 
