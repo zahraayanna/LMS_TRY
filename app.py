@@ -771,41 +771,93 @@ def page_course_detail():
 
         # --- Add Question to Quiz ---
         if user["role"] == "instructor" and quizzes:
-            st.markdown("### ➕ Add Question to Quiz")
+            from PIL import Image
+            import io
+            import base64
+
+            st.markdown("### ➕ Add Question to Quiz (Rich Version)")
             quiz_list = {q["title"]: q["id"] for q in quizzes}
             selected_quiz = st.selectbox("Select Quiz", list(quiz_list.keys()))
             qid = quiz_list[selected_quiz]
 
-            with st.form("add_question"):
-                question = st.text_input("Question Text")
+            with st.form("add_question_rich"):
+                question_text = st.text_area("Question Text (Markdown + LaTeX supported)", height=150)
+                question_image = st.file_uploader("Upload Question Image (optional)", type=["png", "jpg", "jpeg"])
+
                 q_type = st.selectbox("Type", ["multiple_choice", "short_answer"])
 
+                img_markdown = ""
+                if question_image:
+                    try:
+                        img_bytes = question_image.read()
+                        file_path = f"uploads/{int(datetime.now().timestamp())}_{question_image.name}"
+                        supabase.storage.from_("thinkverse_uploads").upload(file_path, img_bytes)
+                        img_url = f"{SUPABASE_URL}/storage/v1/object/public/thinkverse_uploads/{file_path}"
+                        img_markdown = f"\n\n![Question Image]({img_url})"
+                    except Exception as e:
+                        st.error(f"⚠️ Failed to upload question image: {e}")
+
                 if q_type == "multiple_choice":
-                    choices = [st.text_input(f"Choice {ch}", key=f"ch_{i}") for i, ch in enumerate(["A", "B", "C", "D", "E"], 1)]
+                    st.markdown("#### ✏️ Multiple Choice Options")
+                    choices = []
+                    for ch in ["A", "B", "C", "D", "E"]:
+                        col1, col2 = st.columns([3, 2])
+                        with col1:
+                            opt_text = st.text_input(f"Option {ch} Text (Markdown/Equation allowed)", key=f"text_{ch}")
+                        with col2:
+                            opt_img = st.file_uploader(f"Upload Image for Option {ch}", type=["png", "jpg", "jpeg"], key=f"img_{ch}")
+
+                        img_opt_md = ""
+                        if opt_img:
+                            try:
+                                img_bytes = opt_img.read()
+                                file_path = f"uploads/{int(datetime.now().timestamp())}_{opt_img.name}"
+                                supabase.storage.from_("thinkverse_uploads").upload(file_path, img_bytes)
+                                img_url = f"{SUPABASE_URL}/storage/v1/object/public/thinkverse_uploads/{file_path}"
+                                img_opt_md = f"\n\n![Option {ch}]({img_url})"
+                            except Exception as e:
+                                st.error(f"⚠️ Failed to upload image for Option {ch}: {e}")
+
+                        full_choice = (opt_text or "") + img_opt_md
+                        choices.append(full_choice.strip())
+
                     correct = st.selectbox("Correct Answer", ["A", "B", "C", "D", "E"])
-                    ok = st.form_submit_button("➕ Add Question")
-                    if ok and question:
-                        supabase.table("quiz_questions").insert({
-                            "quiz_id": qid,
-                            "question": question,
-                            "type": "multiple_choice",
-                            "choices": "|".join(choices),
-                            "correct_answer": correct
-                        }).execute()
-                        st.success("Question added successfully!")
-                        st.rerun()
-                else:
-                    ans = st.text_input("Correct Answer")
-                    ok = st.form_submit_button("➕ Add Question")
-                    if ok and question:
-                        supabase.table("quiz_questions").insert({
-                            "quiz_id": qid,
-                            "question": question,
-                            "type": "short_answer",
-                            "correct_answer": ans
-                        }).execute()
-                        st.success("Question added!")
-                        st.rerun()
+                    ok = st.form_submit_button("💾 Add Question")
+
+                    if ok and question_text:
+                        try:
+                            final_question = question_text + img_markdown
+                            supabase.table("quiz_questions").insert({
+                                "quiz_id": qid,
+                                "question": final_question,
+                                "type": "multiple_choice",
+                                "choices": "|".join(choices),
+                                "correct_answer": correct
+                            }).execute()
+                            st.success("✅ Question added successfully with image/equation support!")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"❌ Failed to add question: {e}")
+
+                else:  # short answer
+                    st.markdown("#### ✏️ Short Answer Question")
+                    correct_ans = st.text_input("Correct Answer (text or equation)")
+                    ok = st.form_submit_button("💾 Add Question")
+
+                    if ok and question_text:
+                        try:
+                            final_question = question_text + img_markdown
+                            supabase.table("quiz_questions").insert({
+                                "quiz_id": qid,
+                                "question": final_question,
+                                "type": "short_answer",
+                                "correct_answer": correct_ans
+                            }).execute()
+                            st.success("✅ Short-answer question added!")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"❌ Failed to add question: {e}")
+
 
     # =====================================
     # ANNOUNCEMENTS
@@ -909,6 +961,7 @@ def main():
 # jalankan aplikasi
 if __name__ == "__main__":
     main()
+
 
 
 
