@@ -551,78 +551,85 @@ def page_course_detail():
             st.info("No attendance sessions created yet.")
 
 
-        # =====================================
-        # MODULES
-        # =====================================
-        with tabs[2]:
-            from PIL import Image
-            import io
-            import base64
+    # =====================================
+    # MODULES
+    # =====================================
+    with tabs[2]:
+        from PIL import Image
+        import io
+        import base64
 
-            st.subheader("📦 Learning Modules")
+        st.subheader("📦 Learning Modules")
 
-            # === Tampilkan semua module yang sudah ada ===
-            mods = supabase.table("modules").select("*").eq("course_id", cid).execute().data
-            if mods:
-                for m in mods:
-                    with st.expander(f"📘 {m['title']}"):
-                        st.markdown(m.get("content", "No content available."), unsafe_allow_html=True)
-                        if m.get("video_url"):
-                            st.video(m["video_url"])
-            else:
-                st.info("No modules added yet.")
+        # === Ambil semua modul berdasarkan course ===
+        if not cid and "last_course" in st.session_state:
+            cid = st.session_state.last_course
 
-            # === Tambah module baru (hanya untuk instruktur) ===
-            if user["role"] == "instructor":
-                st.divider()
-                st.markdown("### ➕ Add New Module (with Images & Equations)")
+        mods = supabase.table("modules").select("*").eq("course_id", cid).execute().data
+        st.write("📘 Debug: Course ID =", cid)
+        st.write("📦 Modules fetched:", mods)
 
-                with st.form("add_module_rich"):
-                    title = st.text_input("Module Title")
-                    content = st.text_area("Content (Markdown + LaTeX supported)", height=200)
-                    uploaded_image = st.file_uploader("Upload Image (optional)", type=["png", "jpg", "jpeg"])
-                    video_url = st.text_input("Video URL (optional)")
+        if mods:
+            for m in mods:
+                with st.expander(f"📘 {m['title']}"):
+                    st.markdown(m.get("content", "No content available."), unsafe_allow_html=True)
+                    if m.get("video_url"):
+                        st.video(m["video_url"])
+        else:
+            st.info("No modules added yet.")
 
-                    preview_btn = st.form_submit_button("🔍 Preview Content")
+        # === Tambah module baru (khusus instruktur) ===
+        if user["role"] == "instructor":
+            st.divider()
+            st.markdown("### ➕ Add New Module (with Images & Equations)")
 
-                    # ======== Handle image upload (Supabase Storage) ========
-                    img_markdown = ""
-                    if uploaded_image:
-                        try:
+            with st.form("add_module_rich", clear_on_submit=True):
+                title = st.text_input("Module Title")
+                content = st.text_area("Content (Markdown + LaTeX supported)", height=200)
+                uploaded_image = st.file_uploader("Upload Image (optional)", type=["png", "jpg", "jpeg"])
+                video_url = st.text_input("Video URL (optional)")
+
+                preview_btn = st.form_submit_button("🔍 Preview Content")
+
+                # ======== Preview ========
+                if preview_btn:
+                    st.markdown("---")
+                    st.markdown("#### 🖼️ Preview Result:")
+                    st.markdown(content, unsafe_allow_html=True)
+                    st.info("You can include equations like this: `$$E = mc^2$$` or `$$F = ma$$`")
+
+                submit_btn = st.form_submit_button("💾 Add Module")
+
+                # ======== Simpan ke Supabase ========
+                if submit_btn and title:
+                    try:
+                        img_markdown = ""
+                        if uploaded_image:
                             img_bytes = uploaded_image.read()
                             file_path = f"uploads/{int(datetime.now().timestamp())}_{uploaded_image.name}"
                             supabase.storage.from_("thinkverse_uploads").upload(file_path, img_bytes)
                             img_url = f"{SUPABASE_URL}/storage/v1/object/public/thinkverse_uploads/{file_path}"
                             img_markdown = f"\n\n![Uploaded Image]({img_url})"
-                        except Exception as e:
-                            st.error(f"⚠️ Failed to upload image: {e}")
 
-                    # ======== Preview ========
-                    if preview_btn:
-                        st.markdown("---")
-                        st.markdown("#### 🖼️ Preview Result:")
-                        preview_text = content + (img_markdown if img_markdown else "")
-                        st.markdown(preview_text, unsafe_allow_html=True)
-                        st.info("You can include equations like this: `$$E = mc^2$$` or `$$F = ma$$`")
-
-                    submit_btn = st.form_submit_button("💾 Add Module")
-
-                # ======== Simpan ke Supabase ========
-                if submit_btn and title:
-                    try:
+                        # Gabungkan konten dan gambar (jika ada)
                         final_content = content + (img_markdown if img_markdown else "")
-                        supabase.table("modules").insert({
-                            "course_id": cid,
+
+                        response = supabase.table("modules").insert({
+                            "course_id": int(cid),
                             "title": title.strip(),
                             "content": final_content.strip() if final_content else "",
                             "video_url": video_url.strip() if video_url else None
                         }).execute()
 
-                        st.success("✅ Module added successfully!")
-                        st.rerun()
+                        st.write("🧩 Debug — Supabase response:", response)
+
+                        if response.data:
+                            st.success("✅ Module added successfully!")
+                            st.rerun()
+                        else:
+                            st.error("⚠️ Insert failed — no data returned from Supabase.")
                     except Exception as e:
                         st.error(f"❌ Failed to add module: {e}")
-
 
     # =====================================
     # ASSIGNMENTS
@@ -845,6 +852,7 @@ def main():
 # jalankan aplikasi
 if __name__ == "__main__":
     main()
+
 
 
 
