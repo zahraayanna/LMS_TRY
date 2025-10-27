@@ -561,26 +561,26 @@ def page_course_detail():
 
         st.subheader("📦 Learning Modules")
 
-        # === Pastikan CID valid ===
+        # === Pastikan CID valid dan simpan di session_state ===
         if not cid:
-            if "current_course" in st.session_state:
-                cid = st.session_state.current_course
-            elif "last_course" in st.session_state:
-                cid = st.session_state.last_course
-            else:
-                st.error("⚠️ Course ID not found.")
-                st.stop()
+            cid = st.session_state.get("current_course") or st.session_state.get("last_course")
+        if not cid:
+            st.error("⚠️ Course ID not found.")
+            st.stop()
 
-        # === Ambil semua modul ===
+        # Simpan CID supaya gak hilang setelah rerun
+        st.session_state.current_course = cid
+
+        # === Load modules dari Supabase ===
         try:
             mods_response = supabase.table("modules").select("*").eq("course_id", cid).execute()
-            mods = mods_response.data
+            mods = mods_response.data or []
         except Exception as e:
             st.error(f"❌ Failed to load modules: {e}")
             mods = []
 
         st.write("🧩 Debug — Course ID:", cid)
-        st.write("📦 Debug — Modules fetched:", mods)
+        st.write("📦 Debug — Modules fetched:", len(mods))
 
         # === Tampilkan modul ===
         if mods:
@@ -605,7 +605,6 @@ def page_course_detail():
 
                 preview_btn = st.form_submit_button("🔍 Preview Content")
 
-                # === Preview konten (tanpa insert) ===
                 if preview_btn:
                     st.markdown("---")
                     st.markdown("#### 🖼️ Preview Result:")
@@ -619,7 +618,7 @@ def page_course_detail():
                         st.warning("Please enter a module title.")
                     else:
                         try:
-                            # === Upload image jika ada ===
+                            # === Upload image ke Supabase Storage (jika ada) ===
                             img_markdown = ""
                             if uploaded_image:
                                 img_bytes = uploaded_image.read()
@@ -628,9 +627,10 @@ def page_course_detail():
                                 img_url = f"{SUPABASE_URL}/storage/v1/object/public/thinkverse_uploads/{file_path}"
                                 img_markdown = f"\n\n![Uploaded Image]({img_url})"
 
+                            # === Gabungkan konten dan gambar ===
                             final_content = (content or "") + (img_markdown or "")
 
-                            # === Insert ke Supabase ===
+                            # === Insert module ke Supabase ===
                             response = supabase.table("modules").insert({
                                 "course_id": int(cid),
                                 "title": title.strip(),
@@ -642,14 +642,25 @@ def page_course_detail():
 
                             if response.data:
                                 st.success(f"✅ Module '{title}' added successfully!")
-                                # === Tambahkan langsung tanpa reload manual ===
-                                mods.append(response.data[0])
+
+                                # Simpan module ke session biar tampil tanpa reload manual
+                                if "modules_cache" not in st.session_state:
+                                    st.session_state.modules_cache = []
+                                st.session_state.modules_cache.append(response.data[0])
+
+                                # 🚀 Force reload modul terbaru dari Supabase
+                                st.session_state.refresh_modules = True
                                 st.rerun()
                             else:
                                 st.error("⚠️ Insert failed — no data returned from Supabase.")
 
                         except Exception as e:
                             st.error(f"❌ Failed to add module: {e}")
+
+            # === Refresh otomatis setelah insert ===
+            if st.session_state.get("refresh_modules"):
+                st.session_state.refresh_modules = False
+                st.rerun()  # aman dipakai sekali di sini untuk memuat ulang data
 
     # =====================================
     # ASSIGNMENTS
@@ -872,6 +883,7 @@ def main():
 # jalankan aplikasi
 if __name__ == "__main__":
     main()
+
 
 
 
