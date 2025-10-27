@@ -558,6 +558,7 @@ def page_course_detail():
         from PIL import Image
         import io
         import base64
+        import markdown
 
         st.subheader("📦 Learning Modules")
 
@@ -915,6 +916,7 @@ def main():
 # jalankan aplikasi
 if __name__ == "__main__":
     main()
+
 
 
 
