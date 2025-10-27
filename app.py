@@ -320,7 +320,7 @@ def page_courses():
                 st.markdown(f"**Access Code:** `{c.get('access_code', '-')}`")
 
             unique_key = f"open_{c['id']}_{uuid.uuid4().hex[:6]}"
-           if st.button("📖 Open Course", key=f"open_{c['id']}"):
+            if st.button("📖 Open Course", key=f"open_{c['id']}"):
                 st.session_state.current_course = c["id"]
                 st.session_state.last_course = c["id"]
                 st.session_state.page = "course_detail"
@@ -795,4 +795,5 @@ def main():
 # jalankan aplikasi
 if __name__ == "__main__":
     main()
+
 
