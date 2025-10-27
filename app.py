@@ -316,17 +316,24 @@ def page_courses():
             st.caption(c.get("description", "No description provided."))
             st.markdown(f"**Course Code:** `{c['code']}`")
 
-            # kode akses hanya ditampilkan untuk instruktur (rahasia!)
+            # kode akses hanya ditampilkan untuk instruktur
             if user["role"] == "instructor":
                 st.markdown(f"**Access Code:** `{c.get('access_code', '-')}`")
 
-            # tombol masuk ke course
-            if st.button("📖 Open Course", key=f"open_{c['id']}_{uuid.uuid4().hex[:6]}"):
+            unique_key = f"open_{c['id']}_{uuid.uuid4().hex[:6]}"
+            if st.button("📖 Open Course", key=unique_key):
+                # simpan course yang dipilih ke session state
                 st.session_state.current_course = c["id"]
+                st.session_state.last_course = c["id"]  # cadangan anti hilang
                 st.session_state.page = "course_detail"
+
+                # debug log
+                st.write(f"🔍 Opening course: {c['title']} (ID: {c['id']})")
+
                 st.rerun()
 
             st.markdown("---")
+
 
 # ======================
 # === COURSE DETAIL ===
@@ -779,6 +786,7 @@ def main():
 # jalankan aplikasi
 if __name__ == "__main__":
     main()
+
 
 
 
