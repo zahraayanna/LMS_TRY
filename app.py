@@ -559,11 +559,11 @@ def page_course_detail():
         import io
         import base64
         import markdown
+        import streamlit.components.v1 as components
 
         st.subheader("📦 Learning Modules")
 
         # === Pastikan CID valid dan simpan di session_state ===
-        #st.write("🔍 Debug — CID type:", type(cid), "Value:", cid)
         if not cid:
             cid = st.session_state.get("current_course") or st.session_state.get("last_course")
         if not cid:
@@ -583,20 +583,17 @@ def page_course_detail():
 
         # === Tampilkan modul ===
         if mods:
-            import markdown  # pastikan library markdown sudah ada
             for m in mods:
                 with st.expander(f"📘 {m['title']}"):
-                    import streamlit.components.v1 as components
-
                     raw_content = m.get("content", "No content available.")
 
-                    # --- Convert Markdown (gambar, bold, italic, dll) jadi HTML ---
+                    # --- Convert Markdown (gambar, bold, dll) ke HTML ---
                     rendered_md = markdown.markdown(
                         raw_content,
                         extensions=["fenced_code", "tables", "md_in_html"]
                     )
 
-                    # --- Bungkus dengan MathJax supaya LaTeX tetap jalan ---
+                    # --- Bungkus dengan MathJax supaya LaTeX bisa tampil ---
                     html_content = f"""
                     <div style="font-size:16px; line-height:1.7;">
                         <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
@@ -613,10 +610,22 @@ def page_course_detail():
                     # --- Tambahkan video kalau ada ---
                     if m.get("video_url"):
                         st.video(m["video_url"])
+
+                    # --- Tombol Delete Module (khusus instruktur) ---
+                    if user["role"] == "instructor":
+                        col1, col2 = st.columns([0.2, 0.8])
+                        with col1:
+                            if st.button(f"🗑️ Delete Module '{m['title']}'", key=f"del_mod_{m['id']}"):
+                                try:
+                                    supabase.table("modules").delete().eq("id", m["id"]).execute()
+                                    st.success(f"✅ Module '{m['title']}' deleted successfully!")
+                                    time.sleep(1)
+                                    st.session_state.refresh_modules = True
+                                    st.rerun()
+                                except Exception as e:
+                                    st.error(f"❌ Failed to delete module: {e}")
         else:
             st.info("📭 No modules added yet.")
-
-
 
         # === Tambah modul baru (khusus instruktur) ===
         if user["role"] == "instructor":
@@ -683,10 +692,12 @@ def page_course_detail():
                         except Exception as e:
                             st.error(f"❌ Failed to add module: {e}")
 
-            # === Refresh otomatis setelah insert ===
+            # === Refresh otomatis setelah insert/delete ===
             if st.session_state.get("refresh_modules"):
                 st.session_state.refresh_modules = False
-                st.rerun()  # aman dipakai sekali di sini untuk memuat ulang data
+                st.rerun()
+
+
 
     # =====================================
     # ASSIGNMENTS
@@ -961,6 +972,7 @@ def main():
 # jalankan aplikasi
 if __name__ == "__main__":
     main()
+
 
 
 
