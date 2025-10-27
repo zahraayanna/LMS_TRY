@@ -776,11 +776,11 @@ def main():
             # coba gunakan backup course id
             if st.session_state.get("last_course"):
                 st.session_state.current_course = st.session_state.last_course
-                st.experimental_rerun()
+                st.rerun()
             else:
                 st.warning("⚠️ No course selected. Please return to the Courses page.")
                 st.session_state.page = "courses"
-                st.experimental_rerun()
+                st.rerun()
         else:
             page_course_detail()
 
@@ -790,11 +790,12 @@ def main():
     else:
         # fallback ke login
         st.session_state.page = "login"
-        st.experimental_rerun()
+        st.rerun()
 
 # jalankan aplikasi
 if __name__ == "__main__":
     main()
+
 
 
 
