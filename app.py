@@ -563,7 +563,7 @@ def page_course_detail():
         st.subheader("📦 Learning Modules")
 
         # === Pastikan CID valid dan simpan di session_state ===
-        st.write("🔍 Debug — CID type:", type(cid), "Value:", cid)
+        #st.write("🔍 Debug — CID type:", type(cid), "Value:", cid)
         if not cid:
             cid = st.session_state.get("current_course") or st.session_state.get("last_course")
         if not cid:
@@ -909,6 +909,7 @@ def main():
 # jalankan aplikasi
 if __name__ == "__main__":
     main()
+
 
 
 
