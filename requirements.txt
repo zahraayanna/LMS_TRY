@@ -1,6 +1,8 @@
 streamlit==1.39.0
 psycopg2-binary
 supabase
+markdown
+
 
 
 
