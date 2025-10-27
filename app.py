@@ -399,9 +399,13 @@ def page_course_detail():
                     supabase.table("enrollments").delete().eq("user_id", user["id"]).eq("course_id", cid).execute()
                     st.success("✅ You have successfully left this course.")
                     time.sleep(1)
-                    st.session_state.page = "courses"
+                    # reset state dan arahkan kembali via router utama
                     st.session_state.current_course = None
-                    st.rerun()
+                    st.session_state.last_course = None
+                    st.session_state.page = "dashboard"
+                    st.session_state._nav_back = True
+                    st.stop()
+
 
     # ⚠️ DELETE COURSE (Instructor only)
     if user["role"] == "instructor" and user["email"] == c["instructor_email"]:
@@ -747,6 +751,11 @@ def page_account():
 # === ROUTING ===
 # ======================
 def main():
+    # Navigasi balik setelah keluar course
+    if st.session_state.get("_nav_back"):
+        del st.session_state["_nav_back"]
+        return main()  # rerender penuh, sidebar muncul lagi
+    
     # Handle soft navigation without experimental rerun
     if st.session_state.get("_nav_trigger"):
         del st.session_state["_nav_trigger"]
@@ -798,6 +807,7 @@ def main():
 # jalankan aplikasi
 if __name__ == "__main__":
     main()
+
 
 
 
