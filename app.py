@@ -644,7 +644,7 @@ def page_course_detail():
                                 st.success(f"✅ Module '{title}' added successfully!")
                                 # === Tambahkan langsung tanpa reload manual ===
                                 mods.append(response.data[0])
-                                st.experimental_rerun()
+                                st.rerun()
                             else:
                                 st.error("⚠️ Insert failed — no data returned from Supabase.")
 
@@ -872,6 +872,7 @@ def main():
 # jalankan aplikasi
 if __name__ == "__main__":
     main()
+
 
 
 
