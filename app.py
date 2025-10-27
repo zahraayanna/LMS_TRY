@@ -562,6 +562,7 @@ def page_course_detail():
         st.subheader("📦 Learning Modules")
 
         # === Pastikan CID valid dan simpan di session_state ===
+        st.write("🔍 Debug — CID type:", type(cid), "Value:", cid)
         if not cid:
             cid = st.session_state.get("current_course") or st.session_state.get("last_course")
         if not cid:
@@ -581,6 +582,10 @@ def page_course_detail():
 
         st.write("🧩 Debug — Course ID:", cid)
         st.write("📦 Debug — Modules fetched:", len(mods))
+            # 🧾 Debug tambahan: tampilkan semua data modules dari Supabase
+            all_mods_debug = supabase.table("modules").select("*").execute().data
+            st.write("🗂️ All modules in database (raw):", all_mods_debug)
+
 
         # === Tampilkan modul ===
         if mods:
@@ -883,6 +888,7 @@ def main():
 # jalankan aplikasi
 if __name__ == "__main__":
     main()
+
 
 
 
