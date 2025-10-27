@@ -581,13 +581,6 @@ def page_course_detail():
             st.error(f"❌ Failed to load modules: {e}")
             mods = []
 
-        st.write("🧩 Debug — Course ID:", cid)
-        st.write("📦 Debug — Modules fetched:", len(mods))
-        # 🧾 Debug tambahan: tampilkan semua data modules dari Supabase
-        all_mods_debug = supabase.table("modules").select("*").execute().data
-        st.write("🗂️ All modules in database (raw):", all_mods_debug)
-
-
         # === Tampilkan modul ===
         if mods:
             import markdown  # pastikan library markdown sudah ada
@@ -916,6 +909,7 @@ def main():
 # jalankan aplikasi
 if __name__ == "__main__":
     main()
+
 
 
 
