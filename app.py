@@ -751,15 +751,19 @@ def page_account():
 # === ROUTING ===
 # ======================
 def main():
+    # === INISIALISASI SESSION STATE ===
     if "page" not in st.session_state:
         st.session_state.page = "login"
     if "user" not in st.session_state:
         st.session_state.user = None
     if "current_course" not in st.session_state:
         st.session_state.current_course = None
+    if "last_course" not in st.session_state:
+        st.session_state.last_course = None
 
     page = st.session_state.page
 
+    # === ROUTER HALAMAN ===
     if page == "login":
         page_login()
 
@@ -769,24 +773,33 @@ def main():
     elif page == "courses":
         page_courses()
 
-    elif page == "account":
-        page_account()
-
     elif page == "course_detail":
-        if st.session_state.get("current_course") is None:
-            st.warning("⚠️ No course selected. Please return to the Courses page.")
-            st.session_state.page = "courses"
-            st.rerun()
+        # --- SAFEGUARD ---
+        if not st.session_state.get("current_course"):
+            # coba gunakan backup course id
+            if st.session_state.get("last_course"):
+                st.session_state.current_course = st.session_state.last_course
+                st.rerun()
+            else:
+                st.warning("⚠️ No course selected. Please return to the Courses page.")
+                st.session_state.page = "courses"
+                st.rerun()
         else:
             page_course_detail()
 
+    elif page == "account":
+        page_account()
+
     else:
+        # fallback ke login
         st.session_state.page = "login"
         st.rerun()
+
 
 # jalankan aplikasi
 if __name__ == "__main__":
     main()
+
 
 
 
