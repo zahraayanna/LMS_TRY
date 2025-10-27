@@ -316,25 +316,22 @@ def page_courses():
             st.caption(c.get("description", "No description provided."))
             st.markdown(f"**Course Code:** `{c['code']}`")
 
-            # kode akses hanya ditampilkan untuk instruktur
             if user["role"] == "instructor":
                 st.markdown(f"**Access Code:** `{c.get('access_code', '-')}`")
 
             unique_key = f"open_{c['id']}_{uuid.uuid4().hex[:6]}"
             if st.button("📖 Open Course", key=unique_key):
-                # simpan course yang dipilih ke session state
+                # simpan ID course yang dipilih
                 st.session_state.current_course = c["id"]
-                st.session_state.last_course = c["id"]  # cadangan anti hilang
+                st.session_state.last_course = c["id"]
                 st.session_state.page = "course_detail"
 
-                # debug log
-                st.write(f"🔍 Opening course: {c['title']} (ID: {c['id']})")
-
-                st.rerun()
+                # langsung render halaman course detail TANPA rerun
+                st.success(f"✅ Opened {c['title']} successfully!")
+                page_course_detail()
+                st.stop()  # hentikan eksekusi di halaman ini setelah render
 
             st.markdown("---")
-
-
 
 # ======================
 # === COURSE DETAIL ===
@@ -779,11 +776,11 @@ def main():
             # coba gunakan backup course id
             if st.session_state.get("last_course"):
                 st.session_state.current_course = st.session_state.last_course
-                st.rerun()
+                st.experimental_rerun()
             else:
                 st.warning("⚠️ No course selected. Please return to the Courses page.")
                 st.session_state.page = "courses"
-                st.rerun()
+                st.experimental_rerun()
         else:
             page_course_detail()
 
@@ -793,12 +790,12 @@ def main():
     else:
         # fallback ke login
         st.session_state.page = "login"
-        st.rerun()
-
+        st.experimental_rerun()
 
 # jalankan aplikasi
 if __name__ == "__main__":
     main()
+
 
 
 
