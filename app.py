@@ -561,24 +561,38 @@ def page_course_detail():
 
         st.subheader("📦 Learning Modules")
 
-        # === Ambil semua modul berdasarkan course ===
-        if not cid and "last_course" in st.session_state:
-            cid = st.session_state.last_course
+        # === Pastikan CID valid ===
+        if not cid:
+            if "current_course" in st.session_state:
+                cid = st.session_state.current_course
+            elif "last_course" in st.session_state:
+                cid = st.session_state.last_course
+            else:
+                st.error("⚠️ Course ID not found.")
+                st.stop()
 
-        mods = supabase.table("modules").select("*").eq("course_id", cid).execute().data
-        st.write("📘 Debug: Course ID =", cid)
-        st.write("📦 Modules fetched:", mods)
+        # === Ambil semua modul ===
+        try:
+            mods_response = supabase.table("modules").select("*").eq("course_id", cid).execute()
+            mods = mods_response.data
+        except Exception as e:
+            st.error(f"❌ Failed to load modules: {e}")
+            mods = []
 
+        st.write("🧩 Debug — Course ID:", cid)
+        st.write("📦 Debug — Modules fetched:", mods)
+
+        # === Tampilkan modul ===
         if mods:
             for m in mods:
                 with st.expander(f"📘 {m['title']}"):
-                    st.markdown(m.get("content", "No content available."), unsafe_allow_html=True)
+                    st.markdown(m.get("content", "_No content available._"), unsafe_allow_html=True)
                     if m.get("video_url"):
                         st.video(m["video_url"])
         else:
-            st.info("No modules added yet.")
+            st.info("📭 No modules added yet.")
 
-        # === Tambah module baru (khusus instruktur) ===
+        # === Tambah modul baru (khusus instruktur) ===
         if user["role"] == "instructor":
             st.divider()
             st.markdown("### ➕ Add New Module (with Images & Equations)")
@@ -591,7 +605,7 @@ def page_course_detail():
 
                 preview_btn = st.form_submit_button("🔍 Preview Content")
 
-                # ======== Preview ========
+                # === Preview konten (tanpa insert) ===
                 if preview_btn:
                     st.markdown("---")
                     st.markdown("#### 🖼️ Preview Result:")
@@ -600,36 +614,42 @@ def page_course_detail():
 
                 submit_btn = st.form_submit_button("💾 Add Module")
 
-                # ======== Simpan ke Supabase ========
-                if submit_btn and title:
-                    try:
-                        img_markdown = ""
-                        if uploaded_image:
-                            img_bytes = uploaded_image.read()
-                            file_path = f"uploads/{int(datetime.now().timestamp())}_{uploaded_image.name}"
-                            supabase.storage.from_("thinkverse_uploads").upload(file_path, img_bytes)
-                            img_url = f"{SUPABASE_URL}/storage/v1/object/public/thinkverse_uploads/{file_path}"
-                            img_markdown = f"\n\n![Uploaded Image]({img_url})"
+                if submit_btn:
+                    if not title.strip():
+                        st.warning("Please enter a module title.")
+                    else:
+                        try:
+                            # === Upload image jika ada ===
+                            img_markdown = ""
+                            if uploaded_image:
+                                img_bytes = uploaded_image.read()
+                                file_path = f"uploads/{int(datetime.now().timestamp())}_{uploaded_image.name}"
+                                supabase.storage.from_("thinkverse_uploads").upload(file_path, img_bytes)
+                                img_url = f"{SUPABASE_URL}/storage/v1/object/public/thinkverse_uploads/{file_path}"
+                                img_markdown = f"\n\n![Uploaded Image]({img_url})"
 
-                        # Gabungkan konten dan gambar (jika ada)
-                        final_content = content + (img_markdown if img_markdown else "")
+                            final_content = (content or "") + (img_markdown or "")
 
-                        response = supabase.table("modules").insert({
-                            "course_id": int(cid),
-                            "title": title.strip(),
-                            "content": final_content.strip() if final_content else "",
-                            "video_url": video_url.strip() if video_url else None
-                        }).execute()
+                            # === Insert ke Supabase ===
+                            response = supabase.table("modules").insert({
+                                "course_id": int(cid),
+                                "title": title.strip(),
+                                "content": final_content.strip(),
+                                "video_url": video_url.strip() if video_url else None
+                            }).execute()
 
-                        st.write("🧩 Debug — Supabase response:", response)
+                            st.write("📤 Debug — Supabase insert response:", response)
 
-                        if response.data:
-                            st.success("✅ Module added successfully!")
-                            st.rerun()
-                        else:
-                            st.error("⚠️ Insert failed — no data returned from Supabase.")
-                    except Exception as e:
-                        st.error(f"❌ Failed to add module: {e}")
+                            if response.data:
+                                st.success(f"✅ Module '{title}' added successfully!")
+                                # === Tambahkan langsung tanpa reload manual ===
+                                mods.append(response.data[0])
+                                st.experimental_rerun()
+                            else:
+                                st.error("⚠️ Insert failed — no data returned from Supabase.")
+
+                        except Exception as e:
+                            st.error(f"❌ Failed to add module: {e}")
 
     # =====================================
     # ASSIGNMENTS
@@ -852,6 +872,7 @@ def main():
 # jalankan aplikasi
 if __name__ == "__main__":
     main()
+
 
 
 
