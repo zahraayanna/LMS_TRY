@@ -320,16 +320,14 @@ def page_courses():
                 st.markdown(f"**Access Code:** `{c.get('access_code', '-')}`")
 
             unique_key = f"open_{c['id']}_{uuid.uuid4().hex[:6]}"
-            if st.button("📖 Open Course", key=unique_key):
-                # simpan ID course yang dipilih
+            if st.button("📖 Open Course", key=f"open_{c['id']}"):
+                # Simpan status course yang dipilih
                 st.session_state.current_course = c["id"]
                 st.session_state.last_course = c["id"]
                 st.session_state.page = "course_detail"
 
-                # langsung render halaman course detail TANPA rerun
-                st.success(f"✅ Opened {c['title']} successfully!")
-                page_course_detail()
-                st.stop()  # hentikan eksekusi di halaman ini setelah render
+                # Gunakan method rerun bawaan yang stabil (bukan experimental)
+                raise st.script_runner.RerunException(st.script_request_queue.RerunData(None))
 
             st.markdown("---")
 
@@ -771,16 +769,16 @@ def main():
         page_courses()
 
     elif page == "course_detail":
-        # --- SAFEGUARD ---
-        if not st.session_state.get("current_course"):
-            # coba gunakan backup course id
-            if st.session_state.get("last_course"):
-                st.session_state.current_course = st.session_state.last_course
-                st.rerun()
-            else:
-                st.warning("⚠️ No course selected. Please return to the Courses page.")
-                st.session_state.page = "courses"
-                st.rerun()
+        # Pastikan course tetap tersimpan
+        if st.session_state.get("current_course"):
+            page_course_detail()
+        elif st.session_state.get("last_course"):
+            st.session_state.current_course = st.session_state.last_course
+            raise st.script_runner.RerunException(st.script_request_queue.RerunData(None))
+        else:
+            st.warning("⚠️ No course selected. Please return to the Courses page.")
+            st.session_state.page = "courses"
+            st.rerun()
         else:
             page_course_detail()
 
@@ -795,6 +793,7 @@ def main():
 # jalankan aplikasi
 if __name__ == "__main__":
     main()
+
 
 
 
