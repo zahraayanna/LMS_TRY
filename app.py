@@ -465,25 +465,43 @@ def page_course_detail():
     # =====================================
     with tabs[1]:
         st.subheader("🕒 Attendance Tracker")
+
         att = supabase.table("attendance").select("*").eq("course_id", cid).execute().data
+
         if att:
+            st.markdown("### Attendance Records")
             for a in att:
-                st.markdown(f"- 🗓️ **{a['date']}** — *{a['topic']}*")
-                if user["role"] == "instructor":
-                    if st.button(f"🗑️ Delete Attendance '{a['topic']}'", key=f"del_att_{a['id']}"):
-                        supabase.table("attendance").delete().eq("id", a["id"]).execute()
-                        st.success("Attendance deleted!")
-                        st.rerun()
-            st.divider()
+                name = ""
+                # ambil nama user dari tabel users
+                try:
+                    udata = supabase.table("users").select("name").eq("id", a["user_id"]).execute().data
+                    if udata:
+                        name = udata[0]["name"]
+                except:
+                    pass
+
+                st.markdown(
+                    f"- 🗓️ **{a['date']}** — 👤 {name or 'Unknown User'} — 📝 {a.get('note', '-')}"
+                )
+
+            # === tombol hapus attendance (instruktur aja) ===
+            if user["role"] == "instructor":
+                st.markdown("---")
+                st.subheader("🗑️ Manage Attendance Records")
+                del_id = st.number_input("Enter Attendance ID to delete", min_value=1, step=1)
+                if st.button("❌ Delete Attendance Record"):
+                    supabase.table("attendance").delete().eq("id", del_id).execute()
+                    st.success("✅ Attendance record deleted successfully!")
+                    st.rerun()
         else:
             st.info("No attendance records yet.")
-            
+
+        # === tambah data kehadiran baru (instruktur) ===
         if user["role"] == "instructor":
             with st.form("add_attendance"):
                 date = st.date_input("Date")
                 note = st.text_input("Note (optional)")
                 ok = st.form_submit_button("➕ Add Attendance")
-
                 if ok:
                     try:
                         response = supabase.table("attendance").insert({
@@ -492,15 +510,10 @@ def page_course_detail():
                             "date": str(date),
                             "note": note
                         }).execute()
-
                         st.success("✅ Attendance recorded successfully!")
-                        st.json(response.data)
                         st.rerun()
-
                     except Exception as e:
                         st.error(f"⚠️ Failed to add attendance: {e}")
-
-
 
     # =====================================
     # MODULES
@@ -738,6 +751,7 @@ def main():
 # jalankan aplikasi
 if __name__ == "__main__":
     main()
+
 
 
 
