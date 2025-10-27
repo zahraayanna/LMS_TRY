@@ -481,7 +481,6 @@ def page_course_detail():
         if user["role"] == "instructor":
             with st.form("add_attendance"):
                 date = st.date_input("Date")
-                status = st.selectbox("Status", ["Present", "Absent", "Excused"])
                 note = st.text_input("Note (optional)")
                 ok = st.form_submit_button("➕ Add Attendance")
 
@@ -490,17 +489,17 @@ def page_course_detail():
                         response = supabase.table("attendance").insert({
                             "course_id": cid,
                             "user_id": user["id"],
-                            "status": status,
                             "date": str(date),
                             "note": note
                         }).execute()
 
-                        st.success("✅ Attendance added successfully!")
-                        st.json(response.data)  # tampilkan respons Supabase-nya biar bisa kita lihat
+                        st.success("✅ Attendance recorded successfully!")
+                        st.json(response.data)
                         st.rerun()
 
                     except Exception as e:
                         st.error(f"⚠️ Failed to add attendance: {e}")
+
 
 
     # =====================================
@@ -739,6 +738,7 @@ def main():
 # jalankan aplikasi
 if __name__ == "__main__":
     main()
+
 
 
 
