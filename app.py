@@ -703,26 +703,72 @@ def page_course_detail():
     # ASSIGNMENTS
     # =====================================
     with tabs[3]:
+        import streamlit.components.v1 as components
         st.subheader("🧩 Assignments")
+
+        # === Ambil data assignment dari Supabase ===
         asg = supabase.table("assignments").select("*").eq("course_id", cid).execute().data
+
         if asg:
             for a in asg:
                 with st.expander(f"📄 {a['title']}"):
                     st.markdown(a.get("description", ""))
-                    if a.get("embed_url"):
-                        st.markdown(f'<iframe src="{a["embed_url"]}" width="100%" height="400px"></iframe>', unsafe_allow_html=True)
+
+                    embed_url = a.get("embed_url")
+                    if embed_url:
+                        st.markdown("#### 📎 Embedded Worksheet / Resource:")
+
+                        # Smart Embed — coba tampilkan iframe langsung
+                        try:
+                            components.iframe(embed_url, height=500, scrolling=True)
+                        except Exception:
+                            # Fallback otomatis kalau iframe diblokir (misalnya Liveworksheet)
+                            st.warning("⚠️ This resource cannot be embedded directly.")
+                            st.markdown(
+                                f"[🔗 Open in New Tab instead]({embed_url})",
+                                unsafe_allow_html=True
+                            )
+
+                    # === Fitur upload tugas untuk siswa ===
                     if user["role"] == "student":
-                        st.write("### Submit Assignment")
+                        st.write("### 📤 Submit Assignment")
                         file = st.file_uploader("Upload your work", key=f"up_{a['id']}")
                         if file:
                             st.success(f"✅ Submission received for '{a['title']}' (Simulated)")
+
+                    # === Fitur hapus tugas untuk instruktur ===
                     if user["role"] == "instructor":
                         if st.button(f"🗑️ Delete Assignment '{a['title']}'", key=f"del_asg_{a['id']}"):
                             supabase.table("assignments").delete().eq("id", a["id"]).execute()
                             st.success("Assignment deleted!")
                             st.rerun()
+
         else:
-            st.info("No assignments available.")
+            st.info("📭 No assignments available.")
+
+        # === Tambah assignment baru (instruktur) ===
+        if user["role"] == "instructor":
+            st.divider()
+            st.markdown("### ➕ Add New Assignment")
+
+            with st.form("add_assignment", clear_on_submit=True):
+                title = st.text_input("Assignment Title")
+                desc = st.text_area("Assignment Description")
+                embed = st.text_input("Embed URL (Liveworksheet / YouTube / PDF Viewer / Docs, etc.)")
+                file_type = st.selectbox("Accepted Submission Type", ["PDF", "Image", "Docx", "Any"])
+                ok = st.form_submit_button("💾 Add Assignment")
+
+            if ok and title:
+                supabase.table("assignments").insert({
+                    "course_id": cid,
+                    "title": title,
+                    "description": desc,
+                    "embed_url": embed,
+                    "allowed_type": file_type
+                }).execute()
+                st.success("✅ Assignment added successfully!")
+                st.rerun()
+
 
     # =====================================
     # QUIZZES (FULL INTERACTIVE)
@@ -972,6 +1018,7 @@ def main():
 # jalankan aplikasi
 if __name__ == "__main__":
     main()
+
 
 
 
