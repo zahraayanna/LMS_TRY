@@ -461,59 +461,79 @@ def page_course_detail():
                 st.rerun()
 
     # =====================================
-    # ATTENDANCE
+    # ATTENDANCE (Improved)
     # =====================================
     with tabs[1]:
         st.subheader("🕒 Attendance Tracker")
 
-        att = supabase.table("attendance").select("*").eq("course_id", cid).execute().data
+        # ambil semua sesi absensi untuk course ini
+        sessions = supabase.table("attendance_sessions").select("*").eq("course_id", cid).execute().data
 
-        if att:
-            st.markdown("### Attendance Records")
-            for a in att:
-                name = ""
-                # ambil nama user dari tabel users
-                try:
-                    udata = supabase.table("users").select("name").eq("id", a["user_id"]).execute().data
-                    if udata:
-                        name = udata[0]["name"]
-                except:
-                    pass
-
-                st.markdown(
-                    f"- 🗓️ **{a['date']}** — 👤 {name or 'Unknown User'} — 📝 {a.get('note', '-')}"
-                )
-
-            # === tombol hapus attendance (instruktur aja) ===
-            if user["role"] == "instructor":
-                st.markdown("---")
-                st.subheader("🗑️ Manage Attendance Records")
-                del_id = st.number_input("Enter Attendance ID to delete", min_value=1, step=1)
-                if st.button("❌ Delete Attendance Record"):
-                    supabase.table("attendance").delete().eq("id", del_id).execute()
-                    st.success("✅ Attendance record deleted successfully!")
-                    st.rerun()
-        else:
-            st.info("No attendance records yet.")
-
-        # === tambah data kehadiran baru (instruktur) ===
         if user["role"] == "instructor":
-            with st.form("add_attendance"):
-                date = st.date_input("Date")
-                note = st.text_input("Note (optional)")
-                ok = st.form_submit_button("➕ Add Attendance")
+            # --- tambah sesi absensi baru ---
+            with st.form("create_attendance_session"):
+                st.markdown("### ➕ Create Attendance Session")
+                date = st.date_input("Session Date")
+                note = st.text_input("Session Note (optional)")
+                ok = st.form_submit_button("Create Session")
                 if ok:
-                    try:
-                        response = supabase.table("attendance").insert({
-                            "course_id": cid,
-                            "user_id": user["id"],
-                            "date": str(date),
-                            "note": note
-                        }).execute()
-                        st.success("✅ Attendance recorded successfully!")
+                    supabase.table("attendance_sessions").insert({
+                        "course_id": cid,
+                        "date": str(date),
+                        "note": note
+                    }).execute()
+                    st.success("✅ Attendance session created!")
+                    st.rerun()
+
+        # --- tampilkan semua sesi absensi ---
+        if sessions:
+            for s in sessions:
+                st.markdown(f"#### 📅 {s['date']} — {s.get('note','') or '_No note_'}")
+
+                # ambil semua kehadiran siswa di sesi ini
+                records = supabase.table("attendance").select("*").eq("session_id", s["id"]).execute().data
+
+                if user["role"] == "instructor":
+                    # tampilkan daftar siswa hadir
+                    st.write("**Attendance Records:**")
+                    if records:
+                        names = []
+                        for r in records:
+                            u = supabase.table("users").select("name").eq("id", r["user_id"]).execute().data
+                            if u:
+                                names.append(u[0]["name"])
+                        st.markdown(", ".join(names) if names else "_No students marked present yet._")
+                    else:
+                        st.info("No attendance yet for this session.")
+
+                    # tombol hapus sesi absensi
+                    if st.button(f"❌ Delete Session ({s['date']})", key=f"del_sess_{s['id']}"):
+                        supabase.table("attendance").delete().eq("session_id", s["id"]).execute()
+                        supabase.table("attendance_sessions").delete().eq("id", s["id"]).execute()
+                        st.success("🗑️ Session deleted successfully!")
                         st.rerun()
-                    except Exception as e:
-                        st.error(f"⚠️ Failed to add attendance: {e}")
+
+                elif user["role"] == "student":
+                    # cek apakah siswa sudah absen
+                    existing = supabase.table("attendance").select("*") \
+                        .eq("session_id", s["id"]).eq("user_id", user["id"]).execute().data
+
+                    if existing:
+                        st.success("✅ You are marked present for this session.")
+                    else:
+                        if st.button(f"🖋️ Mark as Present ({s['date']})", key=f"mark_{s['id']}"):
+                            supabase.table("attendance").insert({
+                                "session_id": s["id"],
+                                "course_id": cid,
+                                "user_id": user["id"],
+                                "date": str(datetime.now().date()),
+                                "status": "present"
+                            }).execute()
+                            st.success("✅ Your attendance has been recorded!")
+                            st.rerun()
+        else:
+            st.info("No attendance sessions created yet.")
+
 
     # =====================================
     # MODULES
@@ -751,6 +771,7 @@ def main():
 # jalankan aplikasi
 if __name__ == "__main__":
     main()
+
 
 
 
