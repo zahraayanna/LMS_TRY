@@ -321,13 +321,16 @@ def page_courses():
 
             unique_key = f"open_{c['id']}_{uuid.uuid4().hex[:6]}"
             if st.button("📖 Open Course", key=f"open_{c['id']}"):
-                # Simpan status course yang dipilih
+                # Simpan state course aktif
                 st.session_state.current_course = c["id"]
                 st.session_state.last_course = c["id"]
                 st.session_state.page = "course_detail"
 
-                # Gunakan method rerun bawaan yang stabil (bukan experimental)
-                raise st.script_runner.RerunException(st.script_request_queue.RerunData(None))
+                # Render langsung halaman course detail
+                st.empty()  # hapus elemen UI lama
+                st.success(f"✅ Entered {c['title']} successfully!")
+                page_course_detail()
+                st.stop()
 
             st.markdown("---")
 
@@ -791,6 +794,7 @@ def main():
 # jalankan aplikasi
 if __name__ == "__main__":
     main()
+
 
 
 
