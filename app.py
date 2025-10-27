@@ -591,15 +591,27 @@ def page_course_detail():
         if mods:
             for m in mods:
                 with st.expander(f"📘 {m['title']}"):
+                    # ======== Markdown & MathJax Renderer ========
                     import streamlit.components.v1 as components
 
-                    content_html = f"""
-                    <div style='font-size: 16px; line-height: 1.6;'>
-                    {m.get('content', 'No content available.').replace('\n', '<br>')}
+                    content = m.get("content", "No content available.")
+
+                    # Gunakan markdown renderer + MathJax
+                    html_content = f"""
+                    <div style="font-size: 16px; line-height: 1.7;">
+                        <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+                        <script id="MathJax-script" async
+                            src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js">
+                        </script>
+                        <article class="markdown-body">
+                            {content.replace("\n", "<br>")}
+                        </article>
                     </div>
                     """
-                    components.html(content_html, height=600, scrolling=True)
 
+                    components.html(html_content, height=600, scrolling=True)
+
+                    # ======== Tampilkan video (jika ada) ========
                     if m.get("video_url"):
                         st.video(m["video_url"])
         else:
@@ -897,6 +909,7 @@ def main():
 # jalankan aplikasi
 if __name__ == "__main__":
     main()
+
 
 
 
