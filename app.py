@@ -589,33 +589,39 @@ def page_course_detail():
 
         # === Tampilkan modul ===
         if mods:
+            import markdown  # pastikan library markdown sudah ada
             for m in mods:
                 with st.expander(f"📘 {m['title']}"):
-                    # ======== Markdown & MathJax Renderer ========
                     import streamlit.components.v1 as components
 
-                    content = m.get("content", "No content available.")
+                    raw_content = m.get("content", "No content available.")
 
-                    # Gunakan markdown renderer + MathJax
+                    # --- Convert Markdown (gambar, bold, italic, dll) jadi HTML ---
+                    rendered_md = markdown.markdown(
+                        raw_content,
+                        extensions=["fenced_code", "tables", "md_in_html"]
+                    )
+
+                    # --- Bungkus dengan MathJax supaya LaTeX tetap jalan ---
                     html_content = f"""
-                    <div style="font-size: 16px; line-height: 1.7;">
+                    <div style="font-size:16px; line-height:1.7;">
                         <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
                         <script id="MathJax-script" async
                             src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js">
                         </script>
-                        <article class="markdown-body">
-                            {content.replace("\n", "<br>")}
-                        </article>
+                        <article class="markdown-body">{rendered_md}</article>
                     </div>
                     """
 
+                    # --- Tampilkan konten lengkap ---
                     components.html(html_content, height=600, scrolling=True)
 
-                    # ======== Tampilkan video (jika ada) ========
+                    # --- Tambahkan video kalau ada ---
                     if m.get("video_url"):
                         st.video(m["video_url"])
         else:
             st.info("📭 No modules added yet.")
+
 
 
         # === Tambah modul baru (khusus instruktur) ===
@@ -909,6 +915,7 @@ def main():
 # jalankan aplikasi
 if __name__ == "__main__":
     main()
+
 
 
 
