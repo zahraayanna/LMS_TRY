@@ -589,13 +589,22 @@ def page_course_detail():
 
         # === Tampilkan modul ===
         if mods:
-            for m in mods:
-                with st.expander(f"📘 {m['title']}"):
-                    st.markdown(m.get("content", "_No content available._"), unsafe_allow_html=True)
-                    if m.get("video_url"):
-                        st.video(m["video_url"])
+        for m in mods:
+            with st.expander(f"📘 {m['title']}"):
+                import streamlit.components.v1 as components
+
+                content_html = f"""
+                <div style='font-size: 16px; line-height: 1.6;'>
+                {m.get('content', 'No content available.').replace('\n', '<br>')}
+                </div>
+                """
+                components.html(content_html, height=600, scrolling=True)
+
+                if m.get("video_url"):
+                    st.video(m["video_url"])
         else:
             st.info("📭 No modules added yet.")
+
 
         # === Tambah modul baru (khusus instruktur) ===
         if user["role"] == "instructor":
@@ -888,6 +897,7 @@ def main():
 # jalankan aplikasi
 if __name__ == "__main__":
     main()
+
 
 
 
