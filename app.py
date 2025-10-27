@@ -375,7 +375,7 @@ def page_course_detail():
     # 🔙 Tombol Kembali ke Courses
     with col1:
         if st.button("🔙 Back to Courses"):
-            st.session_state.page = "courses"
+            st.session_state.page = "dashboard"  # ⬅ balik ke dashboard utama
             st.session_state.current_course = None
             st.rerun()
 
@@ -704,6 +704,7 @@ def main():
 # jalankan aplikasi
 if __name__ == "__main__":
     main()
+
 
 
 
