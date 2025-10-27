@@ -327,7 +327,7 @@ def page_courses():
                 st.rerun()
 
             st.markdown("---")
-                    
+
 # ======================
 # === COURSE DETAIL ===
 # ======================
@@ -779,6 +779,7 @@ def main():
 # jalankan aplikasi
 if __name__ == "__main__":
     main()
+
 
 
 
