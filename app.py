@@ -339,14 +339,11 @@ def upload_to_supabase(file):
     return f"{SUPABASE_URL}/storage/v1/object/public/thinkverse_uploads/{file_path}"
 
 
-# --- halaman detail course ---
 # ============================================
-# PAGE: COURSE DETAIL — ThinkVerse v5.3
-# Full LMS Course System (Supabase)
+# PAGE: COURSE DETAIL — ThinkVerse v5.4
+# (All previous features + delete system)
 # ============================================
-
 def page_course_detail():
-    # --- Rerun safeguard ---
     if "current_course" not in st.session_state and "last_course" in st.session_state:
         st.session_state.current_course = st.session_state.last_course
 
@@ -365,7 +362,6 @@ def page_course_detail():
         st.error(f"Error loading course data: {e}")
         return
 
-    # --- Header ---
     st.title(f"📘 {c['title']}")
     st.caption(c.get("description", ""))
 
@@ -379,18 +375,15 @@ def page_course_detail():
                 if key in st.session_state:
                     del st.session_state[key]
             st.session_state.page = "dashboard"
-            st.session_state.user = st.session_state.get("user")  # pastikan user tetap login
-            st.rerun()  # rerun ke main() sepenuhnya
+            st.session_state.user = st.session_state.get("user")
+            st.rerun()
 
-
-    # 🚪 Tombol Resign dari Course (hanya untuk student)
+    # 🚪 Tombol Resign dari Course (student only)
     with col2:
-        user = st.session_state.get("user")
         if user and user["role"] == "student":
             if st.button("🚪 Leave this Course"):
                 confirm = st.checkbox("Yes, I really want to leave this course")
                 if confirm:
-                    # hapus dari tabel enrollments
                     supabase.table("enrollments").delete().eq("user_id", user["id"]).eq("course_id", cid).execute()
                     st.success("✅ You have successfully left this course.")
                     time.sleep(1)
@@ -398,6 +391,25 @@ def page_course_detail():
                     st.session_state.current_course = None
                     st.rerun()
 
+    # ⚠️ DELETE COURSE (Instructor only)
+    if user["role"] == "instructor" and user["email"] == c["instructor_email"]:
+        with st.expander("⚠️ Danger Zone — Delete this Course"):
+            st.warning("This will permanently delete the course and all related data (modules, assignments, quizzes, announcements).")
+            confirm = st.checkbox("Yes, I understand and want to delete this course")
+            if confirm and st.button("🗑️ Delete Course Permanently"):
+                supabase.table("modules").delete().eq("course_id", cid).execute()
+                supabase.table("assignments").delete().eq("course_id", cid).execute()
+                supabase.table("quiz_questions").delete().eq("quiz_id", cid).execute()
+                supabase.table("quizzes").delete().eq("course_id", cid).execute()
+                supabase.table("announcements").delete().eq("course_id", cid).execute()
+                supabase.table("attendance").delete().eq("course_id", cid).execute()
+                supabase.table("enrollments").delete().eq("course_id", cid).execute()
+                supabase.table("courses").delete().eq("id", cid).execute()
+                st.success("✅ Course deleted successfully!")
+                time.sleep(1)
+                st.session_state.page = "dashboard"
+                st.session_state.current_course = None
+                st.rerun()
 
     # --- Tabs ---
     tabs = st.tabs([
@@ -412,23 +424,16 @@ def page_course_detail():
     # =====================================
     # DASHBOARD
     # =====================================
-    # === TAB DASHBOARD ===
     with tabs[0]:
         st.markdown("## 🎯 Course Overview")
-        # ambil data course dari Supabase
-        course = supabase.table("courses").select("*").eq("id", cid).execute().data
-        if not course:
-            st.error("Course not found.")
-            st.stop()
-        c = course[0]
 
+        c = supabase.table("courses").select("*").eq("id", cid).execute().data[0]
         st.markdown("### About this Course")
         st.write(c.get("description") or "_No description provided._")
 
         st.markdown("### 🎥 Course Video")
-        yt_url = c.get("youtube_url")
-        if yt_url:
-            st.video(yt_url)
+        if c.get("youtube_url"):
+            st.video(c["youtube_url"])
         else:
             st.info("No YouTube video attached.")
 
@@ -437,25 +442,21 @@ def page_course_detail():
             st.components.v1.iframe(c["reference_book"], height=400)
         else:
             st.info("No embedded reference book.")
-        # ======== EDIT SECTION (Instructor Only) ========
-        user = st.session_state.get("user")
-        if user and user["role"] == "instructor":
+
+        if user["role"] == "instructor":
             st.divider()
             st.subheader("🛠️ Edit Course Dashboard")
-
             with st.form("edit_course_dashboard"):
                 new_desc = st.text_area("Update Course Description", c.get("description", ""), height=150)
                 new_yt = st.text_input("YouTube Video URL", c.get("youtube_url", ""))
                 new_book = st.text_input("Reference Book Embed URL (iframe link)", c.get("reference_book", ""))
                 save_btn = st.form_submit_button("💾 Save Changes")
-
             if save_btn:
                 supabase.table("courses").update({
                     "description": new_desc,
                     "youtube_url": new_yt,
                     "reference_book": new_book
                 }).eq("id", cid).execute()
-
                 st.success("✅ Course dashboard updated successfully!")
                 st.rerun()
 
@@ -464,13 +465,18 @@ def page_course_detail():
     # =====================================
     with tabs[1]:
         st.subheader("🕒 Attendance Tracker")
-
         att = supabase.table("attendance").select("*").eq("course_id", cid).execute().data
         if att:
-            st.dataframe(att)
+            for a in att:
+                st.markdown(f"- 🗓️ **{a['date']}** — *{a['topic']}*")
+                if user["role"] == "instructor":
+                    if st.button(f"🗑️ Delete Attendance '{a['topic']}'", key=f"del_att_{a['id']}"):
+                        supabase.table("attendance").delete().eq("id", a["id"]).execute()
+                        st.success("Attendance deleted!")
+                        st.rerun()
+            st.divider()
         else:
             st.info("No attendance records yet.")
-
         if user["role"] == "instructor":
             with st.form("add_attendance"):
                 date = st.date_input("Date")
@@ -490,7 +496,6 @@ def page_course_detail():
     # =====================================
     with tabs[2]:
         st.subheader("📦 Learning Modules")
-
         mods = supabase.table("modules").select("*").eq("course_id", cid).execute().data
         if mods:
             for m in mods:
@@ -498,9 +503,13 @@ def page_course_detail():
                     st.markdown(m.get("content", "No content."))
                     if m.get("video_url"):
                         st.video(m["video_url"])
+                    if user["role"] == "instructor":
+                        if st.button(f"🗑️ Delete Module '{m['title']}'", key=f"del_mod_{m['id']}"):
+                            supabase.table("modules").delete().eq("id", m["id"]).execute()
+                            st.success("Module deleted!")
+                            st.rerun()
         else:
             st.info("No modules added yet.")
-
         if user["role"] == "instructor":
             with st.form("add_module"):
                 title = st.text_input("Module Title")
@@ -522,7 +531,6 @@ def page_course_detail():
     # =====================================
     with tabs[3]:
         st.subheader("🧩 Assignments")
-
         asg = supabase.table("assignments").select("*").eq("course_id", cid).execute().data
         if asg:
             for a in asg:
@@ -535,26 +543,13 @@ def page_course_detail():
                         file = st.file_uploader("Upload your work", key=f"up_{a['id']}")
                         if file:
                             st.success(f"✅ Submission received for '{a['title']}' (Simulated)")
+                    if user["role"] == "instructor":
+                        if st.button(f"🗑️ Delete Assignment '{a['title']}'", key=f"del_asg_{a['id']}"):
+                            supabase.table("assignments").delete().eq("id", a["id"]).execute()
+                            st.success("Assignment deleted!")
+                            st.rerun()
         else:
             st.info("No assignments available.")
-
-        if user["role"] == "instructor":
-            with st.form("add_assignment"):
-                title = st.text_input("Assignment Title")
-                desc = st.text_area("Assignment Description")
-                embed = st.text_input("Embed URL (Liveworksheet / YouTube / PDF Viewer)")
-                file_type = st.selectbox("Accepted Submission Type", ["PDF", "Image", "Docx", "Any"])
-                ok = st.form_submit_button("➕ Add Assignment")
-                if ok and title:
-                    supabase.table("assignments").insert({
-                        "course_id": cid,
-                        "title": title,
-                        "description": desc,
-                        "embed_url": embed,
-                        "allowed_type": file_type
-                    }).execute()
-                    st.success("Assignment added!")
-                    st.rerun()
 
     # =====================================
     # QUIZZES (FULL INTERACTIVE)
@@ -568,6 +563,7 @@ def page_course_detail():
                 with st.expander(f"📝 {q['title']}"):
                     st.markdown(q.get("description", ""))
                     questions = supabase.table("quiz_questions").select("*").eq("quiz_id", q["id"]).execute().data
+
                     if questions:
                         for i, qs in enumerate(questions, 1):
                             st.markdown(f"**{i}. {qs['question']}**")
@@ -576,8 +572,23 @@ def page_course_detail():
                                 st.radio("Answer:", choices, key=f"q_{qs['id']}")
                             else:
                                 st.text_input("Answer:", key=f"t_{qs['id']}")
+
+                            # 🗑️ Delete Question
+                            if user["role"] == "instructor":
+                                if st.button(f"🗑️ Delete Question {i}", key=f"del_q_{qs['id']}"):
+                                    supabase.table("quiz_questions").delete().eq("id", qs["id"]).execute()
+                                    st.success(f"Question {i} deleted!")
+                                    st.rerun()
                     else:
                         st.info("No questions yet.")
+
+                    # 🗑️ Delete Entire Quiz
+                    if user["role"] == "instructor":
+                        if st.button(f"🗑️ Delete Quiz '{q['title']}'", key=f"del_quiz_{q['id']}"):
+                            supabase.table("quiz_questions").delete().eq("quiz_id", q["id"]).execute()
+                            supabase.table("quizzes").delete().eq("id", q["id"]).execute()
+                            st.success("Quiz deleted!")
+                            st.rerun()
         else:
             st.info("No quizzes yet.")
 
@@ -606,6 +617,7 @@ def page_course_detail():
             with st.form("add_question"):
                 question = st.text_input("Question Text")
                 q_type = st.selectbox("Type", ["multiple_choice", "short_answer"])
+
                 if q_type == "multiple_choice":
                     choices = [st.text_input(f"Choice {ch}", key=f"ch_{i}") for i, ch in enumerate(["A", "B", "C", "D", "E"], 1)]
                     correct = st.selectbox("Correct Answer", ["A", "B", "C", "D", "E"])
@@ -644,6 +656,14 @@ def page_course_detail():
             for a in ann:
                 st.markdown(f"**📢 {a['title']}** — *{a['date']}*")
                 st.markdown(a["content"])
+
+                # 🗑️ Delete announcement
+                if user["role"] == "instructor":
+                    if st.button(f"🗑️ Delete Announcement '{a['title']}'", key=f"del_ann_{a['id']}"):
+                        supabase.table("announcements").delete().eq("id", a["id"]).execute()
+                        st.success("Announcement deleted!")
+                        st.rerun()
+
                 st.divider()
         else:
             st.info("No announcements yet.")
@@ -663,11 +683,10 @@ def page_course_detail():
                     }).execute()
                     st.success("Announcement posted!")
                     st.rerun()
-                    
-def page_account():
-    st.header("👤 Account Page")
-    st.info("This section is under construction.")
 
+def page_account(): 
+    st.header("👤 Account Page") 
+    st.info("This section is under construction.")
 # ======================
 # === ROUTING ===
 # ======================
@@ -708,6 +727,7 @@ def main():
 # jalankan aplikasi
 if __name__ == "__main__":
     main()
+
 
 
 
