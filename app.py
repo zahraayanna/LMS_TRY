@@ -574,7 +574,7 @@ def page_course_detail():
 
         # === Load modules dari Supabase ===
         try:
-            mods_response = supabase.table("modules").select("*").eq("course_id", cid).execute()
+            mods_response = supabase.table("modules").select("*").eq("course_id", int(cid)).execute()
             mods = mods_response.data or []
         except Exception as e:
             st.error(f"❌ Failed to load modules: {e}")
@@ -888,6 +888,7 @@ def main():
 # jalankan aplikasi
 if __name__ == "__main__":
     main()
+
 
 
 
