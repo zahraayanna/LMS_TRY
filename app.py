@@ -320,16 +320,12 @@ def page_courses():
                 st.markdown(f"**Access Code:** `{c.get('access_code', '-')}`")
 
             unique_key = f"open_{c['id']}_{uuid.uuid4().hex[:6]}"
-            if st.button("📖 Open Course", key=f"open_{c['id']}"):
-                # Simpan state course aktif
+           if st.button("📖 Open Course", key=f"open_{c['id']}"):
                 st.session_state.current_course = c["id"]
                 st.session_state.last_course = c["id"]
                 st.session_state.page = "course_detail"
-
-                # Gunakan rerun alami Streamlit
-                st.session_state._rerun_flag = True
+                st.session_state._nav_trigger = True
                 st.stop()
-
 
             st.markdown("---")
 
@@ -748,10 +744,11 @@ def page_account():
 # === ROUTING ===
 # ======================
 def main():
-    # Cegah double render dan rerun halus
-    if "_rerun_flag" in st.session_state:
-        del st.session_state["_rerun_flag"]
-        st.experimental_rerun()
+    # Handle soft navigation without experimental rerun
+    if st.session_state.get("_nav_trigger"):
+        del st.session_state["_nav_trigger"]
+        return main()  # panggil ulang fungsi main() manual, rerender natural
+
 
     # === INISIALISASI SESSION STATE ===
     if "page" not in st.session_state:
@@ -798,3 +795,4 @@ def main():
 # jalankan aplikasi
 if __name__ == "__main__":
     main()
+
