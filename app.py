@@ -326,11 +326,10 @@ def page_courses():
                 st.session_state.last_course = c["id"]
                 st.session_state.page = "course_detail"
 
-                # Render langsung halaman course detail
-                st.empty()  # hapus elemen UI lama
-                st.success(f"✅ Entered {c['title']} successfully!")
-                page_course_detail()
+                # Gunakan rerun alami Streamlit
+                st.session_state._rerun_flag = True
                 st.stop()
+
 
             st.markdown("---")
 
@@ -749,6 +748,11 @@ def page_account():
 # === ROUTING ===
 # ======================
 def main():
+    # Cegah double render dan rerun halus
+    if "_rerun_flag" in st.session_state:
+        del st.session_state["_rerun_flag"]
+        st.experimental_rerun()
+
     # === INISIALISASI SESSION STATE ===
     if "page" not in st.session_state:
         st.session_state.page = "login"
@@ -794,30 +798,3 @@ def main():
 # jalankan aplikasi
 if __name__ == "__main__":
     main()
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
