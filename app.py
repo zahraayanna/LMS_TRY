@@ -375,9 +375,13 @@ def page_course_detail():
     # 🔙 Tombol Kembali ke Courses
     with col1:
         if st.button("🔙 Back to Courses"):
-            st.session_state.page = "dashboard"  # ⬅ balik ke dashboard utama
-            st.session_state.current_course = None
-            st.rerun()
+            for key in ["current_course", "last_course"]:
+                if key in st.session_state:
+                    del st.session_state[key]
+            st.session_state.page = "dashboard"
+            st.session_state.user = st.session_state.get("user")  # pastikan user tetap login
+            st.rerun()  # rerun ke main() sepenuhnya
+
 
     # 🚪 Tombol Resign dari Course (hanya untuk student)
     with col2:
@@ -704,6 +708,7 @@ def main():
 # jalankan aplikasi
 if __name__ == "__main__":
     main()
+
 
 
 
