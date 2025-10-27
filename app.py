@@ -486,7 +486,7 @@ def page_course_detail():
                 ok = st.form_submit_button("➕ Add Attendance")
 
                 if ok:
-                     try:
+                    try:
                         response = supabase.table("attendance").insert({
                             "course_id": cid,
                             "user_id": user["id"],
@@ -739,6 +739,7 @@ def main():
 # jalankan aplikasi
 if __name__ == "__main__":
     main()
+
 
 
 
