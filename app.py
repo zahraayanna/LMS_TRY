@@ -320,12 +320,15 @@ def page_courses():
                 st.markdown(f"**Access Code:** `{c.get('access_code', '-')}`")
 
             unique_key = f"open_{c['id']}_{uuid.uuid4().hex[:6]}"
+           
+
             if st.button("📖 Open Course", key=f"open_{c['id']}"):
                 st.session_state.current_course = c["id"]
                 st.session_state.last_course = c["id"]
                 st.session_state.page = "course_detail"
-                st.session_state._nav_trigger = True
-                st.stop()
+
+                # 🚀 rerender langsung halaman detail
+                st.switch_page("app.py")  # pastikan nama file Streamlit utama kamu sesuai
 
             st.markdown("---")
 
@@ -795,5 +798,6 @@ def main():
 # jalankan aplikasi
 if __name__ == "__main__":
     main()
+
 
 
