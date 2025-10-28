@@ -812,25 +812,74 @@ def page_course_detail():
     # QUIZZES (FULL INTERACTIVE)
     # =====================================
     with tabs[4]:
+        import streamlit.components.v1 as components
+        import re
+        import markdown
+
         st.subheader("🧠 Quizzes")
 
+        # === Load all quizzes for this course ===
         quizzes = supabase.table("quizzes").select("*").eq("course_id", cid).execute().data
+
         if quizzes:
             for q in quizzes:
                 with st.expander(f"📝 {q['title']}"):
-                    st.markdown(q.get("description", ""))
-                    questions = supabase.table("quiz_questions").select("*").eq("quiz_id", q["id"]).execute().data
+
+                    # === Smart Description Rendering (Markdown + YouTube Embed) ===
+                    desc = q.get("description", "")
+                    if desc:
+                        st.markdown("### 📘 Quiz Description:")
+
+                        # Cek apakah mengandung link YouTube
+                        youtube_match = re.search(
+                            r"(https?://(?:www\.)?(?:youtube\.com/watch\?v=|youtu\.be/)[\w\-]+)",
+                            desc,
+                        )
+                        if youtube_match:
+                            youtube_url = youtube_match.group(1)
+                            video_id = (
+                                youtube_url.split("v=")[-1]
+                                if "v=" in youtube_url
+                                else youtube_url.split("/")[-1]
+                            )
+                            st.video(f"https://www.youtube.com/watch?v={video_id}")
+
+                            # Hapus link YouTube dari deskripsi agar tidak dobel
+                            desc = desc.replace(youtube_url, "")
+
+                        # Render Markdown dan LaTeX dari deskripsi
+                        if desc.strip():
+                            rendered_md = markdown.markdown(
+                                desc, extensions=["fenced_code", "tables", "md_in_html"]
+                            )    
+                            html_content = f"""
+                            <div style="font-size:16px; line-height:1.6;">
+                                <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+                                <script id="MathJax-script" async
+                                    src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js">
+                                </script>
+                                {rendered_md}
+                            </div>
+                            """
+                            components.html(html_content, height=250, scrolling=True)
+
+                    # === Show quiz questions ===
+                    questions = (
+                        supabase.table("quiz_questions").select("*").eq("quiz_id", q["id"]).execute().data
+                    )
 
                     if questions:
                         for i, qs in enumerate(questions, 1):
-                            st.markdown(f"**{i}. {qs['question']}**")
+                            st.markdown(f"**{i}.**")
+                            st.markdown(qs["question"], unsafe_allow_html=True)
+
                             if qs["type"] == "multiple_choice":
                                 choices = qs["choices"].split("|")
                                 st.radio("Answer:", choices, key=f"q_{qs['id']}")
                             else:
                                 st.text_input("Answer:", key=f"t_{qs['id']}")
 
-                            # 🗑️ Delete Question
+                            # 🗑️ Delete question
                             if user["role"] == "instructor":
                                 if st.button(f"🗑️ Delete Question {i}", key=f"del_q_{qs['id']}"):
                                     supabase.table("quiz_questions").delete().eq("id", qs["id"]).execute()
@@ -849,19 +898,18 @@ def page_course_detail():
         else:
             st.info("No quizzes yet.")
 
-        # --- Create quiz ---
+        # --- Create a new quiz ---
         if user["role"] == "instructor":
             with st.form("add_quiz"):
                 title = st.text_input("Quiz Title")
-                desc = st.text_area("Quiz Description")
+                desc = st.text_area("Quiz Description (supports Markdown, LaTeX, and YouTube link)")
                 ok = st.form_submit_button("➕ Create Quiz")
+
                 if ok and title:
-                    supabase.table("quizzes").insert({
-                        "course_id": cid,
-                        "title": title,
-                        "description": desc
-                    }).execute()
-                    st.success("Quiz created!")
+                    supabase.table("quizzes").insert(
+                        {"course_id": cid, "title": title, "description": desc}
+                    ).execute()
+                    st.success("✅ Quiz created successfully!")
                     st.rerun()
 
         # --- Add Question to Quiz ---
@@ -900,7 +948,9 @@ def page_course_detail():
                         with col1:
                             opt_text = st.text_input(f"Option {ch} Text (Markdown/Equation allowed)", key=f"text_{ch}")
                         with col2:
-                            opt_img = st.file_uploader(f"Upload Image for Option {ch}", type=["png", "jpg", "jpeg"], key=f"img_{ch}")
+                            opt_img = st.file_uploader(
+                                f"Upload Image for Option {ch}", type=["png", "jpg", "jpeg"], key=f"img_{ch}"
+                            )
 
                         img_opt_md = ""
                         if opt_img:
@@ -922,13 +972,15 @@ def page_course_detail():
                     if ok and question_text:
                         try:
                             final_question = question_text + img_markdown
-                            supabase.table("quiz_questions").insert({
-                                "quiz_id": qid,
-                                "question": final_question,
-                                "type": "multiple_choice",
-                                "choices": "|".join(choices),
-                                "correct_answer": correct
-                            }).execute()
+                            supabase.table("quiz_questions").insert(
+                                {
+                                    "quiz_id": qid,
+                                    "question": final_question,
+                                    "type": "multiple_choice",
+                                    "choices": "|".join(choices),
+                                    "correct_answer": correct,
+                                }
+                            ).execute()
                             st.success("✅ Question added successfully with image/equation support!")
                             st.rerun()
                         except Exception as e:
@@ -942,12 +994,14 @@ def page_course_detail():
                     if ok and question_text:
                         try:
                             final_question = question_text + img_markdown
-                            supabase.table("quiz_questions").insert({
-                                "quiz_id": qid,
-                                "question": final_question,
-                                "type": "short_answer",
-                                "correct_answer": correct_ans
-                            }).execute()
+                            supabase.table("quiz_questions").insert(
+                                {
+                                    "quiz_id": qid,
+                                    "question": final_question,
+                                    "type": "short_answer",
+                                    "correct_answer": correct_ans,
+                                }
+                            ).execute()
                             st.success("✅ Short-answer question added!")
                             st.rerun()
                         except Exception as e:
@@ -1056,6 +1110,7 @@ def main():
 # jalankan aplikasi
 if __name__ == "__main__":
     main()
+
 
 
 
