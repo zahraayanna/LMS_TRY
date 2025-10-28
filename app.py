@@ -1,7 +1,7 @@
 import streamlit as st
 st.set_page_config(page_title="ThinkVerse LMS", page_icon="🎓", layout="wide")
 
-
+import uuid
 from supabase import create_client
 import time
 from datetime import datetime
@@ -721,32 +721,50 @@ def page_course_detail():
                                         st.error(f"❌ Failed to delete module: {e}")
 
                             # === Link Quiz/Assignment ke Modul ===
-                            st.markdown("### 🔗 Link Existing Quiz or Assignment")
-                            link_type = st.selectbox("Select Type", ["quiz", "assignment"], key=f"type_{m['id']}")
-                            available = (
-                                {q["title"]: q["id"] for q in all_quizzes}
-                                if link_type == "quiz"
-                                else {a["title"]: a["id"] for a in all_assignments}
-                            )
+                            # === Tambahkan link ke quiz/assignment (khusus instruktur) ===
+                            if user["role"] == "instructor":
+                                st.markdown("### 🔗 Link Quiz or Assignment to This Module")
 
-                            if available:
-                                target = st.selectbox(f"Select {link_type.title()}", list(available.keys()), key=f"sel_{m['id']}")
-                                if st.button(f"➕ Link {link_type.title()}", key=f"link_{m['id']}"):
-                                    try:
-                                        supabase.table("module_link").insert({
-                                            "course_id": cid,
-                                            "module_id": m["id"],
-                                            "type": link_type,
-                                            "target_id": available[target]
-                                        }).execute()
-                                        st.success(f"✅ {link_type.title()} linked successfully!")
-                                        st.rerun()
-                                    except Exception as e:
-                                        st.error(f"❌ Failed to link: {e}")
-                            else:
-                                st.info(f"No available {link_type}s to link.")
-                        else:
-                            st.info("📭 No modules added yet.")
+                                # Buat key unik per modul
+                                unique_suffix = str(uuid.uuid4())
+
+                                with st.form(f"link_form_{m['id']}_{unique_suffix}"):
+                                    link_type = st.selectbox(
+                                        "Select Type",
+                                        ["quiz", "assignment"],
+                                        key=f"type_{m['id']}_{unique_suffix}"
+                                    )
+
+                                    # Pilihan target berdasarkan tipe
+                                    available = (
+                                        {q["title"]: q["id"] for q in all_quizzes}
+                                        if link_type == "quiz"
+                                        else {a["title"]: a["id"] for a in all_assignments}
+                                    )
+
+                                    if available:
+                                        target = st.selectbox(
+                                            f"Select {link_type.title()}",
+                                            list(available.keys()),
+                                            key=f"sel_{m['id']}_{unique_suffix}"
+                                        )
+
+                                        ok = st.form_submit_button(f"➕ Link {link_type.title()}")
+                                        if ok:
+                                            try:
+                                                supabase.table("module_link").insert({
+                                                    "course_id": cid,
+                                                    "module_id": m["id"],
+                                                    "type": link_type,
+                                                    "target_id": available[target]
+                                                }).execute()
+                                                st.success(f"✅ {link_type.title()} linked successfully!")
+                                                st.rerun()
+                                            except Exception as e:
+                                                st.error(f"❌ Failed to link: {e}")
+                                    else:
+                                        st.info(f"No available {link_type}s to link.")
+
 
                         # === Form Edit Modul ===
                         if st.session_state.get("show_edit_form"):
@@ -1352,6 +1370,7 @@ def main():
 # jalankan aplikasi
 if __name__ == "__main__":
     main()
+
 
 
 
