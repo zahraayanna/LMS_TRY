@@ -1141,40 +1141,109 @@ def page_course_detail():
     # ANNOUNCEMENTS
     # =====================================
     with tabs[5]:
+        from datetime import date
+        import streamlit.components.v1 as components
+
         st.subheader("📣 Course Announcements")
 
-        ann = supabase.table("announcements").select("*").eq("course_id", cid).execute().data
+        # === Load announcements ===
+        try:
+            ann = supabase.table("announcements").select("*").eq("course_id", cid).order("date", desc=True).execute().data
+        except Exception as e:
+            st.error(f"❌ Failed to load announcements: {e}")
+            ann = []
+
+        # === Tampilkan semua pengumuman ===
         if ann:
             for a in ann:
-                st.markdown(f"**📢 {a['title']}** — *{a['date']}*")
-                st.markdown(a["content"])
+                st.markdown(f"""
+                <div style="
+                    background-color:#f9fafb;
+                    border-left:6px solid #4F46E5;
+                    padding:15px;
+                    border-radius:10px;
+                    margin-bottom:10px;">
+                    <h4 style="margin-bottom:4px;">📢 {a['title']}</h4>
+                    <small style="color:#6b7280;">📅 {a['date']}</small>
+                    <p style="margin-top:8px; font-size:15px; color:#1e293b;">{a['content']}</p>
+                </div>
+                """, unsafe_allow_html=True)
 
-                # 🗑️ Delete announcement
+                # 🗑️ Tombol hapus hanya untuk guru
                 if user["role"] == "instructor":
-                    if st.button(f"🗑️ Delete Announcement '{a['title']}'", key=f"del_ann_{a['id']}"):
-                        supabase.table("announcements").delete().eq("id", a["id"]).execute()
-                        st.success("Announcement deleted!")
-                        st.rerun()
-
-                st.divider()
+                    if st.button(f"🗑️ Delete '{a['title']}'", key=f"del_ann_{a['id']}"):
+                        try:
+                            supabase.table("announcements").delete().eq("id", a["id"]).execute()
+                            st.success("🗑️ Announcement deleted successfully!")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"❌ Failed to delete announcement: {e}")
         else:
             st.info("No announcements yet.")
 
+        # === Form untuk membuat pengumuman baru ===
         if user["role"] == "instructor":
-            with st.form("add_announcement"):
+            st.divider()
+            st.markdown("### ➕ Post New Announcement")
+
+            with st.form("add_announcement", clear_on_submit=True):
                 title = st.text_input("Title")
-                content = st.text_area("Content")
-                ok = st.form_submit_button("📣 Post Announcement")
-                if ok and title:
-                    from datetime import date
-                    supabase.table("announcements").insert({
-                        "course_id": cid,
-                        "title": title,
-                        "content": content,
-                        "date": str(date.today())
-                    }).execute()
-                    st.success("Announcement posted!")
-                    st.rerun()
+                content = st.text_area("Content", height=150)
+                submit = st.form_submit_button("📣 Post Announcement")
+
+                if submit:
+                    if not title.strip():
+                        st.warning("Please enter a title before posting.")
+                    else:
+                        try:
+                            supabase.table("announcements").insert({
+                                "course_id": cid,
+                                "title": title.strip(),
+                                "content": content.strip(),
+                                "date": str(date.today())
+                            }).execute()
+                            st.success("✅ Announcement posted successfully!")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"❌ Failed to post announcement: {e}")
+
+    # === DASHBOARD — ANNOUNCEMENTS FOR STUDENTS ===
+    if user["role"] == "student":
+        st.subheader("📣 Latest Announcements from Your Courses")
+
+        try:
+            # Ambil semua course yang diikuti siswa
+            enrolled = supabase.table("enrollments").select("course_id").eq("user_id", user["id"]).execute().data
+            course_ids = [e["course_id"] for e in enrolled]
+
+            if course_ids:
+                # Ambil semua announcement dari course tersebut
+                anns = supabase.table("announcements").select("*, courses(title)").in_("course_id", course_ids).order("date", desc=True).execute().data
+
+                if anns:
+                    for a in anns:
+                        course_name = a.get("courses", {}).get("title", "Unknown Course")
+                        st.markdown(f"""
+                        <div style="
+                            background-color:#f1f5f9;
+                            border-left:5px solid #2563EB;
+                            padding:12px 16px;
+                            border-radius:8px;
+                            margin-bottom:8px;">
+                            <b style="font-size:16px;">📢 {a['title']}</b>
+                            <div style="color:#6b7280; font-size:13px;">
+                                {a['date']} — <i>{course_name}</i>
+                            </div>
+                            <div style="margin-top:6px; font-size:14px;">{a['content']}</div>
+                        </div>
+                        """, unsafe_allow_html=True)
+                else:
+                    st.info("No new announcements from your courses yet.")
+            else:
+                st.info("You are not enrolled in any courses yet.")
+        except Exception as e:
+            st.error(f"❌ Failed to load announcements: {e}")
+
 
 def page_account(): 
     st.header("👤 Account Page") 
@@ -1239,6 +1308,7 @@ def main():
 # jalankan aplikasi
 if __name__ == "__main__":
     main()
+
 
 
 
