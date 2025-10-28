@@ -809,7 +809,7 @@ def page_course_detail():
 
                                             supabase.table("modules").insert({
                                                 "course_id": int(cid),
-                                                title": title.strip(),
+                                                "title": title.strip(),
                                                 "content": final_content.strip(),
                                                 "video_url": video_url.strip() if video_url else None
                                             }).execute()
@@ -1239,6 +1239,7 @@ def main():
 # jalankan aplikasi
 if __name__ == "__main__":
     main()
+
 
 
 
