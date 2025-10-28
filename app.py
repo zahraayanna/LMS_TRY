@@ -572,7 +572,7 @@ def page_course_detail():
 
         st.session_state.current_course = cid
 
-        # === Load Modules ===
+        # === Load modules ===
         try:
             mods_response = supabase.table("modules").select("*").eq("course_id", int(cid)).execute()
             mods = mods_response.data or []
@@ -580,23 +580,33 @@ def page_course_detail():
             st.error(f"❌ Failed to load modules: {e}")
             mods = []
 
-        # === Tampilkan Module ===
+        # === Load quizzes & assignments (untuk relasi) ===
+        all_quizzes = supabase.table("quizzes").select("*").eq("course_id", cid).execute().data or []
+        all_assignments = supabase.table("assignments").select("*").eq("course_id", cid).execute().data or []
+
+        # === Load module-link table (jika ada) ===
+        try:
+            links_response = supabase.table("module_links").select("*").eq("course_id", cid).execute()
+            module_links = links_response.data or []
+        except:
+            module_links = []
+
+        # === Tampilkan semua modul ===
         if mods:
             for m in mods:
                 with st.expander(f"📘 {m['title']}"):
-                    raw_content = m.get("content", "No content available.")
-                    rendered_md = markdown.markdown(
-                        raw_content,
-                        extensions=["fenced_code", "tables", "md_in_html"]
-                    )
-
-                    # --- Style judul dengan highlight dan ukuran besar ---
+                    # === Judul dengan highlight ===
                     st.markdown(
                         f"<h2 style='color:#4F46E5; text-shadow:1px 1px 2px #ccc;'>{m['title']}</h2>",
                         unsafe_allow_html=True
                     )
 
-                    # --- Render konten dengan LaTeX ---
+                    # === Render isi modul ===
+                    raw_content = m.get("content", "No content available.")
+                    rendered_md = markdown.markdown(
+                        raw_content,
+                        extensions=["fenced_code", "tables", "md_in_html"]
+                    )
                     html_content = f"""
                     <div style="font-size:16px; line-height:1.7; text-align:justify;">
                         <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
@@ -608,25 +618,36 @@ def page_course_detail():
                     """
                     components.html(html_content, height=600, scrolling=True)
 
-                    # --- Tampilkan video jika ada ---
+                    # === Tambahkan video jika ada ===
                     if m.get("video_url"):
                         st.video(m["video_url"])
 
-                    st.divider()
+                    st.markdown("---")
 
-                    # === Navigasi ke Quiz dan Assignment ===
-                    st.markdown("### 🧭 Related Activities")
-                    col_q, col_a = st.columns(2)
-                    with col_q:
-                        if st.button("🧠 Go to Quiz Section", key=f"quiz_nav_{m['id']}"):
-                            st.session_state.active_tab = "quiz"
-                            st.rerun()
-                    with col_a:
-                        if st.button("📋 Go to Assignment Section", key=f"asg_nav_{m['id']}"):
-                            st.session_state.active_tab = "assignment"
-                            st.rerun()
+                    # === Tampilkan Quiz & Assignment yang terhubung ===
+                    related_quiz = [l for l in module_links if l["module_id"] == m["id"] and l["type"] == "quiz"]
+                    related_asg = [l for l in module_links if l["module_id"] == m["id"] and l["type"] == "assignment"]
 
-                    # === Tombol Edit & Delete (instruktur) ===
+                    if related_quiz or related_asg:
+                        st.markdown("### 🧩 Related Activities")
+
+                        for rq in related_quiz:
+                            quiz_data = next((q for q in all_quizzes if q["id"] == rq["target_id"]), None)
+                            if quiz_data:
+                                if st.button(f"🧠 {quiz_data['title']}", key=f"open_quiz_{quiz_data['id']}"):
+                                    st.session_state.selected_quiz_id = quiz_data["id"]
+                                    st.session_state.page = "course_detail_quiz"
+                                    st.rerun()
+
+                        for ra in related_asg:
+                            asg_data = next((a for a in all_assignments if a["id"] == ra["target_id"]), None)
+                            if asg_data:
+                                if st.button(f"📋 {asg_data['title']}", key=f"open_asg_{asg_data['id']}"):
+                                    st.session_state.selected_assignment_id = asg_data["id"]
+                                    st.session_state.page = "course_detail_assignment"
+                                    st.rerun()
+
+                    # === Bagian edit & delete modul (instruktur) ===
                     if user["role"] == "instructor":
                         st.divider()
                         col1, col2 = st.columns(2)
@@ -646,91 +667,33 @@ def page_course_detail():
                                 except Exception as e:
                                     st.error(f"❌ Failed to delete module: {e}")
 
+                        # === Tambahkan link ke quiz/assignment ===
+                        st.markdown("### 🔗 Link Quiz or Assignment to This Module")
+                        link_type = st.selectbox("Select Type", ["quiz", "assignment"], key=f"type_{m['id']}")
+                        if link_type == "quiz":
+                            available = {q["title"]: q["id"] for q in all_quizzes}
+                        else:
+                            available = {a["title"]: a["id"] for a in all_assignments}
+
+                        if available:
+                            target = st.selectbox(f"Select {link_type.title()}", list(available.keys()), key=f"sel_{m['id']}")
+                            if st.button(f"➕ Link {link_type.title()}", key=f"link_{m['id']}"):
+                                try:
+                                    supabase.table("module_links").insert({
+                                        "course_id": cid,
+                                        "module_id": m["id"],
+                                        "type": link_type,
+                                        "target_id": available[target]
+                                    }).execute()
+                                    st.success(f"✅ {link_type.title()} linked successfully!")
+                                    st.rerun()
+                                except Exception as e:
+                                    st.error(f"❌ Failed to link: {e}")
+                        else:
+                            st.info(f"No available {link_type}s to link.")
+
         else:
             st.info("📭 No modules added yet.")
-
-        # === Form Edit Module ===
-        if user["role"] == "instructor" and st.session_state.get("show_edit_form"):
-            m = st.session_state.edit_module_data
-            st.markdown(f"### ✏️ Edit Module: {m['title']}")
-
-            with st.form("edit_module_form", clear_on_submit=True):
-                new_title = st.text_input("Module Title", value=m["title"])
-                new_content = st.text_area("Content (Markdown + LaTeX supported)", value=m["content"], height=200)
-                new_video_url = st.text_input("Video URL (optional)", value=m.get("video_url") or "")
-                update_btn = st.form_submit_button("💾 Update Module")
-
-                if update_btn:
-                    try:
-                        supabase.table("modules").update({
-                            "title": new_title.strip(),
-                            "content": new_content.strip(),
-                            "video_url": new_video_url.strip()
-                        }).eq("id", m["id"]).execute()
-
-                        st.success("✅ Module updated successfully!")
-                        st.session_state.show_edit_form = False
-                        st.session_state.refresh_modules = True
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"❌ Failed to update module: {e}")
-
-        # === Tambah Module Baru ===
-        if user["role"] == "instructor" and not st.session_state.get("show_edit_form"):
-            st.divider()
-            st.markdown("### ➕ Add New Module (with Images & Equations)")
-
-            with st.form("add_module_rich", clear_on_submit=True):
-                title = st.text_input("Module Title")
-                content = st.text_area("Content (Markdown + LaTeX supported)", height=200)
-                uploaded_image = st.file_uploader("Upload Image (optional)", type=["png", "jpg", "jpeg"])
-                video_url = st.text_input("Video URL (optional)")
-
-                preview_btn = st.form_submit_button("🔍 Preview Content")
-
-                if preview_btn:
-                    st.markdown("---")
-                    st.markdown("#### 🖼️ Preview Result:")
-                    st.markdown(content, unsafe_allow_html=True)
-                    st.info("You can include equations like `$$E = mc^2$$` or `$$F = ma$$`.")
-
-                submit_btn = st.form_submit_button("💾 Add Module")
-
-                if submit_btn:
-                    if not title.strip():
-                        st.warning("Please enter a module title.")
-                    else:
-                        try:
-                            img_markdown = ""
-                            if uploaded_image:
-                                img_bytes = uploaded_image.read()
-                                file_path = f"uploads/{int(datetime.now().timestamp())}_{uploaded_image.name}"
-                                supabase.storage.from_("thinkverse_uploads").upload(file_path, img_bytes)
-                                img_url = f"{SUPABASE_URL}/storage/v1/object/public/thinkverse_uploads/{file_path}"
-                                img_markdown = f"\n\n![Uploaded Image]({img_url})"
-
-                            final_content = (content or "") + (img_markdown or "")
-                            response = supabase.table("modules").insert({
-                                "course_id": int(cid),
-                                "title": title.strip(),
-                                "content": final_content.strip(),
-                                "video_url": video_url.strip() if video_url else None
-                            }).execute()
-
-                            if response.data:
-                                st.success(f"✅ Module '{title}' added successfully!")
-                                st.session_state.refresh_modules = True
-                                st.rerun()
-                            else:
-                                st.error("⚠️ Insert failed — no data returned.")
-                        except Exception as e:
-                            st.error(f"❌ Failed to add module: {e}")
-
-        # === Refresh otomatis ===
-        if st.session_state.get("refresh_modules"):
-            st.session_state.refresh_modules = False
-            st.rerun()
-
 
 
     # =====================================
@@ -1144,6 +1107,7 @@ def main():
 # jalankan aplikasi
 if __name__ == "__main__":
     main()
+
 
 
 
