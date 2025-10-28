@@ -998,15 +998,59 @@ def page_course_detail():
                     )
 
                     if questions:
+                        st.markdown("### ✏️ Jawab Semua Pertanyaan di Bawah:")
+
+                        answers = {}
+
                         for i, qs in enumerate(questions, 1):
-                            st.markdown(f"**{i}.**")
-                            st.markdown(qs["question"], unsafe_allow_html=True)
+                            st.markdown(f"**{i}. {qs['question']}**")
 
                             if qs["type"] == "multiple_choice":
                                 choices = qs["choices"].split("|")
-                                st.radio("Answer:", choices, key=f"q_{qs['id']}")
+                                ans = st.radio(
+                                    "Pilih jawaban:",
+                                    choices,
+                                    key=f"ans_{qs['id']}"
+                                )
                             else:
-                                st.text_input("Answer:", key=f"t_{qs['id']}")
+                                ans = st.text_input(
+                                    "Jawaban singkat:",
+                                    key=f"ans_{qs['id']}"
+                                )
+
+                            answers[qs["id"]] = ans
+
+                        # === Tombol Kumpulkan Jawaban ===
+                        if user["role"] == "student":
+                            if st.button("✅ Kumpulkan Jawaban", key=f"submit_quiz_{q['id']}"):
+                                score = 0
+                                total = len(questions)
+
+                                for qs in questions:
+                                    correct = qs["correct_answer"].strip()
+                                    user_ans = answers.get(qs["id"], "").strip()
+
+                                    if qs["type"] == "multiple_choice":
+                                        if user_ans == correct:
+                                            score += 1
+                                    else:
+                                        if user_ans.lower() == correct.lower():
+                                            score += 1
+
+                                # === Menampilkan hasil ===
+                                st.success(f"🎉 Quiz Selesai! Skor kamu: {score}/{total}")
+
+                                # === (Opsional) Simpan hasil ke database ===
+                                try:
+                                    supabase.table("quiz_submissions").insert({
+                                        "quiz_id": q["id"],
+                                        "user_id": user["id"],
+                                        "score": score,
+                                        "total": total,
+                                        "submitted_at": str(datetime.now())
+                                    }).execute()
+                                except:
+                                    pass  # kalau tabel belum ada, biarkan aja untuk sekarang
 
                             # 🗑️ Delete question
                             if user["role"] == "instructor":
@@ -1308,6 +1352,7 @@ def main():
 # jalankan aplikasi
 if __name__ == "__main__":
     main()
+
 
 
 
