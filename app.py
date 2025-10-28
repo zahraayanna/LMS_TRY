@@ -667,13 +667,15 @@ def page_course_detail():
                                     unsafe_allow_html=True,
                                 )
                                 # Tombol kecil di bawahnya
-                                if st.button(
-                                    "➡️ Open Quiz",
-                                    key=f"open_quiz_{m['id']}_{quiz_data['id']}"
-                                ):
-                                    st.session_state.selected_quiz_id = quiz_data["id"]
-                                    st.session_state.page = "course_detail_quiz"
-                                    st.rerun()
+                                st.markdown(f"""
+                                    <a href="#quiz_{quiz_data['id']}" 
+                                       style="display:inline-block; padding:8px 16px;
+                                              background-color:#4F46E5; color:white; border-radius:6px;
+                                              text-decoration:none; margin-top:6px;">
+                                       ➡️ Open Quiz: {quiz_data['title']}
+                                    </a>
+                                """, unsafe_allow_html=True)
+
 
                         # === Bagian Assignment ===
                         for ra in related_asg:
@@ -696,8 +698,6 @@ def page_course_detail():
                                     st.session_state.page = "course_detail_assignment"
                                     st.rerun()
 
-
-                        # === Tombol Edit dan Delete ===
                         # === Tombol Edit dan Delete ===
                         if user["role"] == "instructor":
                             st.divider()
@@ -1239,6 +1239,7 @@ def main():
 # jalankan aplikasi
 if __name__ == "__main__":
     main()
+
 
 
 
