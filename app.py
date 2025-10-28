@@ -563,17 +563,16 @@ def page_course_detail():
 
         st.subheader("📦 Learning Modules")
 
-        # === Pastikan CID valid dan simpan di session_state ===
+        # === Pastikan CID valid ===
         if not cid:
             cid = st.session_state.get("current_course") or st.session_state.get("last_course")
         if not cid:
             st.error("⚠️ Course ID not found.")
             st.stop()
 
-        # Simpan CID supaya gak hilang setelah rerun
         st.session_state.current_course = cid
 
-        # === Load modules dari Supabase ===
+        # === Load Modules ===
         try:
             mods_response = supabase.table("modules").select("*").eq("course_id", int(cid)).execute()
             mods = mods_response.data or []
@@ -581,21 +580,25 @@ def page_course_detail():
             st.error(f"❌ Failed to load modules: {e}")
             mods = []
 
-        # === Tampilkan modul ===
+        # === Tampilkan Module ===
         if mods:
             for m in mods:
                 with st.expander(f"📘 {m['title']}"):
                     raw_content = m.get("content", "No content available.")
-
-                    # --- Convert Markdown (gambar, bold, dll) ke HTML ---
                     rendered_md = markdown.markdown(
                         raw_content,
                         extensions=["fenced_code", "tables", "md_in_html"]
                     )
 
-                    # --- Bungkus dengan MathJax supaya LaTeX bisa tampil ---
+                    # --- Style judul dengan highlight dan ukuran besar ---
+                    st.markdown(
+                        f"<h2 style='color:#4F46E5; text-shadow:1px 1px 2px #ccc;'>{m['title']}</h2>",
+                        unsafe_allow_html=True
+                    )
+
+                    # --- Render konten dengan LaTeX ---
                     html_content = f"""
-                    <div style="font-size:16px; line-height:1.7;">
+                    <div style="font-size:16px; line-height:1.7; text-align:justify;">
                         <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
                         <script id="MathJax-script" async
                             src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js">
@@ -603,32 +606,77 @@ def page_course_detail():
                         <article class="markdown-body">{rendered_md}</article>
                     </div>
                     """
-
-                    # --- Tampilkan konten lengkap ---
                     components.html(html_content, height=600, scrolling=True)
 
-                    # --- Tambahkan video kalau ada ---
+                    # --- Tampilkan video jika ada ---
                     if m.get("video_url"):
                         st.video(m["video_url"])
 
-                    # --- Tombol Delete Module (khusus instruktur) ---
+                    st.divider()
+
+                    # === Navigasi ke Quiz dan Assignment ===
+                    st.markdown("### 🧭 Related Activities")
+                    col_q, col_a = st.columns(2)
+                    with col_q:
+                        if st.button("🧠 Go to Quiz Section", key=f"quiz_nav_{m['id']}"):
+                            st.session_state.active_tab = "quiz"
+                            st.rerun()
+                    with col_a:
+                        if st.button("📋 Go to Assignment Section", key=f"asg_nav_{m['id']}"):
+                            st.session_state.active_tab = "assignment"
+                            st.rerun()
+
+                    # === Tombol Edit & Delete (instruktur) ===
                     if user["role"] == "instructor":
-                        col1, col2 = st.columns([0.2, 0.8])
+                        st.divider()
+                        col1, col2 = st.columns(2)
                         with col1:
-                            if st.button(f"🗑️ Delete Module '{m['title']}'", key=f"del_mod_{m['id']}"):
+                            if st.button(f"📝 Edit '{m['title']}'", key=f"edit_mod_{m['id']}"):
+                                st.session_state.edit_module_id = m["id"]
+                                st.session_state.edit_module_data = m
+                                st.session_state.show_edit_form = True
+                                st.rerun()
+                        with col2:
+                            if st.button(f"🗑️ Delete '{m['title']}'", key=f"del_mod_{m['id']}"):
                                 try:
                                     supabase.table("modules").delete().eq("id", m["id"]).execute()
                                     st.success(f"✅ Module '{m['title']}' deleted successfully!")
-                                    time.sleep(1)
                                     st.session_state.refresh_modules = True
                                     st.rerun()
                                 except Exception as e:
                                     st.error(f"❌ Failed to delete module: {e}")
+
         else:
             st.info("📭 No modules added yet.")
 
-        # === Tambah modul baru (khusus instruktur) ===
-        if user["role"] == "instructor":
+        # === Form Edit Module ===
+        if user["role"] == "instructor" and st.session_state.get("show_edit_form"):
+            m = st.session_state.edit_module_data
+            st.markdown(f"### ✏️ Edit Module: {m['title']}")
+
+            with st.form("edit_module_form", clear_on_submit=True):
+                new_title = st.text_input("Module Title", value=m["title"])
+                new_content = st.text_area("Content (Markdown + LaTeX supported)", value=m["content"], height=200)
+                new_video_url = st.text_input("Video URL (optional)", value=m.get("video_url") or "")
+                update_btn = st.form_submit_button("💾 Update Module")
+
+                if update_btn:
+                    try:
+                        supabase.table("modules").update({
+                            "title": new_title.strip(),
+                            "content": new_content.strip(),
+                            "video_url": new_video_url.strip()
+                        }).eq("id", m["id"]).execute()
+
+                        st.success("✅ Module updated successfully!")
+                        st.session_state.show_edit_form = False
+                        st.session_state.refresh_modules = True
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"❌ Failed to update module: {e}")
+
+        # === Tambah Module Baru ===
+        if user["role"] == "instructor" and not st.session_state.get("show_edit_form"):
             st.divider()
             st.markdown("### ➕ Add New Module (with Images & Equations)")
 
@@ -644,7 +692,7 @@ def page_course_detail():
                     st.markdown("---")
                     st.markdown("#### 🖼️ Preview Result:")
                     st.markdown(content, unsafe_allow_html=True)
-                    st.info("You can include equations like this: `$$E = mc^2$$` or `$$F = ma$$`")
+                    st.info("You can include equations like `$$E = mc^2$$` or `$$F = ma$$`.")
 
                 submit_btn = st.form_submit_button("💾 Add Module")
 
@@ -653,7 +701,6 @@ def page_course_detail():
                         st.warning("Please enter a module title.")
                     else:
                         try:
-                            # === Upload image ke Supabase Storage (jika ada) ===
                             img_markdown = ""
                             if uploaded_image:
                                 img_bytes = uploaded_image.read()
@@ -662,10 +709,7 @@ def page_course_detail():
                                 img_url = f"{SUPABASE_URL}/storage/v1/object/public/thinkverse_uploads/{file_path}"
                                 img_markdown = f"\n\n![Uploaded Image]({img_url})"
 
-                            # === Gabungkan konten dan gambar ===
                             final_content = (content or "") + (img_markdown or "")
-
-                            # === Insert module ke Supabase ===
                             response = supabase.table("modules").insert({
                                 "course_id": int(cid),
                                 "title": title.strip(),
@@ -673,29 +717,19 @@ def page_course_detail():
                                 "video_url": video_url.strip() if video_url else None
                             }).execute()
 
-                            st.write("📤 Debug — Supabase insert response:", response)
-
                             if response.data:
                                 st.success(f"✅ Module '{title}' added successfully!")
-
-                                # Simpan module ke session biar tampil tanpa reload manual
-                                if "modules_cache" not in st.session_state:
-                                    st.session_state.modules_cache = []
-                                st.session_state.modules_cache.append(response.data[0])
-
-                                # 🚀 Force reload modul terbaru dari Supabase
                                 st.session_state.refresh_modules = True
                                 st.rerun()
                             else:
-                                st.error("⚠️ Insert failed — no data returned from Supabase.")
-
+                                st.error("⚠️ Insert failed — no data returned.")
                         except Exception as e:
                             st.error(f"❌ Failed to add module: {e}")
 
-            # === Refresh otomatis setelah insert/delete ===
-            if st.session_state.get("refresh_modules"):
-                st.session_state.refresh_modules = False
-                st.rerun()
+        # === Refresh otomatis ===
+        if st.session_state.get("refresh_modules"):
+            st.session_state.refresh_modules = False
+            st.rerun()
 
 
 
@@ -1110,6 +1144,7 @@ def main():
 # jalankan aplikasi
 if __name__ == "__main__":
     main()
+
 
 
 
