@@ -704,10 +704,11 @@ def page_course_detail():
     # =====================================
     with tabs[3]:
         import streamlit.components.v1 as components
+        import re
 
         st.subheader("🧩 Assignments")
 
-        # === Load Assignments dari Supabase ===
+        # === Load Assignments ===
         try:
             asg_response = supabase.table("assignments").select("*").eq("course_id", cid).execute()
             asg = asg_response.data or []
@@ -715,40 +716,67 @@ def page_course_detail():
             st.error(f"❌ Failed to load assignments: {e}")
             asg = []
 
-        # === Tampilkan daftar assignment ===
+        # === Display Assignments ===
         if asg:
             for a in asg:
                 with st.expander(f"📄 {a['title']}"):
                     st.markdown(a.get("description", "No description provided."))
 
-                    # === Tampilkan embed worksheet / resource ===
+                    # === Smart Embed Handling ===
                     if a.get("embed_url"):
                         st.markdown("### 📎 Embedded Worksheet / Resource:")
-                        try:
-                            components.iframe(a["embed_url"], height=600, scrolling=True)
-                        except Exception as e:
-                            st.warning(f"⚠️ Could not load embed: {e}")
+                        embed_link = a["embed_url"].strip()
 
-                    # === Bagian student (upload tugas) ===
+                        # 🔹 Jika link dari Liveworksheet → tampilkan tombol redirect, bukan iframe
+                        if "liveworksheets.com" in embed_link:
+                            st.warning("⚠️ Liveworksheet cannot be embedded directly due to site restrictions.")
+                            st.markdown(
+                                f"""
+                                <div style='text-align:center;'>
+                                    <a href="{embed_link}" target="_blank" 
+                                       style='background:linear-gradient(90deg,#FF8C00,#FF4081);
+                                              color:white;
+                                              padding:10px 20px;
+                                              border-radius:8px;
+                                              text-decoration:none;
+                                              font-weight:600;'>
+                                       🔗 Open Liveworksheet
+                                    </a>
+                                </div>
+                                """,
+                                unsafe_allow_html=True
+                            )
+
+                        # 🔹 Kalau file HTML publik → tampilkan embed iframe langsung
+                        elif embed_link.endswith(".html"):
+                            try:
+                                components.iframe(embed_link, height=700, scrolling=True)
+                            except Exception as e:
+                                st.warning(f"⚠️ Could not load embedded HTML: {e}")
+
+                        # 🔹 Kalau link dari platform lain (YouTube, Google Form, dst)
+                        elif re.match(r"^https?://", embed_link):
+                            st.markdown(f"[🌐 Open Resource]({embed_link})")
+                        else:
+                            st.info("ℹ️ Invalid embed link provided.")
+
+                    # === Student submission ===
                     if user["role"] == "student":
                         st.markdown("### ✏️ Submit Assignment")
                         file = st.file_uploader("Upload your work (PDF, DOCX, ZIP, etc.)", key=f"up_{a['id']}")
                         if file:
                             st.success(f"✅ Submission received for '{a['title']}' (Simulated)")
 
-                    # === Bagian instructor (hapus assignment) ===
+                    # === Instructor delete ===
                     if user["role"] == "instructor":
                         if st.button(f"🗑️ Delete Assignment '{a['title']}'", key=f"del_asg_{a['id']}"):
-                            try:
-                                supabase.table("assignments").delete().eq("id", a["id"]).execute()
-                                st.success("✅ Assignment deleted!")
-                                st.rerun()
-                            except Exception as e:
-                                st.error(f"❌ Failed to delete assignment: {e}")
+                            supabase.table("assignments").delete().eq("id", a["id"]).execute()
+                            st.success("✅ Assignment deleted!")
+                            st.rerun()
         else:
             st.info("📭 No assignments available.")
 
-        # === Tambah assignment baru (instruktur) ===
+        # === Add new assignment (Instructor only) ===
         if user["role"] == "instructor":
             st.divider()
             st.markdown("### ➕ Add New Assignment")
@@ -757,10 +785,11 @@ def page_course_detail():
                 title = st.text_input("Assignment Title")
                 desc = st.text_area("Assignment Description", height=100)
                 embed_url = st.text_input(
-                    "Embed URL (Public HTML link — e.g., redirect file for Liveworksheet or external resource)"
+                    "Embed URL (Link to Liveworksheet, Google Form, or HTML resource)"
                 )
 
                 submit_asg = st.form_submit_button("💾 Add Assignment")
+
                 if submit_asg:
                     if not title.strip():
                         st.warning("⚠️ Please enter a title.")
@@ -777,6 +806,7 @@ def page_course_detail():
                             st.rerun()
                         except Exception as e:
                             st.error(f"❌ Failed to add assignment: {e}")
+
                             
     # =====================================
     # QUIZZES (FULL INTERACTIVE)
@@ -1026,6 +1056,7 @@ def main():
 # jalankan aplikasi
 if __name__ == "__main__":
     main()
+
 
 
 
