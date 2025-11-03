@@ -429,26 +429,26 @@ def page_course_detail():
 
     # --- Tabs ---
     tabs = st.tabs([
-    "📚 Overview",
-    "🕒 Attendance",
-    "📦 Learning Modules",
-    "📋 Assignments",
-    "🧠 Quizzes",
-    "📣 Announcements"
-])
+        "📚 Overview",
+        "🕒 Attendance",
+        "📦 Learning Modules",
+        "📋 Assignments",
+        "🧠 Quizzes",
+        "📣 Announcements"
+    ])
 
-# === Deteksi tab aktif dari session state ===
-active_tab = st.session_state.get("active_tab", "overview")
-
-# index tab sesuai urutan di atas
-tab_index = {
-    "overview": 0,
-    "attendance": 1,
-    "module": 2,
-    "assignment": 3,
-    "quiz": 4,
-    "announcement": 5
-}
+    # === Deteksi tab aktif dari session state ===
+    active_tab = st.session_state.get("active_tab", "overview")
+    
+    # index tab sesuai urutan di atas
+    tab_index = {
+        "overview": 0,
+        "attendance": 1,
+        "module": 2,
+        "assignment": 3,
+        "quiz": 4,
+        "announcement": 5
+    }
 
 
     # =====================================
@@ -1485,6 +1485,7 @@ def main():
 # === Panggil fungsi utama ===
 if __name__ == "__main__":
     main()
+
 
 
 
