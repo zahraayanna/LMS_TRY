@@ -423,10 +423,8 @@ def page_courses():
             button_key = f"open_course_{cid}_{uuid.uuid4().hex[:6]}"
 
             # === Tombol Open Course dengan rerun aman ===
-            if st.button("➡️ Open Course", key=button_key):
-                st.session_state.current_course = cid
-                st.session_state.last_course = cid
-                st.session_state.page = "course_detail"
+            if st.button("➡️ Open Course", key=f"open_{cid}_{uuid.uuid4().hex[:6]}"):
+                navigate_to("course_detail", current_course=cid, last_course=cid)
 
                 # 🔥 Trik anti “tidak berpindah”
                 placeholder = st.empty()
@@ -1350,6 +1348,7 @@ def page_account():
 
 if __name__ == "__main__":
     main()
+
 
 
 
