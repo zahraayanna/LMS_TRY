@@ -148,6 +148,8 @@ def page_login():
                 st.session_state.user = user
                 st.session_state.page = "dashboard"  # ⬅ pindah halaman otomatis
                 st.success(f"Selamat datang, {user['name']} 👋")
+                st.session_state.user = {"id": user_data["id"], "name": user_data["name"], "role": user_data["role"]}
+                st.session_state.page = "dashboard"
                 st.rerun()
             else:
                 st.error("❌ Email atau password salah.")
@@ -1205,6 +1207,12 @@ def page_account():
 # === ROUTING ===
 # ======================
 def main():
+    # --- Pastikan session tidak hilang ---
+    if "user" not in st.session_state or st.session_state.user is None:
+        st.session_state.page = "login"
+        st.session_state.user = None
+        st.rerun()
+
     # Navigasi balik setelah keluar course
     if st.session_state.get("_nav_back"):
         del st.session_state["_nav_back"]
@@ -1261,6 +1269,7 @@ def main():
 # jalankan aplikasi
 if __name__ == "__main__":
     main()
+
 
 
 
