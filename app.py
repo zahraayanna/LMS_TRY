@@ -1,11 +1,11 @@
 import streamlit as st
-st.set_page_config(page_title="ThinkVerse LMS", page_icon="🎓", layout="wide")
-
 import uuid
-from supabase import create_client
-import time
 from datetime import datetime
-import json
+from supabase import create_client, Client
+import time
+import markdown
+
+st.set_page_config(page_title="ThinkVerse LMS", layout="wide")
 
 # =========================
 # === KONFIGURASI AWAL ===
@@ -1207,11 +1207,20 @@ def page_account():
 # === ROUTING ===
 # ======================
 def main():
-    # --- Pastikan session tidak hilang ---
-    if "user" not in st.session_state or st.session_state.user is None:
+    # --- Pastikan session state sudah diinisialisasi ---
+    if "initialized" not in st.session_state:
+        st.session_state.initialized = True
         st.session_state.page = "login"
         st.session_state.user = None
-        st.rerun()
+        st.session_state.refresh_modules = False
+        st.session_state.show_edit_form = False
+        st.session_state.current_course = None
+        st.session_state.edit_module_id = None
+        st.session_state.edit_module_data = None
+        
+    if "user" not in st.session_state or st.session_state.user is None:
+        if st.session_state.page != "login":
+            st.session_state.page = "login"
 
     # Navigasi balik setelah keluar course
     if st.session_state.get("_nav_back"):
@@ -1269,6 +1278,7 @@ def main():
 # jalankan aplikasi
 if __name__ == "__main__":
     main()
+
 
 
 
