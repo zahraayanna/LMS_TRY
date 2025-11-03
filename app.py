@@ -628,18 +628,39 @@ def page_course_detail():
                         f"<h2 style='color:#4338CA; font-weight:700; font-size:26px; text-shadow:1px 1px 2px #cfcfcf;'>{m['title']}</h2>",
                         unsafe_allow_html=True
                     )
-
-                    # --- Render markdown + MathJax ---
+                    
+                    # === Render Markdown + MathJax + Custom Embed Support ===
                     raw_content = m.get("content", "No content available.")
-                    rendered_md = markdown.markdown(raw_content, extensions=["fenced_code", "tables", "md_in_html"])
+                    
+                    # 1️⃣ Cari semua tag embed di dalam konten
+                    import re
+                    embed_pattern = r"<embed\s+src=\"([^\"]+)\"(?:\s+width=\"(\d+)\"|\s*)?(?:\s+height=\"(\d+)\"|\s*)?>"
+                    embeds = re.findall(embed_pattern, raw_content)
+                    
+                    # 2️⃣ Ubah <embed ...> menjadi HTML iframe valid
+                    def replace_embed(match):
+                        src = match.group(1)
+                        width = match.group(2) or "560"
+                        height = match.group(3) or "315"
+                        return f'<div style="text-align:center; margin:16px 0;"><iframe src="{src}" width="{width}" height="{height}" frameborder="0" allowfullscreen></iframe></div>'
+                    
+                    content_with_embeds = re.sub(embed_pattern, replace_embed, raw_content)
+                    
+                    # 3️⃣ Render Markdown normal + MathJax
+                    rendered_md = markdown.markdown(
+                        content_with_embeds,
+                        extensions=["fenced_code", "tables", "md_in_html"]
+                    )
+                    
                     html_content = f"""
-                        <div style="font-size:16px; line-height:1.7; text-align:justify;">
+                    <div style="font-size:16px; line-height:1.7; text-align:justify;">
                         <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
                         <script id="MathJax-script" async
                             src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
                         <article class="markdown-body">{rendered_md}</article>
                     </div>
                     """
+                    
                     components.html(html_content, height=600, scrolling=True)
 
                     if m.get("video_url"):
@@ -1399,6 +1420,7 @@ def main():
 # jalankan aplikasi
 if __name__ == "__main__":
     main()
+
 
 
 
