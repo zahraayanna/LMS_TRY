@@ -1207,6 +1207,8 @@ def page_account():
 # === ROUTING ===
 # ======================
 def main():
+init_session_state()
+
     # --- Pastikan session state sudah diinisialisasi ---
     if "initialized" not in st.session_state:
         st.session_state.initialized = True
@@ -1232,6 +1234,20 @@ def main():
         del st.session_state["_nav_trigger"]
         return main()  # panggil ulang fungsi main() manual, rerender natural
 
+    def init_session_state():
+        defaults = {
+            "initialized": True,
+            "page": "login",
+            "user": None,
+            "refresh_modules": False,
+            "show_edit_form": False,
+            "current_course": None,
+            "edit_module_id": None,
+            "edit_module_data": None,
+        }
+        for key, val in defaults.items():
+            if key not in st.session_state:
+                st.session_state[key] = val
 
     # === INISIALISASI SESSION STATE ===
     if "page" not in st.session_state:
@@ -1278,6 +1294,7 @@ def main():
 # jalankan aplikasi
 if __name__ == "__main__":
     main()
+
 
 
 
