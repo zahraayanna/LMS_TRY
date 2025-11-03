@@ -933,32 +933,93 @@ def page_course_detail():
     # ASSIGNMENTS
     # =====================================
     with tabs[3]:
+        import re
+        import streamlit.components.v1 as components
+        from datetime import datetime
+    
         st.subheader("📋 Assignments")
     
-        assignments = supabase.table("assignments").select("*").eq("course_id", cid).execute().data
-        selected_asg_id = st.session_state.get("selected_assignment_id")
+        # === Load assignments ===
+        try:
+            assignments = (
+                supabase.table("assignments").select("*").eq("course_id", cid).execute().data or []
+            )
+            assignments = [a for a in assignments if a.get("id")]
+        except Exception as e:
+            st.error(f"❌ Failed to load assignments: {e}")
+            assignments = []
     
+        # === Display all assignments ===
         if assignments:
             for a in assignments:
-                expanded = selected_asg_id == a["id"]  # otomatis buka assignment yg diklik
-                with st.expander(f"📄 {a['title']}", expanded=expanded):
-                    if expanded:
-                        # reset biar gak auto expand terus
-                        st.session_state.selected_assignment_id = None
+                with st.expander(f"📄 {a['title']}"):
+                    st.markdown(f"**Description:**\n\n{a.get('description', '_No description provided._')}")
     
-                    st.markdown(f"**Description:**\n\n{a.get('description', '_No description_')}")
+                    # === EMBEDDED RESOURCES ===
+                    embed_links = []
     
-                    if a.get("file_url"):
-                        st.markdown(f"[📎 Download File]({a['file_url']})")
+                    # handle dua kolom embed (baru)
+                    if a.get("embed_url_1"):
+                        embed_links.append(a["embed_url_1"].strip())
+                    if a.get("embed_url_2"):
+                        embed_links.append(a["embed_url_2"].strip())
     
-                    if user["role"] == "student":
-                        uploaded = st.file_uploader("Upload your work:", key=f"upload_{a['id']}")
-                        if uploaded and st.button("📤 Submit", key=f"submit_{a['id']}"):
+                    # fallback kalau masih pakai kolom lama (gabungan)
+                    if not embed_links and a.get("embed_url"):
+                        embed_links = [url.strip() for url in a["embed_url"].split("|") if url.strip()]
+    
+                    # tampilkan masing-masing embed
+                    for i, link in enumerate(embed_links, 1):
+                        st.markdown(f"### 🔗 Embedded Resource {i}:")
+    
+                        # 1️⃣ PhET Simulation
+                        if "phet.colorado.edu" in link:
+                            st.success("🧪 Embedded PhET Simulation:")
+                            iframe_html = f"""
+                            <iframe src="{link}" width="800" height="600"
+                                    allowfullscreen style="border:1px solid #ccc; border-radius:10px;">
+                            </iframe>
+                            """
+                            components.html(iframe_html, height=620)
+    
+                        # 2️⃣ Liveworksheet
+                        elif "liveworksheets.com" in link:
+                            st.success("🧾 Embedded Liveworksheet:")
                             try:
-                                file_bytes = uploaded.read()
-                                file_path = f"assignments/{user['id']}_{int(datetime.now().timestamp())}_{uploaded.name}"
+                                iframe_html = f"""
+                                <iframe src="{link}" width="100%" height="800"
+                                        style="border:2px solid #ddd; border-radius:10px;"
+                                        allowfullscreen></iframe>
+                                """
+                                components.html(iframe_html, height=820, scrolling=True)
+                            except Exception as e:
+                                st.warning(f"⚠️ Could not embed Liveworksheet: {e}")
+    
+                        # 3️⃣ Public HTML
+                        elif link.endswith(".html"):
+                            st.success("🧩 Embedded HTML Content:")
+                            try:
+                                components.iframe(link, height=700, scrolling=True)
+                            except Exception as e:
+                                st.warning(f"⚠️ Could not load HTML: {e}")
+    
+                        # 4️⃣ Default links (YouTube, Form, Drive)
+                        elif re.match(r"^https?://", link):
+                            st.markdown(f"[🌐 Open Resource {i}]({link})")
+                        else:
+                            st.info("ℹ️ Invalid embed link provided.")
+    
+                    # === Student submission ===
+                    if user["role"] == "student":
+                        st.markdown("### ✏️ Submit Assignment")
+                        file = st.file_uploader("Upload your work (PDF, DOCX, ZIP, etc.)", key=f"up_{a['id']}")
+                        if file and st.button("📤 Submit", key=f"submit_{a['id']}"):
+                            try:
+                                file_bytes = file.read()
+                                file_path = f"assignments/{user['id']}_{int(datetime.now().timestamp())}_{file.name}"
                                 supabase.storage.from_("thinkverse_uploads").upload(file_path, file_bytes)
                                 file_url = f"{SUPABASE_URL}/storage/v1/object/public/thinkverse_uploads/{file_path}"
+    
                                 supabase.table("assignment_submissions").insert({
                                     "assignment_id": a["id"],
                                     "user_id": user["id"],
@@ -968,108 +1029,84 @@ def page_course_detail():
                                 st.success("✅ Assignment submitted successfully!")
                             except Exception as e:
                                 st.error(f"❌ Failed to upload: {e}")
-        else:
-            st.info("No assignments yet.")
-
-
-        # === Load Assignments ===
-        try:
-            asg_response = supabase.table("assignments").select("*").eq("course_id", cid).execute()
-            asg = asg_response.data or []
-        except Exception as e:
-            st.error(f"❌ Failed to load assignments: {e}")
-            asg = []
-
-        # === Display Assignments ===
-        if asg:
-            for a in asg:
-                with st.expander(f"📄 {a['title']}"):
-                    st.markdown(a.get("description", "No description provided."))
-
-                    # === Smart Embed Handling ===
-                    if a.get("embed_url"):
-                        st.markdown("### 📎 Embedded Worksheet / Resource:")
-                        embed_link = a["embed_url"].strip()
-
-                        # 🔹 Jika link dari Liveworksheet → tampilkan tombol redirect, bukan iframe
-                        if "liveworksheets.com" in embed_link:
-                            st.warning("⚠️ Liveworksheet cannot be embedded directly due to site restrictions.")
-                            st.markdown(
-                                f"""
-                                <div style='text-align:center;'>
-                                    <a href="{embed_link}" target="_blank" 
-                                       style='background:linear-gradient(90deg,#FF8C00,#FF4081);
-                                              color:white;
-                                              padding:10px 20px;
-                                              border-radius:8px;
-                                              text-decoration:none;
-                                              font-weight:600;'>
-                                       🔗 Open Liveworksheet
-                                    </a>
-                                </div>
-                                """,
-                                unsafe_allow_html=True
-                            )
-
-                        # 🔹 Kalau file HTML publik → tampilkan embed iframe langsung
-                        elif embed_link.endswith(".html"):
-                            try:
-                                components.iframe(embed_link, height=700, scrolling=True)
-                            except Exception as e:
-                                st.warning(f"⚠️ Could not load embedded HTML: {e}")
-
-                        # 🔹 Kalau link dari platform lain (YouTube, Google Form, dst)
-                        elif re.match(r"^https?://", embed_link):
-                            st.markdown(f"[🌐 Open Resource]({embed_link})")
-                        else:
-                            st.info("ℹ️ Invalid embed link provided.")
-
-                    # === Student submission ===
-                    if user["role"] == "student":
-                        st.markdown("### ✏️ Submit Assignment")
-                        file = st.file_uploader("Upload your work (PDF, DOCX, ZIP, etc.)", key=f"up_{a['id']}")
-                        if file:
-                            st.success(f"✅ Submission received for '{a['title']}' (Simulated)")
-
-                    # === Instructor delete ===
+    
+                    # === Instructor Controls ===
                     if user["role"] == "instructor":
-                        if st.button(f"🗑️ Delete Assignment '{a['title']}'", key=f"del_asg_{a['id']}"):
-                            supabase.table("assignments").delete().eq("id", a["id"]).execute()
-                            st.success("✅ Assignment deleted!")
-                            st.rerun()
+                        st.divider()
+                        col1, col2 = st.columns(2)
+    
+                        # ✏️ Edit assignment
+                        with col1:
+                            with st.form(f"edit_asg_{a['id']}"):
+                                st.markdown("### ✏️ Edit Assignment")
+                                new_title = st.text_input("Title", a["title"])
+                                new_desc = st.text_area("Description", a.get("description", ""), height=100)
+                                new_url1 = st.text_input("Embed URL 1 (PhET / Liveworksheet / HTML)", a.get("embed_url_1", ""))
+                                new_url2 = st.text_input("Embed URL 2 (Optional second resource)", a.get("embed_url_2", ""))
+                                save = st.form_submit_button("💾 Save Changes")
+                                if save:
+                                    try:
+                                        supabase.table("assignments").update({
+                                            "title": new_title.strip(),
+                                            "description": new_desc.strip(),
+                                            "embed_url_1": new_url1.strip() if new_url1 else None,
+                                            "embed_url_2": new_url2.strip() if new_url2 else None,
+                                        }).eq("id", a["id"]).execute()
+                                        st.success("✅ Assignment updated successfully!")
+                                        st.rerun()
+                                    except Exception as e:
+                                        st.error(f"❌ Failed to update: {e}")
+    
+                        # 🗑️ Delete assignment
+                        with col2:
+                            if st.button(
+                                f"🗑️ Delete Assignment '{a['title']}'", 
+                                key=f"del_asg_{a['id']}", type="primary"
+                            ):
+                                try:
+                                    supabase.table("assignments").delete().eq("id", a["id"]).execute()
+                                    st.success("✅ Assignment deleted!")
+                                    st.rerun()
+                                except Exception as e:
+                                    st.error(f"❌ Failed to delete: {e}")
+    
         else:
             st.info("📭 No assignments available.")
-
+    
         # === Add new assignment (Instructor only) ===
         if user["role"] == "instructor":
             st.divider()
             st.markdown("### ➕ Add New Assignment")
-
+    
             with st.form("add_assignment", clear_on_submit=True):
                 title = st.text_input("Assignment Title")
                 desc = st.text_area("Assignment Description", height=100)
-                embed_url = st.text_input(
-                    "Embed URL (Link to Liveworksheet, Google Form, or HTML resource)"
-                )
-
+                embed_url_1 = st.text_input("Embed URL 1 (PhET / Liveworksheet / HTML)")
+                embed_url_2 = st.text_input("Embed URL 2 (Optional second resource)")
+    
                 submit_asg = st.form_submit_button("💾 Add Assignment")
-
                 if submit_asg:
                     if not title.strip():
                         st.warning("⚠️ Please enter a title.")
+                    elif st.session_state.get("saving_assignment", False):
+                        st.info("⏳ Please wait, still saving previous assignment...")
                     else:
                         try:
+                            st.session_state.saving_assignment = True
                             supabase.table("assignments").insert({
                                 "course_id": cid,
                                 "title": title.strip(),
                                 "description": desc.strip() if desc else "",
-                                "embed_url": embed_url.strip() if embed_url else None
+                                "embed_url_1": embed_url_1.strip() if embed_url_1 else None,
+                                "embed_url_2": embed_url_2.strip() if embed_url_2 else None,
                             }).execute()
-
                             st.success(f"✅ Assignment '{title}' added successfully!")
+                            st.session_state.saving_assignment = False
                             st.rerun()
                         except Exception as e:
                             st.error(f"❌ Failed to add assignment: {e}")
+                            st.session_state.saving_assignment = False
+
 
                             
     # =====================================
@@ -1505,6 +1542,7 @@ def main():
 # === Panggil fungsi utama ===
 if __name__ == "__main__":
     main()
+
 
 
 
