@@ -193,11 +193,22 @@ def page_login():
 
         if ok:
             user = login(email, pw)
+
             if user:
-                st.session_state.user = user
-                st.session_state.page = "dashboard"  # ⬅ pindah halaman otomatis
-                st.success(f"Selamat datang, {user['name']} 👋")
-                st.session_state.user = {"id": user_data["id"], "name": user_data["name"], "role": user_data["role"]}
+                # Debug dulu (lihat struktur data dari fungsi login)
+                st.write("🧩 Debug - Data user dari login():", user)
+
+                # Gunakan kunci yang benar
+                st.session_state.user = {
+                    "id": user.get("id") or user.get("user_id") or user.get("uid"),
+                    "name": user.get("name"),
+                    "role": user.get("role"),
+                    "email": user.get("email"),
+                }
+
+                st.success(f"Selamat datang, {st.session_state.user['name']} 👋")
+
+                # Arahkan ke dashboard
                 st.session_state.page = "dashboard"
                 st.rerun()
             else:
@@ -229,6 +240,7 @@ def page_login():
                 st.error("Password tidak sama.")
             elif reset_password(email_fp, new_pw):
                 st.success("✅ Password berhasil direset! Silakan login ulang.")
+
 
 # ======================
 # === DASHBOARD ===
@@ -1255,4 +1267,5 @@ def page_account():
 
 if __name__ == "__main__":
     main()
+
 
