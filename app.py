@@ -711,18 +711,22 @@ def page_course_detail():
                     # === Tombol selesai ===
                     if user["role"] == "student" and status != "completed":
                         if st.button(f"✅ Mark as Completed", key=f"done_{m['id']}"):
-                            supabase.table("module_progress").upsert(
-                                {
-                                    "user_id": user["id"],
-                                    "module_id": m["id"],
-                                    "course_id": cid,
-                                    "status": "completed",
-                                    "updated_at": datetime.now().isoformat(),
-                                },
-                                on_conflict="user_id,module_id",
-                            ).execute()
-                            st.success("🎯 Module marked as completed!")
-                            st.rerun()
+                            try:
+                                supabase.table("module_progress").upsert(
+                                    {
+                                        "user_id": user["id"],
+                                        "module_id": m["id"],
+                                        "course_id": int(cid),
+                                        "status": "completed",
+                                        "updated_at": datetime.now().isoformat(),
+                                    },
+                                    on_conflict=["user_id", "module_id"]
+                                ).execute()
+                                st.success("🎯 Module marked as completed!")
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"❌ Failed to update progress: {e}")
+
     
                     # === Guru bisa edit & hapus ===
                     if user["role"] == "instructor":
@@ -1334,6 +1338,7 @@ def main():
 # jalankan aplikasi
 if __name__ == "__main__":
     main()
+
 
 
 
