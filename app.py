@@ -1206,6 +1206,32 @@ def page_account():
 # ======================
 # === ROUTING ===
 # ======================
+import streamlit as st
+import time
+import uuid
+from datetime import datetime
+
+# --- Konfigurasi halaman Streamlit ---
+st.set_page_config(page_title="ThinkVerse LMS", layout="wide")
+
+# === Inisialisasi Session State Aman ===
+def init_session_state():
+    defaults = {
+        "initialized": True,
+        "page": "login",
+        "user": None,
+        "refresh_modules": False,
+        "show_edit_form": False,
+        "current_course": None,
+        "edit_module_id": None,
+        "edit_module_data": None,
+        "selected_quiz_id": None,
+        "selected_assignment_id": None,
+    }
+    for key, val in defaults.items():
+        if key not in st.session_state:
+            st.session_state[key] = val
+
 def main():
     init_session_state()
 
@@ -1294,6 +1320,7 @@ def main():
 # jalankan aplikasi
 if __name__ == "__main__":
     main()
+
 
 
 
