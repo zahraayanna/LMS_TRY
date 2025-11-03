@@ -55,15 +55,6 @@ def main():
 
 
 # =========================
-# ⬇️ SEMUA FUNGSI HALAMAN (page_login, page_dashboard, dll)
-# =========================
-def page_login():
-    ...
-def page_dashboard():
-    ...
-
-
-# =========================
 # === KONFIGURASI AWAL ===
 # =========================
 
@@ -277,9 +268,12 @@ def page_courses():
     import random, string
     st.title("🎓 My Courses")
 
+    # === AMAN: cek session user ===
     user = st.session_state.get("user")
     if not user:
-        st.warning("Please log in to continue.")
+        st.warning("⚠️ Please log in to continue.")
+        st.session_state.page = "login"
+        st.rerun()
         return
 
     # === INSTRUCTOR ONLY SECTION ===
@@ -298,29 +292,35 @@ def page_courses():
             if not new_code.strip() or not new_title.strip():
                 st.warning("Course code and title cannot be empty.")
             else:
-                existing = supabase.table("courses").select("*") \
-                    .eq("code", new_code.strip()) \
-                    .eq("instructor_email", user["email"]) \
-                    .execute().data
+                existing = (
+                    supabase.table("courses")
+                    .select("*")
+                    .eq("code", new_code.strip())
+                    .eq("instructor_email", user["email"])
+                    .execute()
+                    .data
+                )
 
                 if existing:
                     st.warning("⚠️ You already have a course with this code!")
                 else:
                     if not access_code.strip():
-                        access_code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
+                        access_code = "".join(random.choices(string.ascii_uppercase + string.digits, k=6))
 
                     instr_row = supabase.table("users").select("id").eq("email", user["email"]).execute().data
                     instructor_id = instr_row[0]["id"] if instr_row else None
 
-                    supabase.table("courses").insert({
-                        "code": new_code.strip(),
-                        "title": new_title.strip(),
-                        "description": new_desc.strip(),
-                        "youtube_url": yt_url or None,
-                        "access_code": access_code,
-                        "instructor_id": instructor_id,
-                        "instructor_email": user["email"]
-                    }).execute()
+                    supabase.table("courses").insert(
+                        {
+                            "code": new_code.strip(),
+                            "title": new_title.strip(),
+                            "description": new_desc.strip(),
+                            "youtube_url": yt_url or None,
+                            "access_code": access_code,
+                            "instructor_id": instructor_id,
+                            "instructor_email": user["email"],
+                        }
+                    ).execute()
 
                     st.success(f"✅ Course '{new_title}' created successfully! Access code: `{access_code}`")
                     st.rerun()
@@ -329,7 +329,6 @@ def page_courses():
     else:
         st.subheader("📥 Join Course with Access Code")
 
-        # siswa wajib masukin kode akses
         with st.form("join_form", clear_on_submit=True):
             join_code = st.text_input("Enter Course Access Code", placeholder="e.g. X7J9Q2")
             join_submit = st.form_submit_button("Join")
@@ -338,24 +337,26 @@ def page_courses():
             if not join_code.strip():
                 st.warning("Please enter a course access code.")
             else:
-                # cek apakah access code valid
                 course = supabase.table("courses").select("*").eq("access_code", join_code.strip()).execute().data
                 if not course:
                     st.error("❌ Invalid access code. Please check with your instructor.")
                 else:
                     course_id = course[0]["id"]
-                    enrolled = supabase.table("enrollments").select("*") \
-                        .eq("user_id", user["id"]) \
-                        .eq("course_id", course_id).execute().data
+                    enrolled = (
+                        supabase.table("enrollments")
+                        .select("*")
+                        .eq("user_id", user["id"])
+                        .eq("course_id", course_id)
+                        .execute()
+                        .data
+                    )
 
                     if enrolled:
                         st.info("📚 You are already enrolled in this course.")
                     else:
-                        supabase.table("enrollments").insert({
-                            "user_id": user["id"],
-                            "course_id": course_id,
-                            "role": "student"
-                        }).execute()
+                        supabase.table("enrollments").insert(
+                            {"user_id": user["id"], "course_id": course_id, "role": "student"}
+                        ).execute()
                         st.success(f"✅ Successfully joined the course '{course[0]['title']}'!")
                         st.rerun()
 
@@ -364,14 +365,13 @@ def page_courses():
 
     # === LOAD COURSES ===
     if user["role"] == "instructor":
-        # tampilkan semua course yang dibuat instruktur
         courses = supabase.table("courses").select("*").eq("instructor_email", user["email"]).execute().data
     else:
-        # siswa cuma bisa lihat course yang SUDAH dia join
         enrolled = supabase.table("enrollments").select("course_id").eq("user_id", user["id"]).execute().data
         course_ids = [c["course_id"] for c in enrolled]
         courses = supabase.table("courses").select("*").in_("id", course_ids).execute().data if course_ids else []
 
+    # === HANDLE EMPTY COURSE LIST ===
     if not courses:
         if user["role"] == "instructor":
             st.info("📭 You haven't created any courses yet.")
@@ -380,33 +380,36 @@ def page_courses():
         return
 
     # === DISPLAY COURSE LIST ===
-    for c in courses:
+    for course in courses:
+        cid = course.get("id") or course.get("course_id") or course.get("cid")
+
+        if not cid:
+            st.warning(f"⚠️ Course ID not found for {course.get('title', 'Unknown Course')}.")
+            continue
+
         with st.container():
-            st.markdown(f"### 🎓 {c['title']}")
-            st.caption(c.get("description", "No description provided."))
-            st.markdown(f"**Course Code:** `{c['code']}`")
+            st.markdown(f"### 🎓 {course.get('title', 'Untitled Course')}")
+            st.caption(course.get("description", "No description provided."))
+            st.markdown(f"**Course Code:** `{course.get('code', '-')}`")
 
             if user["role"] == "instructor":
-                st.markdown(f"**Access Code:** `{c.get('access_code', '-')}`")
+                st.markdown(f"**Access Code:** `{course.get('access_code', '-')}`")
 
-            unique_key = f"open_{c['id']}_{uuid.uuid4().hex[:6]}"
-           
+            # === Unik key tombol supaya gak bentrok ===
+            button_key = f"open_course_{cid}_{uuid.uuid4().hex[:6]}"
 
-            if st.button("Open Course", key=f"open_{cid}"):
+            if st.button("➡️ Open Course", key=button_key):
                 if "user" in st.session_state and st.session_state.user:
                     st.session_state.current_course = cid
                     st.session_state.last_course = cid
                     st.session_state.page = "course_detail"
                     st.rerun()
                 else:
-                    st.warning("⚠️ Sesi login berakhir. Silakan login kembali.")
+                    st.warning("⚠️ Session expired. Please log in again.")
                     st.session_state.page = "login"
                     st.rerun()
 
-                # 🚀 rerender langsung halaman detail
-                st.switch_page("app.py")  # pastikan nama file Streamlit utama kamu sesuai
-
-            st.markdown("---")
+        st.markdown("---")
 
 # ======================
 # === COURSE DETAIL ===
@@ -1312,6 +1315,7 @@ def page_account():
 
 if __name__ == "__main__":
     main()
+
 
 
 
