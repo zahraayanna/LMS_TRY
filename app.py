@@ -1211,10 +1211,10 @@ import time
 import uuid
 from datetime import datetime
 
-# --- Konfigurasi halaman Streamlit ---
+# --- 🧱 Konfigurasi halaman Streamlit (HARUS paling pertama & hanya sekali) ---
 st.set_page_config(page_title="ThinkVerse LMS", layout="wide")
 
-# === Inisialisasi Session State Aman ===
+# === ✅ Inisialisasi Session State Aman ===
 def init_session_state():
     defaults = {
         "initialized": True,
@@ -1227,67 +1227,26 @@ def init_session_state():
         "edit_module_data": None,
         "selected_quiz_id": None,
         "selected_assignment_id": None,
+        "last_course": None,
     }
     for key, val in defaults.items():
         if key not in st.session_state:
             st.session_state[key] = val
 
+
+# === 🚀 MAIN APP ===
 def main():
+    # --- Pastikan session state sudah siap ---
     init_session_state()
 
-    # --- Pastikan session state sudah diinisialisasi ---
-    if "initialized" not in st.session_state:
-        st.session_state.initialized = True
-        st.session_state.page = "login"
-        st.session_state.user = None
-        st.session_state.refresh_modules = False
-        st.session_state.show_edit_form = False
-        st.session_state.current_course = None
-        st.session_state.edit_module_id = None
-        st.session_state.edit_module_data = None
-        
+    # --- Pastikan user login sebelum masuk ke halaman lain ---
     if "user" not in st.session_state or st.session_state.user is None:
         if st.session_state.page != "login":
             st.session_state.page = "login"
 
-    # Navigasi balik setelah keluar course
-    if st.session_state.get("_nav_back"):
-        del st.session_state["_nav_back"]
-        return main()  # rerender penuh, sidebar muncul lagi
-    
-    # Handle soft navigation without experimental rerun
-    if st.session_state.get("_nav_trigger"):
-        del st.session_state["_nav_trigger"]
-        return main()  # panggil ulang fungsi main() manual, rerender natural
-
-    def init_session_state():
-        defaults = {
-            "initialized": True,
-            "page": "login",
-            "user": None,
-            "refresh_modules": False,
-            "show_edit_form": False,
-            "current_course": None,
-            "edit_module_id": None,
-            "edit_module_data": None,
-        }
-        for key, val in defaults.items():
-            if key not in st.session_state:
-                st.session_state[key] = val
-
-    # === INISIALISASI SESSION STATE ===
-    if "page" not in st.session_state:
-        st.session_state.page = "login"
-    if "user" not in st.session_state:
-        st.session_state.user = None
-    if "current_course" not in st.session_state:
-        st.session_state.current_course = None
-    if "last_course" not in st.session_state:
-        st.session_state.last_course = None
-
+    # --- Router halaman ---
     page = st.session_state.page
 
-    # === ROUTER HALAMAN ===
     if page == "login":
         page_login()
 
@@ -1298,12 +1257,13 @@ def main():
         page_courses()
 
     elif page == "course_detail":
-        # Pastikan course tetap tersimpan
+        # Pastikan course tersimpan
         if st.session_state.get("current_course"):
             page_course_detail()
         elif st.session_state.get("last_course"):
             st.session_state.current_course = st.session_state.last_course
-            raise st.script_runner.RerunException(st.script_request_queue.RerunData(None))
+            st.session_state.page = "course_detail"
+            st.rerun()
         else:
             st.warning("⚠️ No course selected. Please return to the Courses page.")
             st.session_state.page = "courses"
@@ -1317,9 +1277,12 @@ def main():
         st.session_state.page = "login"
         st.rerun()
 
-# jalankan aplikasi
+
+# === Jalankan aplikasi utama ===
 if __name__ == "__main__":
     main()
+
+
 
 
 
