@@ -1127,7 +1127,9 @@ def page_course_detail():
     
                     # === Edit Quiz (title + description) ===
                     if user["role"] == "instructor":
-                        with st.expander(f"✏️ Edit Quiz '{q['title']}'", expanded=False):
+                        st.divider()
+                        with st.container():
+                            st.markdown("#### ✏️ Edit This Quiz")
                             with st.form(f"edit_quiz_{q['id']}"):
                                 new_title = st.text_input("Quiz Title", q["title"])
                                 new_desc = st.text_area("Quiz Description (Markdown/LaTeX allowed)", q.get("description", ""))
@@ -1136,7 +1138,6 @@ def page_course_detail():
                                     st.markdown("---")
                                     st.markdown("#### 📖 Preview:")
                                     st.markdown(new_desc, unsafe_allow_html=True)
-    
                                 save_edit = st.form_submit_button("💾 Save Changes")
                                 if save_edit:
                                     supabase.table("quizzes").update(
@@ -1163,7 +1164,8 @@ def page_course_detail():
     
                             # === Edit Question ===
                             if user["role"] == "instructor":
-                                with st.expander(f"📝 Edit Question {i}", expanded=False):
+                                with st.container():
+                                    st.markdown(f"#### 📝 Edit Question {i}")
                                     with st.form(f"edit_q_{qs['id']}"):
                                         new_q_text = st.text_area("Question Text", qs["question"])
                                         if qs["type"] == "multiple_choice":
@@ -1227,6 +1229,7 @@ def page_course_detail():
     
                     # === Delete entire quiz ===
                     if user["role"] == "instructor":
+                        st.divider()
                         if st.button(f"🗑️ Delete Quiz '{q['title']}'", key=f"del_quiz_{q['id']}"):
                             supabase.table("quiz_questions").delete().eq("quiz_id", q["id"]).execute()
                             supabase.table("quizzes").delete().eq("id", q["id"]).execute()
@@ -1235,7 +1238,7 @@ def page_course_detail():
         else:
             st.info("No quizzes yet.")
     
-        # === Create a new quiz ===
+        # === Create new quiz ===
         if user["role"] == "instructor":
             with st.form("add_quiz"):
                 title = st.text_input("Quiz Title")
@@ -1248,7 +1251,7 @@ def page_course_detail():
                     st.success("✅ Quiz created successfully!")
                     st.rerun()
     
-        # === Add Question to Quiz ===
+        # === Add question ===
         if user["role"] == "instructor" and quizzes:
             st.markdown("### ➕ Add Question to Quiz (Rich Version)")
             quiz_list = {q["title"]: q["id"] for q in quizzes}
@@ -1309,7 +1312,6 @@ def page_course_detail():
                             st.rerun()
                         except Exception as e:
                             st.error(f"❌ Failed to add question: {e}")
-    
                 else:
                     st.markdown("#### ✏️ Short Answer Question")
                     correct_ans = st.text_input("Correct Answer (text or equation)")
@@ -1327,6 +1329,7 @@ def page_course_detail():
                             st.rerun()
                         except Exception as e:
                             st.error(f"❌ Failed to add question: {e}")
+
 
 
 
@@ -1502,6 +1505,7 @@ def main():
 # === Panggil fungsi utama ===
 if __name__ == "__main__":
     main()
+
 
 
 
