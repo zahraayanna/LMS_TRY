@@ -407,16 +407,32 @@ def page_courses():
             # === Unik key tombol supaya gak bentrok ===
             button_key = f"open_course_{cid}_{uuid.uuid4().hex[:6]}"
 
+            # === Tombol Open Course dengan rerun aman ===
             if st.button("➡️ Open Course", key=button_key):
-                if "user" in st.session_state and st.session_state.user:
-                    st.session_state.current_course = cid
-                    st.session_state.last_course = cid
-                    st.session_state.page = "course_detail"
-                    st.rerun()
-                else:
-                    st.warning("⚠️ Session expired. Please log in again.")
-                    st.session_state.page = "login"
-                    st.rerun()
+                st.session_state.current_course = cid
+                st.session_state.last_course = cid
+                st.session_state.page = "course_detail"
+
+                # 🔥 Trik anti “tidak berpindah”
+                placeholder = st.empty()
+                placeholder.info("⏳ Opening course, please wait...")
+                time.sleep(0.3)
+                st.experimental_rerun()  # paksa Streamlit rerun seluruh script
+
+
+                # === Unik key tombol supaya gak bentrok ===
+                button_key = f"open_course_{cid}_{uuid.uuid4().hex[:6]}"
+
+                if st.button("➡️ Open Course", key=button_key):
+                    if "user" in st.session_state and st.session_state.user:
+                        st.session_state.current_course = cid
+                        st.session_state.last_course = cid
+                        st.session_state.page = "course_detail"
+                        st.rerun()
+                    else:
+                        st.warning("⚠️ Session expired. Please log in again.")
+                        st.session_state.page = "login"
+                        st.rerun()
 
         st.markdown("---")
 
@@ -1336,6 +1352,7 @@ def page_account():
 
 if __name__ == "__main__":
     main()
+
 
 
 
