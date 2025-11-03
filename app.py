@@ -712,20 +712,38 @@ def page_course_detail():
                     if user["role"] == "student" and status != "completed":
                         if st.button(f"✅ Mark as Completed", key=f"done_{m['id']}"):
                             try:
-                                supabase.table("module_progress").upsert(
-                                    {
+                                # 1️⃣ Cek apakah sudah ada data progres untuk modul ini
+                                existing = supabase.table("module_progress") \
+                                    .select("id") \
+                                    .eq("user_id", user["id"]) \
+                                    .eq("module_id", m["id"]) \
+                                    .execute().data
+                        
+                                # 2️⃣ Kalau belum ada → insert
+                                if not existing:
+                                    supabase.table("module_progress").insert({
                                         "user_id": user["id"],
                                         "module_id": m["id"],
                                         "course_id": int(cid),
                                         "status": "completed",
-                                        "updated_at": datetime.now().isoformat(),
-                                    },
-                                    on_conflict=["user_id", "module_id"]
-                                ).execute()
+                                        "updated_at": datetime.now().isoformat()
+                                    }).execute()
+                                else:
+                                    # 3️⃣ Kalau sudah ada → update status ke 'completed'
+                                    supabase.table("module_progress").update({
+                                        "status": "completed",
+                                        "updated_at": datetime.now().isoformat()
+                                    }) \
+                                    .eq("user_id", user["id"]) \
+                                    .eq("module_id", m["id"]) \
+                                    .execute()
+                        
                                 st.success("🎯 Module marked as completed!")
                                 st.rerun()
+                        
                             except Exception as e:
                                 st.error(f"❌ Failed to update progress: {e}")
+
 
     
                     # === Guru bisa edit & hapus ===
@@ -1338,6 +1356,7 @@ def main():
 # jalankan aplikasi
 if __name__ == "__main__":
     main()
+
 
 
 
