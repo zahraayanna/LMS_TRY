@@ -29,29 +29,38 @@ def init_session_state():
 
 def main():
     init_session_state()
-    # === Proteksi global: pastikan user masih login ===
+
+    # Proteksi login global
     if "user" not in st.session_state or not st.session_state.user:
-        # Jika user belum login dan bukan di halaman login, arahkan ke login
-        if st.session_state.page != "login":
-            st.warning("⚠️ Sesi login berakhir. Silakan login kembali.")
-            st.session_state.page = "login"
-            st.rerun()
-            
+        st.session_state.page = "login"
+
     page = st.session_state.page
 
     if page == "login":
         page_login()
+
     elif page == "dashboard":
         page_dashboard()
+
     elif page == "courses":
         page_courses()
+
     elif page == "course_detail":
-        page_course_detail()
+        # ✅ Ini bagian yang harus ada agar tombol Open Course bisa berfungsi
+        if st.session_state.get("current_course"):
+            page_course_detail()
+        else:
+            st.warning("⚠️ No course selected.")
+            st.session_state.page = "courses"
+            st.rerun()
+
     elif page == "account":
         page_account()
+
     else:
         st.session_state.page = "login"
         st.rerun()
+
 
 
 # =========================
@@ -435,10 +444,33 @@ def upload_to_supabase(file):
 # (All previous features + delete system)
 # ============================================
 def page_course_detail():
-    from io import BytesIO
+    if "user" not in st.session_state or not st.session_state.user:
+        st.warning("⚠️ Please log in again.")
+        st.session_state.page = "login"
+        st.rerun()
+
+    cid = st.session_state.get("current_course")
+    if not cid:
+        st.error("❌ No course selected.")
+        st.session_state.page = "courses"
+        st.rerun()
+
+from io import BytesIO
 import base64
 import re
 from datetime import datetime
+
+def page_course_detail():
+    if "user" not in st.session_state or not st.session_state.user:
+        st.warning("⚠️ Please log in again.")
+        st.session_state.page = "login"
+        st.rerun()
+
+    cid = st.session_state.get("current_course")
+    if not cid:
+        st.error("❌ No course selected.")
+        st.session_state.page = "courses"
+        st.rerun()
 
 # --- upload helper ---
 def upload_to_supabase(file):
@@ -1315,6 +1347,7 @@ def page_account():
 
 if __name__ == "__main__":
     main()
+
 
 
 
