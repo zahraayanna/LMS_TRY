@@ -7,6 +7,21 @@ import uuid
 from datetime import datetime
 from supabase import create_client
 
+# ==========================================================
+# 🔀 GLOBAL NAVIGATION FUNCTION (WAJIB ADA DI PALING ATAS)
+# ==========================================================
+def navigate_to(page_name, **kwargs):
+    """
+    Navigasi aman ke halaman lain dengan full rerun.
+    Bisa digunakan di tombol mana pun.
+    Contoh: navigate_to("course_detail", cid=3)
+    """
+    st.session_state.page = page_name
+    for k, v in kwargs.items():
+        st.session_state[k] = v
+    st.session_state["_force_rerun"] = True
+    st.rerun()
+
 # === Definisi fungsi utilitas ===
 def init_session_state():
     defaults = {
@@ -1335,6 +1350,7 @@ def page_account():
 
 if __name__ == "__main__":
     main()
+
 
 
 
