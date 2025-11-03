@@ -1,6 +1,12 @@
 import streamlit as st
 st.set_page_config(page_title="ThinkVerse LMS", layout="wide")
 
+def switch_page(page_name):
+    """Router global dengan rerun penuh"""
+    st.session_state.page = page_name
+    st.session_state._force_reload = True
+    st.rerun()
+
 # === Import lain baru boleh di bawah sini ===
 import time
 import uuid
@@ -43,37 +49,28 @@ def init_session_state():
 
 
 def main():
-    init_session_state()
-
+    if "page" not in st.session_state:
+        st.session_state.page = "login"
     if st.session_state.get("_force_reload"):
         st.session_state._force_reload = False
         st.rerun()
 
-    # Proteksi login global
-    if "user" not in st.session_state or not st.session_state.user:
-        st.session_state.page = "login"
-
     page = st.session_state.page
 
+    # === ROUTER ===
     if page == "login":
         page_login()
-
     elif page == "dashboard":
         page_dashboard()
-
     elif page == "courses":
         page_courses()
-
     elif page == "course_detail":
-        page_course_detail()
-
+        page_course_detail()   # ⚡ WAJIB ADA
     elif page == "account":
         page_account()
-
     else:
         st.session_state.page = "login"
         st.rerun()
-
 
 
 # =========================
@@ -429,17 +426,10 @@ def page_courses():
 
             # === Tombol Open Course dengan rerun aman ===
             if st.button("➡️ Open Course", key=f"open_{course['id']}_{uuid.uuid4().hex[:6]}"):
-                # Simpan data course
                 st.session_state.current_course = course["id"]
                 st.session_state.last_course = course["id"]
-    
-                # Pastikan user gak hilang
-                if "user" in st.session_state and st.session_state.user:
-                    st.session_state.user = st.session_state.user
-                else:
-                    st.warning("⚠️ Session expired. Please log in again.")
-                    st.session_state.page = "login"
-                    st.rerun()
+                switch_page("course_detail")
+
 
                 # Pindahkan halaman
                 st.session_state.page = "course_detail"
@@ -479,11 +469,18 @@ def upload_to_supabase(file):
 # (All previous features + delete system)
 # ============================================
 def page_course_detail():
-    if "user" not in st.session_state or not st.session_state.user:
+    user = st.session_state.get("user")
+    if not user:
         st.warning("⚠️ Please log in again.")
         st.session_state.page = "login"
         st.rerun()
 
+    # 🧭 Sidebar supaya tetap muncul
+    st.sidebar.title("ThinkVerse LMS")
+    st.sidebar.markdown(f"👋 **{user['name']}**\n📧 {user['email']}\nRole: *{user['role']}*")
+    if st.sidebar.button("🏠 Back to Dashboard"):
+        switch_page("dashboard")
+        
     cid = st.session_state.get("current_course")
     if not cid:
         st.error("❌ No course selected.")
@@ -1371,6 +1368,7 @@ def page_account():
 
 if __name__ == "__main__":
     main()
+
 
 
 
