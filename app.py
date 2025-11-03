@@ -29,7 +29,14 @@ def init_session_state():
 
 def main():
     init_session_state()
-
+    # === Proteksi global: pastikan user masih login ===
+    if "user" not in st.session_state or not st.session_state.user:
+        # Jika user belum login dan bukan di halaman login, arahkan ke login
+        if st.session_state.page != "login":
+            st.warning("⚠️ Sesi login berakhir. Silakan login kembali.")
+            st.session_state.page = "login"
+            st.rerun()
+            
     page = st.session_state.page
 
     if page == "login":
@@ -385,10 +392,16 @@ def page_courses():
             unique_key = f"open_{c['id']}_{uuid.uuid4().hex[:6]}"
            
 
-            if st.button("📖 Open Course", key=f"open_{c['id']}"):
-                st.session_state.current_course = c["id"]
-                st.session_state.last_course = c["id"]
-                st.session_state.page = "course_detail"
+            if st.button("Open Course", key=f"open_{cid}"):
+                if "user" in st.session_state and st.session_state.user:
+                    st.session_state.current_course = cid
+                    st.session_state.last_course = cid
+                    st.session_state.page = "course_detail"
+                    st.rerun()
+                else:
+                    st.warning("⚠️ Sesi login berakhir. Silakan login kembali.")
+                    st.session_state.page = "login"
+                    st.rerun()
 
                 # 🚀 rerender langsung halaman detail
                 st.switch_page("app.py")  # pastikan nama file Streamlit utama kamu sesuai
@@ -419,6 +432,33 @@ def upload_to_supabase(file):
 # (All previous features + delete system)
 # ============================================
 def page_course_detail():
+    from io import BytesIO
+import base64
+import re
+from datetime import datetime
+
+# --- upload helper ---
+def upload_to_supabase(file):
+    """Upload file ke bucket thinkverse_uploads di Supabase."""
+    if not file:
+        return None
+    file_bytes = file.read()
+    file_path = f"uploads/{int(datetime.now().timestamp())}_{file.name}"
+    supabase.storage.from_("thinkverse_uploads").upload(file_path, file_bytes)
+    return f"{SUPABASE_URL}/storage/v1/object/public/thinkverse_uploads/{file_path}"
+
+
+# ============================================
+# PAGE: COURSE DETAIL — ThinkVerse v5.4
+# (All previous features + delete system)
+# ============================================
+def page_course_detail():
+    
+    if "user" not in st.session_state or not st.session_state.user:
+        st.warning("⚠️ Sesi login kamu telah berakhir. Silakan login ulang.")
+        st.session_state.page = "login"
+        st.rerun()
+
     if "current_course" not in st.session_state and "last_course" in st.session_state:
         st.session_state.current_course = st.session_state.last_course
 
@@ -426,9 +466,14 @@ def page_course_detail():
         st.warning("⚠️ No course selected. Please return to the Courses page.")
         st.stop()
 
-    cid = st.session_state.current_course
-    user = st.session_state.user
-    st.session_state.last_course = cid
+    cid = st.session_state.get("current_course")
+    if not cid:
+        cid = st.session_state.get("last_course")
+    if not cid:
+        st.error("Course tidak ditemukan. Silakan kembali ke halaman Courses.")
+        st.session_state.page = "courses"
+        st.rerun()
+
 
     # --- Load course data ---
     try:
@@ -1267,5 +1312,6 @@ def page_account():
 
 if __name__ == "__main__":
     main()
+
 
 
