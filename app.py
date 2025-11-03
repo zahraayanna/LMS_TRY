@@ -585,7 +585,7 @@ def page_course_detail():
     # =====================================
     with tabs[2]:
         from datetime import datetime
-        import markdown, re, uuid
+        import markdown, re, hashlib
         import streamlit.components.v1 as components
     
         st.subheader("📦 Learning Activities (Modules)")
@@ -725,9 +725,9 @@ def page_course_detail():
                         for rq in related_quiz:
                             q = next((q for q in all_quizzes if q["id"] == rq["target_id"]), None)
                             if q:
-                                quiz_key = f"quiz_btn_{m.get('id', uuid.uuid4())}_{q.get('id', uuid.uuid4())}"
+                                stable_key = hashlib.md5(f"quiz_{m['id']}_{q['id']}".encode()).hexdigest()
                                 st.markdown(f"🧠 **Quiz:** {q.get('title', 'Untitled Quiz')}")
-                                if st.button(f"➡️ Open Quiz", key=quiz_key):
+                                if st.button("➡️ Open Quiz", key=stable_key):
                                     supabase.table("module_progress").update({
                                         "status": "completed",
                                         "updated_at": datetime.now().isoformat(),
@@ -738,9 +738,9 @@ def page_course_detail():
                         for ra in related_asg:
                             a = next((a for a in all_assignments if a["id"] == ra["target_id"]), None)
                             if a:
-                                asg_key = f"asg_btn_{m.get('id', uuid.uuid4())}_{a.get('id', uuid.uuid4())}"
+                                stable_key = hashlib.md5(f"asg_{m['id']}_{a['id']}".encode()).hexdigest()
                                 st.markdown(f"📋 **Assignment:** {a.get('title', 'Untitled Assignment')}")
-                                if st.button(f"➡️ Open Assignment", key=asg_key):
+                                if st.button("➡️ Open Assignment", key=stable_key):
                                     supabase.table("module_progress").update({
                                         "status": "completed",
                                         "updated_at": datetime.now().isoformat(),
@@ -750,7 +750,8 @@ def page_course_detail():
     
                     # === Tombol selesai manual ===
                     if user["role"] == "student" and status != "completed":
-                        if st.button(f"✅ Mark as Completed", key=f"done_btn_{m.get('id', uuid.uuid4())}"):
+                        done_key = hashlib.md5(f"done_{m['id']}".encode()).hexdigest()
+                        if st.button(f"✅ Mark as Completed", key=done_key):
                             existing = (
                                 supabase.table("module_progress")
                                 .select("id")
@@ -780,20 +781,23 @@ def page_course_detail():
                         st.divider()
                         col1, col2, col3 = st.columns(3)
                         with col1:
-                            if st.button(f"📝 Edit '{m['title']}'", key=f"edit_btn_{m.get('id', uuid.uuid4())}"):
+                            edit_key = hashlib.md5(f"edit_{m['id']}".encode()).hexdigest()
+                            if st.button(f"📝 Edit '{m['title']}'", key=edit_key):
                                 st.session_state.edit_module_id = m["id"]
                                 st.session_state.edit_module_data = m
                                 st.session_state.show_edit_form = True
                                 st.rerun()
     
                         with col2:
-                            if st.button(f"🗑️ Delete '{m['title']}'", key=f"del_btn_{m.get('id', uuid.uuid4())}"):
+                            del_key = hashlib.md5(f"del_{m['id']}".encode()).hexdigest()
+                            if st.button(f"🗑️ Delete '{m['title']}'", key=del_key):
                                 supabase.table("modules").delete().eq("id", m["id"]).execute()
                                 st.success("✅ Module deleted successfully!")
                                 st.rerun()
     
                         with col3:
-                            with st.form(f"link_form_{m.get('id', uuid.uuid4())}"):
+                            form_key = f"link_form_{m['id']}"
+                            with st.form(form_key):
                                 link_type = st.selectbox("Link Type", ["quiz", "assignment"], key=f"linktype_{m['id']}")
                                 available = {q["title"]: q["id"] for q in all_quizzes} if link_type == "quiz" else {a["title"]: a["id"] for a in all_assignments}
                                 if available:
@@ -871,6 +875,7 @@ def page_course_detail():
                         }).execute()
                         st.success(f"✅ Module '{title}' added successfully!")
                         st.rerun()
+
 
 
 
@@ -1401,6 +1406,7 @@ def main():
 # jalankan aplikasi
 if __name__ == "__main__":
     main()
+
 
 
 
