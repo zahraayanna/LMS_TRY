@@ -7,19 +7,12 @@ import uuid
 from datetime import datetime
 from supabase import create_client
 
-# ==========================================================
-# 🔀 GLOBAL NAVIGATION FUNCTION (WAJIB ADA DI PALING ATAS)
-# ==========================================================
-def navigate_to(page_name, **kwargs):
-    """
-    Navigasi aman ke halaman lain dengan full rerun.
-    Bisa digunakan di tombol mana pun.
-    Contoh: navigate_to("course_detail", cid=3)
-    """
+def go_to(page_name, **kwargs):
+    """Navigasi global yang aman dan pasti berpindah halaman."""
+    st.session_state.update(kwargs)
     st.session_state.page = page_name
-    for k, v in kwargs.items():
-        st.session_state[k] = v
-    st.session_state["_force_rerun"] = True
+    st.session_state._go_to_trigger = True
+    st.session_state._from_page = st.session_state.get("page")
     st.rerun()
 
 # === Definisi fungsi utilitas ===
@@ -44,6 +37,11 @@ def init_session_state():
 
 def main():
     init_session_state()
+
+    if st.session_state.get("_go_to_trigger"):
+        st.session_state._go_to_trigger = False
+        st.rerun()
+
 
     # Proteksi login global
     if "user" not in st.session_state or not st.session_state.user:
@@ -423,8 +421,9 @@ def page_courses():
             button_key = f"open_course_{cid}_{uuid.uuid4().hex[:6]}"
 
             # === Tombol Open Course dengan rerun aman ===
-            if st.button("➡️ Open Course", key=f"open_{cid}_{uuid.uuid4().hex[:6]}"):
-                navigate_to("course_detail", current_course=cid, last_course=cid)
+            if st.button("➡️ Open Course", key=f"open_{course['id']}_{uuid.uuid4().hex[:6]}"):
+                go_to("course_detail", current_course=course["id"], last_course=course["id"])
+
 
                 # 🔥 Trik anti “tidak berpindah”
                 placeholder = st.empty()
@@ -1348,6 +1347,7 @@ def page_account():
 
 if __name__ == "__main__":
     main()
+
 
 
 
