@@ -15,6 +15,13 @@ def go_to(page_name, **kwargs):
     st.session_state._from_page = st.session_state.get("page")
     st.rerun()
 
+def route_to(page_name):
+    """Navigasi keluar dari tab dashboard dengan full rerun"""
+    st.session_state.page = page_name
+    st.session_state._force_reload = True
+    st.rerun()
+
+
 # === Definisi fungsi utilitas ===
 def init_session_state():
     defaults = {
@@ -59,13 +66,7 @@ def main():
         page_courses()
 
     elif page == "course_detail":
-        # ✅ Ini bagian yang harus ada agar tombol Open Course bisa berfungsi
-        if st.session_state.get("current_course"):
-            page_course_detail()
-        else:
-            st.warning("⚠️ No course selected.")
-            st.session_state.page = "courses"
-            st.rerun()
+        page_course_detail()
 
     elif page == "account":
         page_account()
@@ -274,7 +275,8 @@ def page_dashboard():
         st.header("🏠 Dashboard Utama")
         st.info("Selamat datang di ThinkVerse LMS! Pilih menu di sebelah kiri untuk melanjutkan.")
     elif nav == "📘 Kursus":
-        page_courses()
+        st.session_state.page = "courses"
+        st.rerun()
     elif nav == "👤 Akun":
         st.header("👤 Profil Pengguna")
         if st.button("Logout"):
@@ -422,8 +424,10 @@ def page_courses():
 
             # === Tombol Open Course dengan rerun aman ===
             if st.button("➡️ Open Course", key=f"open_{course['id']}_{uuid.uuid4().hex[:6]}"):
-                go_to("course_detail", current_course=course["id"], last_course=course["id"])
-
+                route_to("course_detail")
+                st.session_state.current_course = course["id"]
+                st.session_state.last_course = course["id"]
+                st.rerun()
 
                 # 🔥 Trik anti “tidak berpindah”
                 placeholder = st.empty()
@@ -1347,6 +1351,7 @@ def page_account():
 
 if __name__ == "__main__":
     main()
+
 
 
 
