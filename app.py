@@ -47,11 +47,6 @@ def main():
         st.rerun()
 
 
-# === Jalankan aplikasi ===
-if __name__ == "__main__":
-    main()
-
-
 # =========================
 # ⬇️ SEMUA FUNGSI HALAMAN (page_login, page_dashboard, dll)
 # =========================
@@ -1257,4 +1252,7 @@ def page_course_detail():
 def page_account(): 
     st.header("👤 Account Page") 
     st.info("This section is under construction.")
+
+if __name__ == "__main__":
+    main()
 
