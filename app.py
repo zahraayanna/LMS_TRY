@@ -15,12 +15,12 @@ def go_to(page_name, **kwargs):
     st.session_state._from_page = st.session_state.get("page")
     st.rerun()
 
-def route_to(page_name):
-    """Navigasi keluar dari tab dashboard dengan full rerun"""
+def route_to(page_name, **kwargs):
+    """Navigasi keluar dari fungsi lain dengan full rerun"""
+    st.session_state.update(kwargs)
     st.session_state.page = page_name
     st.session_state._force_reload = True
     st.rerun()
-
 
 # === Definisi fungsi utilitas ===
 def init_session_state():
@@ -45,10 +45,9 @@ def init_session_state():
 def main():
     init_session_state()
 
-    if st.session_state.get("_go_to_trigger"):
-        st.session_state._go_to_trigger = False
+    if st.session_state.get("_force_reload"):
+        st.session_state._force_reload = False
         st.rerun()
-
 
     # Proteksi login global
     if "user" not in st.session_state or not st.session_state.user:
@@ -267,21 +266,27 @@ def page_login():
 # === DASHBOARD ===
 # ======================
 def page_dashboard():
-    u = st.session_state.user
+    user = st.session_state.user
     st.sidebar.title("ThinkVerse LMS")
-    st.sidebar.markdown(f"👋 **{u['name']}**\n\n📧 {u['email']}\n\nRole: *{u['role']}*")
+    st.sidebar.markdown(f"👋 **{user['name']}**\n📧 {user['email']}\nRole: *{user['role']}*")
+    
     nav = st.sidebar.radio("Navigasi", ["🏠 Dashboard", "📘 Kursus", "👤 Akun"])
+    
     if nav == "🏠 Dashboard":
         st.header("🏠 Dashboard Utama")
         st.info("Selamat datang di ThinkVerse LMS! Pilih menu di sebelah kiri untuk melanjutkan.")
+    
     elif nav == "📘 Kursus":
-        st.session_state.page = "courses"
-        st.rerun()
+        # 🔥 Arahkan ke halaman courses penuh (bukan tab dalam dashboard)
+        route_to("courses")
+
     elif nav == "👤 Akun":
         st.header("👤 Profil Pengguna")
         if st.button("Logout"):
             st.session_state.clear()
+            st.session_state.page = "login"
             st.rerun()
+
 
 
 # ======================
@@ -424,10 +429,10 @@ def page_courses():
 
             # === Tombol Open Course dengan rerun aman ===
             if st.button("➡️ Open Course", key=f"open_{course['id']}_{uuid.uuid4().hex[:6]}"):
-                route_to("course_detail")
                 st.session_state.current_course = course["id"]
                 st.session_state.last_course = course["id"]
-                st.rerun()
+                route_to("course_detail")
+
 
                 # 🔥 Trik anti “tidak berpindah”
                 placeholder = st.empty()
@@ -1351,6 +1356,7 @@ def page_account():
 
 if __name__ == "__main__":
     main()
+
 
 
 
