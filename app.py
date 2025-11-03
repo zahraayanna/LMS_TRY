@@ -429,9 +429,24 @@ def page_courses():
 
             # === Tombol Open Course dengan rerun aman ===
             if st.button("➡️ Open Course", key=f"open_{course['id']}_{uuid.uuid4().hex[:6]}"):
+                # Simpan data course
                 st.session_state.current_course = course["id"]
                 st.session_state.last_course = course["id"]
-                route_to("course_detail")
+    
+                # Pastikan user gak hilang
+                if "user" in st.session_state and st.session_state.user:
+                    st.session_state.user = st.session_state.user
+                else:
+                    st.warning("⚠️ Session expired. Please log in again.")
+                    st.session_state.page = "login"
+                    st.rerun()
+
+                # Pindahkan halaman
+                st.session_state.page = "course_detail"
+
+                # 🔥 Paksa rerun penuh agar router utama jalan
+                st.rerun()
+
 
 
                 # 🔥 Trik anti “tidak berpindah”
@@ -1356,6 +1371,7 @@ def page_account():
 
 if __name__ == "__main__":
     main()
+
 
 
 
