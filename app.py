@@ -1,4 +1,6 @@
 import streamlit as st
+st.set_page_config(page_title="ThinkVerse LMS", layout="wide")
+
 import uuid
 from datetime import datetime
 from supabase import create_client, Client
@@ -1281,6 +1283,7 @@ def main():
 # === Jalankan aplikasi utama ===
 if __name__ == "__main__":
     main()
+
 
 
 
