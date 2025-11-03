@@ -1,77 +1,11 @@
 import streamlit as st
-st.set_page_config(page_title="ThinkVerse LMS", layout="wide")
+st.set_page_config(page_title="ThinkVerse LMS", page_icon="🎓", layout="wide")
 
-def switch_page(page_name):
-    """Router global dengan rerun penuh"""
-    st.session_state.page = page_name
-    st.session_state._force_reload = True
-    st.rerun()
-
-# === Import lain baru boleh di bawah sini ===
-import time
 import uuid
-from datetime import datetime
 from supabase import create_client
-
-def go_to(page_name, **kwargs):
-    """Navigasi global yang aman dan pasti berpindah halaman."""
-    st.session_state.update(kwargs)
-    st.session_state.page = page_name
-    st.session_state._go_to_trigger = True
-    st.session_state._from_page = st.session_state.get("page")
-    st.rerun()
-
-def route_to(page_name, **kwargs):
-    """Navigasi keluar dari fungsi lain dengan full rerun"""
-    st.session_state.update(kwargs)
-    st.session_state.page = page_name
-    st.session_state._force_reload = True
-    st.rerun()
-
-# === Definisi fungsi utilitas ===
-def init_session_state():
-    defaults = {
-        "initialized": True,
-        "page": "login",
-        "user": None,
-        "refresh_modules": False,
-        "show_edit_form": False,
-        "current_course": None,
-        "edit_module_id": None,
-        "edit_module_data": None,
-        "selected_quiz_id": None,
-        "selected_assignment_id": None,
-        "last_course": None,
-    }
-    for key, val in defaults.items():
-        if key not in st.session_state:
-            st.session_state[key] = val
-
-
-def main():
-    if "page" not in st.session_state:
-        st.session_state.page = "login"
-    if st.session_state.get("_force_reload"):
-        st.session_state._force_reload = False
-        st.rerun()
-
-    page = st.session_state.page
-
-    # === ROUTER ===
-    if page == "login":
-        page_login()
-    elif page == "dashboard":
-        page_dashboard()
-    elif page == "courses":
-        page_courses()
-    elif page == "course_detail":
-        page_course_detail()   # ⚡ WAJIB ADA
-    elif page == "account":
-        page_account()
-    else:
-        st.session_state.page = "login"
-        st.rerun()
-
+import time
+from datetime import datetime
+import json
 
 # =========================
 # === KONFIGURASI AWAL ===
@@ -210,23 +144,10 @@ def page_login():
 
         if ok:
             user = login(email, pw)
-
             if user:
-                # Debug dulu (lihat struktur data dari fungsi login)
-                st.write("🧩 Debug - Data user dari login():", user)
-
-                # Gunakan kunci yang benar
-                st.session_state.user = {
-                    "id": user.get("id") or user.get("user_id") or user.get("uid"),
-                    "name": user.get("name"),
-                    "role": user.get("role"),
-                    "email": user.get("email"),
-                }
-
-                st.success(f"Selamat datang, {st.session_state.user['name']} 👋")
-
-                # Arahkan ke dashboard
-                st.session_state.page = "dashboard"
+                st.session_state.user = user
+                st.session_state.page = "dashboard"  # ⬅ pindah halaman otomatis
+                st.success(f"Selamat datang, {user['name']} 👋")
                 st.rerun()
             else:
                 st.error("❌ Email atau password salah.")
@@ -258,32 +179,24 @@ def page_login():
             elif reset_password(email_fp, new_pw):
                 st.success("✅ Password berhasil direset! Silakan login ulang.")
 
-
 # ======================
 # === DASHBOARD ===
 # ======================
 def page_dashboard():
-    user = st.session_state.user
+    u = st.session_state.user
     st.sidebar.title("ThinkVerse LMS")
-    st.sidebar.markdown(f"👋 **{user['name']}**\n📧 {user['email']}\nRole: *{user['role']}*")
-    
+    st.sidebar.markdown(f"👋 **{u['name']}**\n\n📧 {u['email']}\n\nRole: *{u['role']}*")
     nav = st.sidebar.radio("Navigasi", ["🏠 Dashboard", "📘 Kursus", "👤 Akun"])
-    
     if nav == "🏠 Dashboard":
         st.header("🏠 Dashboard Utama")
         st.info("Selamat datang di ThinkVerse LMS! Pilih menu di sebelah kiri untuk melanjutkan.")
-    
     elif nav == "📘 Kursus":
-        # 🔥 Arahkan ke halaman courses penuh (bukan tab dalam dashboard)
-        route_to("courses")
-
+        page_courses()
     elif nav == "👤 Akun":
         st.header("👤 Profil Pengguna")
         if st.button("Logout"):
             st.session_state.clear()
-            st.session_state.page = "login"
             st.rerun()
-
 
 
 # ======================
@@ -294,12 +207,9 @@ def page_courses():
     import random, string
     st.title("🎓 My Courses")
 
-    # === AMAN: cek session user ===
     user = st.session_state.get("user")
     if not user:
-        st.warning("⚠️ Please log in to continue.")
-        st.session_state.page = "login"
-        st.rerun()
+        st.warning("Please log in to continue.")
         return
 
     # === INSTRUCTOR ONLY SECTION ===
@@ -318,35 +228,29 @@ def page_courses():
             if not new_code.strip() or not new_title.strip():
                 st.warning("Course code and title cannot be empty.")
             else:
-                existing = (
-                    supabase.table("courses")
-                    .select("*")
-                    .eq("code", new_code.strip())
-                    .eq("instructor_email", user["email"])
-                    .execute()
-                    .data
-                )
+                existing = supabase.table("courses").select("*") \
+                    .eq("code", new_code.strip()) \
+                    .eq("instructor_email", user["email"]) \
+                    .execute().data
 
                 if existing:
                     st.warning("⚠️ You already have a course with this code!")
                 else:
                     if not access_code.strip():
-                        access_code = "".join(random.choices(string.ascii_uppercase + string.digits, k=6))
+                        access_code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
 
                     instr_row = supabase.table("users").select("id").eq("email", user["email"]).execute().data
                     instructor_id = instr_row[0]["id"] if instr_row else None
 
-                    supabase.table("courses").insert(
-                        {
-                            "code": new_code.strip(),
-                            "title": new_title.strip(),
-                            "description": new_desc.strip(),
-                            "youtube_url": yt_url or None,
-                            "access_code": access_code,
-                            "instructor_id": instructor_id,
-                            "instructor_email": user["email"],
-                        }
-                    ).execute()
+                    supabase.table("courses").insert({
+                        "code": new_code.strip(),
+                        "title": new_title.strip(),
+                        "description": new_desc.strip(),
+                        "youtube_url": yt_url or None,
+                        "access_code": access_code,
+                        "instructor_id": instructor_id,
+                        "instructor_email": user["email"]
+                    }).execute()
 
                     st.success(f"✅ Course '{new_title}' created successfully! Access code: `{access_code}`")
                     st.rerun()
@@ -355,6 +259,7 @@ def page_courses():
     else:
         st.subheader("📥 Join Course with Access Code")
 
+        # siswa wajib masukin kode akses
         with st.form("join_form", clear_on_submit=True):
             join_code = st.text_input("Enter Course Access Code", placeholder="e.g. X7J9Q2")
             join_submit = st.form_submit_button("Join")
@@ -363,26 +268,24 @@ def page_courses():
             if not join_code.strip():
                 st.warning("Please enter a course access code.")
             else:
+                # cek apakah access code valid
                 course = supabase.table("courses").select("*").eq("access_code", join_code.strip()).execute().data
                 if not course:
                     st.error("❌ Invalid access code. Please check with your instructor.")
                 else:
                     course_id = course[0]["id"]
-                    enrolled = (
-                        supabase.table("enrollments")
-                        .select("*")
-                        .eq("user_id", user["id"])
-                        .eq("course_id", course_id)
-                        .execute()
-                        .data
-                    )
+                    enrolled = supabase.table("enrollments").select("*") \
+                        .eq("user_id", user["id"]) \
+                        .eq("course_id", course_id).execute().data
 
                     if enrolled:
                         st.info("📚 You are already enrolled in this course.")
                     else:
-                        supabase.table("enrollments").insert(
-                            {"user_id": user["id"], "course_id": course_id, "role": "student"}
-                        ).execute()
+                        supabase.table("enrollments").insert({
+                            "user_id": user["id"],
+                            "course_id": course_id,
+                            "role": "student"
+                        }).execute()
                         st.success(f"✅ Successfully joined the course '{course[0]['title']}'!")
                         st.rerun()
 
@@ -391,13 +294,14 @@ def page_courses():
 
     # === LOAD COURSES ===
     if user["role"] == "instructor":
+        # tampilkan semua course yang dibuat instruktur
         courses = supabase.table("courses").select("*").eq("instructor_email", user["email"]).execute().data
     else:
+        # siswa cuma bisa lihat course yang SUDAH dia join
         enrolled = supabase.table("enrollments").select("course_id").eq("user_id", user["id"]).execute().data
         course_ids = [c["course_id"] for c in enrolled]
         courses = supabase.table("courses").select("*").in_("id", course_ids).execute().data if course_ids else []
 
-    # === HANDLE EMPTY COURSE LIST ===
     if not courses:
         if user["role"] == "instructor":
             st.info("📭 You haven't created any courses yet.")
@@ -406,44 +310,27 @@ def page_courses():
         return
 
     # === DISPLAY COURSE LIST ===
-    for course in courses:
-        cid = course.get("id") or course.get("course_id") or course.get("cid")
-
-        if not cid:
-            st.warning(f"⚠️ Course ID not found for {course.get('title', 'Unknown Course')}.")
-            continue
-
+    for c in courses:
         with st.container():
-            st.markdown(f"### 🎓 {course.get('title', 'Untitled Course')}")
-            st.caption(course.get("description", "No description provided."))
-            st.markdown(f"**Course Code:** `{course.get('code', '-')}`")
+            st.markdown(f"### 🎓 {c['title']}")
+            st.caption(c.get("description", "No description provided."))
+            st.markdown(f"**Course Code:** `{c['code']}`")
 
             if user["role"] == "instructor":
-                st.markdown(f"**Access Code:** `{course.get('access_code', '-')}`")
+                st.markdown(f"**Access Code:** `{c.get('access_code', '-')}`")
 
-            # === Unik key tombol supaya gak bentrok ===
-            button_key = f"open_course_{cid}_{uuid.uuid4().hex[:6]}"
+            unique_key = f"open_{c['id']}_{uuid.uuid4().hex[:6]}"
+           
 
-            # === Tombol Open Course dengan rerun aman ===
-            if st.button("➡️ Open Course", key=f"open_{course['id']}_{uuid.uuid4().hex[:6]}"):
-                st.session_state.current_course = course["id"]
-                st.session_state.last_course = course["id"]
-                switch_page("course_detail")
-
-
-                # Pindahkan halaman
+            if st.button("📖 Open Course", key=f"open_{c['id']}"):
+                st.session_state.current_course = c["id"]
+                st.session_state.last_course = c["id"]
                 st.session_state.page = "course_detail"
 
-                # 🔥 Paksa rerun penuh agar router utama jalan
-                st.rerun()
+                # 🚀 rerender langsung halaman detail
+                st.switch_page("app.py")  # pastikan nama file Streamlit utama kamu sesuai
 
-
-
-                # 🔥 Trik anti “tidak berpindah”
-                placeholder = st.empty()
-                placeholder.info("⏳ Opening course, please wait...")
-                time.sleep(0.3)
-                st.rerun()  # paksa Streamlit rerun seluruh script
+            st.markdown("---")
 
 # ======================
 # === COURSE DETAIL ===
@@ -469,52 +356,6 @@ def upload_to_supabase(file):
 # (All previous features + delete system)
 # ============================================
 def page_course_detail():
-    user = st.session_state.get("user")
-    if not user:
-        st.warning("⚠️ Please log in again.")
-        st.session_state.page = "login"
-        st.rerun()
-
-    # 🧭 Sidebar supaya tetap muncul
-    st.sidebar.title("ThinkVerse LMS")
-    st.sidebar.markdown(f"👋 **{user['name']}**\n📧 {user['email']}\nRole: *{user['role']}*")
-    if st.sidebar.button("🏠 Back to Dashboard"):
-        switch_page("dashboard")
-        
-    cid = st.session_state.get("current_course")
-    if not cid:
-        st.error("❌ No course selected.")
-        st.session_state.page = "courses"
-        st.rerun()
-
-from io import BytesIO
-import base64
-import re
-from datetime import datetime
-
-
-# --- upload helper ---
-def upload_to_supabase(file):
-    """Upload file ke bucket thinkverse_uploads di Supabase."""
-    if not file:
-        return None
-    file_bytes = file.read()
-    file_path = f"uploads/{int(datetime.now().timestamp())}_{file.name}"
-    supabase.storage.from_("thinkverse_uploads").upload(file_path, file_bytes)
-    return f"{SUPABASE_URL}/storage/v1/object/public/thinkverse_uploads/{file_path}"
-
-
-# ============================================
-# PAGE: COURSE DETAIL — ThinkVerse v5.4
-# (All previous features + delete system)
-# ============================================
-def page_course_detail():
-    
-    if "user" not in st.session_state or not st.session_state.user:
-        st.warning("⚠️ Sesi login kamu telah berakhir. Silakan login ulang.")
-        st.session_state.page = "login"
-        st.rerun()
-
     if "current_course" not in st.session_state and "last_course" in st.session_state:
         st.session_state.current_course = st.session_state.last_course
 
@@ -522,14 +363,9 @@ def page_course_detail():
         st.warning("⚠️ No course selected. Please return to the Courses page.")
         st.stop()
 
-    cid = st.session_state.get("current_course")
-    if not cid:
-        cid = st.session_state.get("last_course")
-    if not cid:
-        st.error("Course tidak ditemukan. Silakan kembali ke halaman Courses.")
-        st.session_state.page = "courses"
-        st.rerun()
-
+    cid = st.session_state.current_course
+    user = st.session_state.user
+    st.session_state.last_course = cid
 
     # --- Load course data ---
     try:
@@ -720,12 +556,14 @@ def page_course_detail():
     # =====================================
     with tabs[2]:
         from PIL import Image
-        import io, base64, markdown, uuid
+        import io
+        import base64
+        import markdown
         import streamlit.components.v1 as components
 
         st.subheader("📦 Learning Modules")
 
-        # === Validasi course ===
+        # === Pastikan CID valid ===
         if not cid:
             cid = st.session_state.get("current_course") or st.session_state.get("last_course")
         if not cid:
@@ -734,7 +572,7 @@ def page_course_detail():
 
         st.session_state.current_course = cid
 
-        # === Ambil data utama ===
+        # === Load data utama ===
         try:
             mods = supabase.table("modules").select("*").eq("course_id", int(cid)).execute().data or []
         except Exception as e:
@@ -744,28 +582,29 @@ def page_course_detail():
         all_quizzes = supabase.table("quizzes").select("*").eq("course_id", cid).execute().data or []
         all_assignments = supabase.table("assignments").select("*").eq("course_id", cid).execute().data or []
 
-        # === Load data link antar modul ===
+        # === Load link modul (pakai tabel module_link, singular)
         try:
-            module_links = supabase.table("module_link").select("*").eq("course_id", cid).execute().data or []
+            links_response = supabase.table("module_link").select("*").eq("course_id", cid).execute()
+            module_links = links_response.data or []
         except Exception as e:
             st.warning("⚠️ Could not load module_link table, please ensure it's created.")
             module_links = []
 
-        # === Tampilkan modul ===
+        # === Tampilan modul ===
         if mods:
             for m in mods:
                 with st.expander(f"📘 {m['title']}"):
-                    # Judul modul dengan highlight
+                    # --- Highlight title ---
                     st.markdown(
                         f"<h2 style='color:#4338CA; font-weight:700; font-size:26px; text-shadow:1px 1px 2px #cfcfcf;'>{m['title']}</h2>",
                         unsafe_allow_html=True
                     )
 
-                    # Tampilkan konten markdown
+                    # --- Render markdown + MathJax ---
                     raw_content = m.get("content", "No content available.")
                     rendered_md = markdown.markdown(raw_content, extensions=["fenced_code", "tables", "md_in_html"])
                     html_content = f"""
-                    <div style="font-size:16px; line-height:1.7; text-align:justify;">
+                        <div style="font-size:16px; line-height:1.7; text-align:justify;">
                         <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
                         <script id="MathJax-script" async
                             src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
@@ -777,127 +616,233 @@ def page_course_detail():
                     if m.get("video_url"):
                         st.video(m["video_url"])
 
-                    # === Related Activities ===
+                    # === Tampilkan Quiz & Assignment yang terhubung ===
                     related_quiz = [l for l in module_links if l["module_id"] == m["id"] and l["type"] == "quiz"]
                     related_asg = [l for l in module_links if l["module_id"] == m["id"] and l["type"] == "assignment"]
 
                     if related_quiz or related_asg:
                         st.markdown("### 🧩 Related Activities")
 
+                        # Tambahkan style CSS biar tampilannya mirip badge
+                        st.markdown("""
+                            <style>
+                                .activity-card {
+                                    background-color: #f8f9ff;
+                                    border: 1px solid #e0e7ff;
+                                    border-radius: 12px;
+                                    padding: 12px 18px;
+                                    margin-bottom: 10px;
+                                    transition: all 0.2s ease;
+                                }
+                                .activity-card:hover {
+                                    background-color: #eef2ff;
+                                    transform: translateY(-2px);
+                                    box-shadow: 0 2px 5px rgba(0,0,0,0.08);
+                                }
+                            .quiz-card {
+                                    border-left: 6px solid #4F46E5;
+                                }
+                            .asg-card {
+                                border-left: 6px solid #059669;
+                                }
+                                .activity-title {
+                                font-size: 16px;
+                                font-weight: 600;
+                                color: #1E293B;
+                                }
+                            </style>
+                        """, unsafe_allow_html=True)
+
+                        # === Bagian Quiz ===
                         for rq in related_quiz:
                             quiz_data = next((q for q in all_quizzes if q["id"] == rq["target_id"]), None)
                             if quiz_data:
-                                col1, col2 = st.columns([0.7, 0.3])
-                                with col1:
-                                    st.markdown(f"🧠 **{quiz_data['title']}** *(Quiz)*")
-                                with col2:
-                                    import uuid  # Pastikan ini ada di bagian atas file kamu (kalau belum)
+                                st.markdown(
+                                    f"""
+                                    <div class="activity-card quiz-card">
+                                        🧠 <span class="activity-title">{quiz_data['title']}</span><br>
+                                        <small style="color:#6b7280;">Quiz Activity</small>
+                                    </div>
+                                    """,
+                                    unsafe_allow_html=True,
+                                )
+                                # Tombol kecil di bawahnya
+                                st.markdown(f"""
+                                    <a href="#quiz_{quiz_data['id']}" 
+                                       style="display:inline-block; padding:8px 16px;
+                                              background-color:#4F46E5; color:white; border-radius:6px;
+                                              text-decoration:none; margin-top:6px;">
+                                       ➡️ Open Quiz: {quiz_data['title']}
+                                    </a>
+                                """, unsafe_allow_html=True)
 
-                                    unique_id = str(uuid.uuid4())
-                                    if st.button("➡️ Open", key=f"open_quiz_{m['id']}_{quiz_data['id']}_{unique_id}"):
-                                        st.session_state.selected_quiz_id = quiz_data["id"]
-                                        st.session_state.page = "course_detail_quiz"
-                                        st.rerun()
 
-                                    if user["role"] == "instructor":
-                                        if st.button("❌ Unlink", key=f"unlink_quiz_{m['id']}_{quiz_data['id']}_{unique_id}"):
-                                            supabase.table("module_link").delete().eq("id", rq["id"]).execute()
-                                            st.success("🔗 Quiz unlinked successfully.")
-                                            st.rerun()
-
-                                        st.session_state.selected_quiz_id = quiz_data["id"]
-                                        st.session_state.page = "course_detail_quiz"
-                                        st.rerun()
-                                    if user["role"] == "instructor":
-                                        if st.button("❌ Unlink", key=f"unlink_quiz_{m['id']}_{quiz_data['id']}"):
-                                            supabase.table("module_link").delete().eq("id", rq["id"]).execute()
-                                            st.success("🔗 Quiz unlinked successfully.")
-                                            st.rerun()
-
+                        # === Bagian Assignment ===
                         for ra in related_asg:
                             asg_data = next((a for a in all_assignments if a["id"] == ra["target_id"]), None)
                             if asg_data:
-                                col1, col2 = st.columns([0.7, 0.3])
-                                with col1:
-                                    st.markdown(f"📋 **{asg_data['title']}** *(Assignment)*")
-                                with col2:
-                                    unique_id = str(uuid.uuid4())
-                                    if st.button("➡️ Open", key=f"open_asg_{m['id']}_{asg_data['id']}_{unique_id}"):
-                                        st.session_state.selected_assignment_id = asg_data["id"]
-                                        st.session_state.page = "course_detail_assignment"
+                                st.markdown(
+                                    f"""
+                                    <div class="activity-card asg-card">
+                                        📋 <span class="activity-title">{asg_data['title']}</span><br>
+                                        <small style="color:#6b7280;">Assignment</small>
+                                    </div>
+                                    """,
+                                    unsafe_allow_html=True,
+                                )
+                                if st.button(
+                                    "➡️ Open Assignment",
+                                    key=f"open_asg_{m['id']}_{asg_data['id']}"
+                                ):
+                                    st.session_state.selected_assignment_id = asg_data["id"]
+                                    st.session_state.page = "course_detail_assignment"
+                                    st.rerun()
+
+                        # === Tombol Edit dan Delete ===
+                        if user["role"] == "instructor":
+                            st.divider()
+                            col1, col2 = st.columns(2)
+
+                            with col1:
+                                if st.button(f"📝 Edit '{m['title']}'", key=f"edit_mod_{m['id']}"):
+                                    st.session_state.edit_module_id = m["id"]
+                                    st.session_state.edit_module_data = m
+                                    st.session_state.show_edit_form = True
+                                    st.rerun()
+
+                            with col2:
+                                if st.button(f"🗑️ Delete '{m['title']}'", key=f"del_mod_{m['id']}"):
+                                    try:
+                                        supabase.table("modules").delete().eq("id", m["id"]).execute()
+                                        st.success(f"✅ Module '{m['title']}' deleted successfully!")
+                                        st.session_state.refresh_modules = True
                                         st.rerun()
+                                    except Exception as e:
+                                        st.error(f"❌ Failed to delete module: {e}")
 
-                                    if user["role"] == "instructor":
-                                        if st.button("❌ Unlink", key=f"unlink_asg_{m['id']}_{asg_data['id']}_{unique_id}"):
-                                            supabase.table("module_link").delete().eq("id", ra["id"]).execute()
-                                            st.success("🔗 Assignment unlinked successfully.")
-                                            st.rerun()
+                            # === Link Quiz/Assignment ke Modul ===
+                            # === Tambahkan link ke quiz/assignment (khusus instruktur) ===
+                            if user["role"] == "instructor":
+                                st.markdown("### 🔗 Link Quiz or Assignment to This Module")
 
-                                        st.session_state.selected_assignment_id = asg_data["id"]
-                                        st.session_state.page = "course_detail_assignment"
+                                # Buat key unik per modul
+                                unique_suffix = str(uuid.uuid4())
+
+                                with st.form(f"link_form_{m['id']}_{unique_suffix}"):
+                                    link_type = st.selectbox(
+                                        "Select Type",
+                                        ["quiz", "assignment"],
+                                        key=f"type_{m['id']}_{unique_suffix}"
+                                    )
+
+                                    # Pilihan target berdasarkan tipe
+                                    available = (
+                                        {q["title"]: q["id"] for q in all_quizzes}
+                                        if link_type == "quiz"
+                                        else {a["title"]: a["id"] for a in all_assignments}
+                                    )
+
+                                    if available:
+                                        target = st.selectbox(
+                                            f"Select {link_type.title()}",
+                                            list(available.keys()),
+                                            key=f"sel_{m['id']}_{unique_suffix}"
+                                        )
+
+                                        ok = st.form_submit_button(f"➕ Link {link_type.title()}")
+                                        if ok:
+                                            try:
+                                                supabase.table("module_link").insert({
+                                                    "course_id": cid,
+                                                    "module_id": m["id"],
+                                                    "type": link_type,
+                                                    "target_id": available[target]
+                                                }).execute()
+                                                st.success(f"✅ {link_type.title()} linked successfully!")
+                                                st.rerun()
+                                            except Exception as e:
+                                                st.error(f"❌ Failed to link: {e}")
+                                    else:
+                                        st.info(f"No available {link_type}s to link.")
+
+
+                        # === Form Edit Modul ===
+                        if st.session_state.get("show_edit_form"):
+                            m = st.session_state.edit_module_data
+                            st.markdown("## ✏️ Edit Module")
+                            with st.form("edit_module_form"):
+                                new_title = st.text_input("Module Title", m["title"])
+                                new_content = st.text_area("Content (Markdown + LaTeX supported)", m["content"], height=200)
+                                new_video = st.text_input("Video URL (optional)", m.get("video_url", ""))
+
+                                update_btn = st.form_submit_button("💾 Save Changes")
+                                if update_btn:
+                                    try:
+                                        supabase.table("modules").update({
+                                            "title": new_title,
+                                            "content": new_content,
+                                            "video_url": new_video
+                                        }).eq("id", m["id"]).execute()
+                                        st.success("✅ Module updated successfully!")
+                                        st.session_state.show_edit_form = False
                                         st.rerun()
-                                    if user["role"] == "instructor":
-                                        if st.button("❌ Unlink", key=f"unlink_asg_{m['id']}_{asg_data['id']}"):
-                                            supabase.table("module_link").delete().eq("id", ra["id"]).execute()
-                                            st.success("🔗 Assignment unlinked successfully.")
+                                    except Exception as e:
+                                        st.error(f"❌ Failed to update: {e}")
+
+                        # === Tambah Modul Baru ===
+                        if user["role"] == "instructor":
+                            st.divider()
+                            st.markdown("### ➕ Add New Module (with Images & Equations)")
+
+                            with st.form("add_module_rich", clear_on_submit=True):
+                                title = st.text_input("Module Title")
+                                content = st.text_area("Content (Markdown + LaTeX supported)", height=200)
+                                uploaded_image = st.file_uploader("Upload Image (optional)", type=["png", "jpg", "jpeg"])
+                                video_url = st.text_input("Video URL (optional)")
+
+                                preview_btn = st.form_submit_button("🔍 Preview Content")
+
+                                if preview_btn:
+                                    st.markdown("---")
+                                    st.markdown("#### 🖼️ Preview Result:")
+                                    st.markdown(content, unsafe_allow_html=True)
+                                    st.info("You can include equations like this: `$$E = mc^2$$` or `$$F = ma$$`")
+
+                                submit_btn = st.form_submit_button("💾 Add Module")
+
+                                if submit_btn:
+                                    if not title.strip():
+                                        st.warning("Please enter a module title.")
+                                    else:
+                                        try:
+                                            img_markdown = ""
+                                            if uploaded_image:
+                                                img_bytes = uploaded_image.read()
+                                                file_path = f"uploads/{int(datetime.now().timestamp())}_{uploaded_image.name}"
+                                                supabase.storage.from_("thinkverse_uploads").upload(file_path, img_bytes)
+                                                img_url = f"{SUPABASE_URL}/storage/v1/object/public/thinkverse_uploads/{file_path}"
+                                                img_markdown = f"\n\n![Uploaded Image]({img_url})"
+
+                                            final_content = (content or "") + (img_markdown or "")
+
+                                            supabase.table("modules").insert({
+                                                "course_id": int(cid),
+                                                "title": title.strip(),
+                                                "content": final_content.strip(),
+                                                "video_url": video_url.strip() if video_url else None
+                                            }).execute()
+
+                                            st.success(f"✅ Module '{title}' added successfully!")
+                                            st.session_state.refresh_modules = True
                                             st.rerun()
+                                        except Exception as e:
+                                            st.error(f"❌ Failed to add module: {e}")
 
-                    # === Instruktur Controls ===
-                    if user["role"] == "instructor":
-                        st.divider()
-                        col1, col2 = st.columns(2)
+                        # === Refresh otomatis ===
+                        if st.session_state.get("refresh_modules"):
+                            st.session_state.refresh_modules = False
+                            st.rerun()
 
-                        # Tombol Edit
-                        with col1:
-                            if st.button(f"📝 Edit '{m['title']}'", key=f"edit_mod_{m['id']}"):
-                                st.session_state.edit_module_id = m["id"]
-                                st.session_state.edit_module_data = m
-                                st.session_state.show_edit_form = True
-                                st.rerun()
-
-                        # Tombol Delete
-                        with col2:
-                            if st.button(f"🗑️ Delete '{m['title']}'", key=f"del_mod_{m['id']}"):
-                                supabase.table("modules").delete().eq("id", m["id"]).execute()
-                                st.success(f"✅ Module '{m['title']}' deleted!")
-                                st.session_state.refresh_modules = True
-                                st.rerun()
-
-                        # === Tambahkan Link Baru ===
-                        st.markdown("### 🔗 Link Quiz or Assignment")
-                        unique_key = str(uuid.uuid4())
-
-                        link_type = st.selectbox(
-                            "Select Type", ["quiz", "assignment"],
-                            key=f"type_{m['id']}_{unique_key}"
-                        )
-
-                        available = (
-                            {q["title"]: q["id"] for q in all_quizzes}
-                            if link_type == "quiz"
-                            else {a["title"]: a["id"] for a in all_assignments}
-                        )
-
-                        if available:
-                            target = st.selectbox(
-                                f"Select {link_type.title()}",
-                                list(available.keys()),
-                                key=f"sel_{m['id']}_{unique_key}"
-                            )
-                            if st.button(f"➕ Link {link_type.title()}", key=f"link_{m['id']}_{unique_key}"):
-                                supabase.table("module_link").insert({
-                                    "course_id": cid,
-                                    "module_id": m["id"],
-                                    "type": link_type,
-                                    "target_id": available[target]
-                                }).execute()
-                                st.success(f"✅ {link_type.title()} linked successfully!")
-                                st.rerun()
-                        else:
-                            st.info(f"No available {link_type}s to link.")
-
-        else:
-            st.info("📭 No modules added yet.")
 
 
 
@@ -1365,22 +1310,63 @@ def page_course_detail():
 def page_account(): 
     st.header("👤 Account Page") 
     st.info("This section is under construction.")
+# ======================
+# === ROUTING ===
+# ======================
+def main():
+    # Navigasi balik setelah keluar course
+    if st.session_state.get("_nav_back"):
+        del st.session_state["_nav_back"]
+        return main()  # rerender penuh, sidebar muncul lagi
+    
+    # Handle soft navigation without experimental rerun
+    if st.session_state.get("_nav_trigger"):
+        del st.session_state["_nav_trigger"]
+        return main()  # panggil ulang fungsi main() manual, rerender natural
 
+
+    # === INISIALISASI SESSION STATE ===
+    if "page" not in st.session_state:
+        st.session_state.page = "login"
+    if "user" not in st.session_state:
+        st.session_state.user = None
+    if "current_course" not in st.session_state:
+        st.session_state.current_course = None
+    if "last_course" not in st.session_state:
+        st.session_state.last_course = None
+
+    page = st.session_state.page
+
+    # === ROUTER HALAMAN ===
+    if page == "login":
+        page_login()
+
+    elif page == "dashboard":
+        page_dashboard()
+
+    elif page == "courses":
+        page_courses()
+
+    elif page == "course_detail":
+        # Pastikan course tetap tersimpan
+        if st.session_state.get("current_course"):
+            page_course_detail()
+        elif st.session_state.get("last_course"):
+            st.session_state.current_course = st.session_state.last_course
+            raise st.script_runner.RerunException(st.script_request_queue.RerunData(None))
+        else:
+            st.warning("⚠️ No course selected. Please return to the Courses page.")
+            st.session_state.page = "courses"
+            st.rerun()
+
+    elif page == "account":
+        page_account()
+
+    else:
+        # fallback ke login
+        st.session_state.page = "login"
+        st.rerun()
+
+# jalankan aplikasi
 if __name__ == "__main__":
     main()
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
