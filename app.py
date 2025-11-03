@@ -1,13 +1,65 @@
 import streamlit as st
 st.set_page_config(page_title="ThinkVerse LMS", layout="wide")
 
+# === Import lain baru boleh di bawah sini ===
+import time
 import uuid
 from datetime import datetime
-from supabase import create_client, Client
-import time
-import markdown
+from supabase import create_client
 
-st.set_page_config(page_title="ThinkVerse LMS", layout="wide")
+# === Definisi fungsi utilitas ===
+def init_session_state():
+    defaults = {
+        "initialized": True,
+        "page": "login",
+        "user": None,
+        "refresh_modules": False,
+        "show_edit_form": False,
+        "current_course": None,
+        "edit_module_id": None,
+        "edit_module_data": None,
+        "selected_quiz_id": None,
+        "selected_assignment_id": None,
+        "last_course": None,
+    }
+    for key, val in defaults.items():
+        if key not in st.session_state:
+            st.session_state[key] = val
+
+
+def main():
+    init_session_state()
+
+    page = st.session_state.page
+
+    if page == "login":
+        page_login()
+    elif page == "dashboard":
+        page_dashboard()
+    elif page == "courses":
+        page_courses()
+    elif page == "course_detail":
+        page_course_detail()
+    elif page == "account":
+        page_account()
+    else:
+        st.session_state.page = "login"
+        st.rerun()
+
+
+# === Jalankan aplikasi ===
+if __name__ == "__main__":
+    main()
+
+
+# =========================
+# ⬇️ SEMUA FUNGSI HALAMAN (page_login, page_dashboard, dll)
+# =========================
+def page_login():
+    ...
+def page_dashboard():
+    ...
+
 
 # =========================
 # === KONFIGURASI AWAL ===
@@ -1205,125 +1257,4 @@ def page_course_detail():
 def page_account(): 
     st.header("👤 Account Page") 
     st.info("This section is under construction.")
-# ======================
-# === ROUTING ===
-# ======================
-import streamlit as st
-import time
-import uuid
-from datetime import datetime
-
-# --- 🧱 Konfigurasi halaman Streamlit (HARUS paling pertama & hanya sekali) ---
-st.set_page_config(page_title="ThinkVerse LMS", layout="wide")
-
-# === ✅ Inisialisasi Session State Aman ===
-def init_session_state():
-    defaults = {
-        "initialized": True,
-        "page": "login",
-        "user": None,
-        "refresh_modules": False,
-        "show_edit_form": False,
-        "current_course": None,
-        "edit_module_id": None,
-        "edit_module_data": None,
-        "selected_quiz_id": None,
-        "selected_assignment_id": None,
-        "last_course": None,
-    }
-    for key, val in defaults.items():
-        if key not in st.session_state:
-            st.session_state[key] = val
-
-
-# === 🚀 MAIN APP ===
-def main():
-    # --- Pastikan session state sudah siap ---
-    init_session_state()
-
-    # --- Pastikan user login sebelum masuk ke halaman lain ---
-    if "user" not in st.session_state or st.session_state.user is None:
-        if st.session_state.page != "login":
-            st.session_state.page = "login"
-
-    # --- Router halaman ---
-    page = st.session_state.page
-
-    if page == "login":
-        page_login()
-
-    elif page == "dashboard":
-        page_dashboard()
-
-    elif page == "courses":
-        page_courses()
-
-    elif page == "course_detail":
-        # Pastikan course tersimpan
-        if st.session_state.get("current_course"):
-            page_course_detail()
-        elif st.session_state.get("last_course"):
-            st.session_state.current_course = st.session_state.last_course
-            st.session_state.page = "course_detail"
-            st.rerun()
-        else:
-            st.warning("⚠️ No course selected. Please return to the Courses page.")
-            st.session_state.page = "courses"
-            st.rerun()
-
-    elif page == "account":
-        page_account()
-
-    else:
-        # fallback ke login
-        st.session_state.page = "login"
-        st.rerun()
-
-
-# === Jalankan aplikasi utama ===
-if __name__ == "__main__":
-    main()
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
