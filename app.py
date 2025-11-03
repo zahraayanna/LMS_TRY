@@ -429,13 +429,27 @@ def page_course_detail():
 
     # --- Tabs ---
     tabs = st.tabs([
-        "🏠 Halaman Utama",
-        "🕒 Absensi",
-        "📦 Aktifitas Pembelajaran",
-        "🧩 Tugas",
-        "🧠 Kuis",
-        "📣 Pengumuman"
-    ])
+    "📚 Overview",
+    "🕒 Attendance",
+    "📦 Learning Modules",
+    "📋 Assignments",
+    "🧠 Quizzes",
+    "📣 Announcements"
+])
+
+# === Deteksi tab aktif dari session state ===
+active_tab = st.session_state.get("active_tab", "overview")
+
+# index tab sesuai urutan di atas
+tab_index = {
+    "overview": 0,
+    "attendance": 1,
+    "module": 2,
+    "assignment": 3,
+    "quiz": 4,
+    "announcement": 5
+}
+
 
     # =====================================
     # DASHBOARD
@@ -729,10 +743,9 @@ def page_course_detail():
                             if q:
                                 stable_key = f"quiz_{cid}_{m['id']}_{q['id']}_{i}"
                                 st.markdown(f"🧠 **Quiz:** {q.get('title', 'Untitled Quiz')}")
-                                if st.button("➡️ Open Quiz", key=stable_key):
-                                    # Simpan ID quiz ke session state dan alihkan ke halaman quiz
+                                if st.button(f"➡️ Open Quiz", key=f"open_quiz_{m['id']}_{q['id']}"):
                                     st.session_state.selected_quiz_id = q["id"]
-                                    st.session_state.page = "course_detail_quiz"
+                                    st.session_state.active_tab = "quiz"
                                     st.rerun()
                     
                         # === Tampilkan assignment terkait ===
@@ -741,10 +754,9 @@ def page_course_detail():
                             if a:
                                 stable_key = f"asg_{cid}_{m['id']}_{a['id']}_{j}"
                                 st.markdown(f"📋 **Assignment:** {a.get('title', 'Untitled Assignment')}")
-                                if st.button("➡️ Open Assignment", key=stable_key):
-                                    # Simpan ID assignment ke session state dan alihkan ke halaman tugas
-                                    st.session_state.selected_assignment_id = a["id"]
-                                    st.session_state.page = "course_detail_assignment"
+                                if st.button(f"➡️ Open Assignment", key=f"open_asg_{m['id']}_{asg_data['id']}"):
+                                    st.session_state.selected_assignment_id = asg_data["id"]
+                                    st.session_state.active_tab = "assignment"
                                     st.rerun()
 
     
@@ -906,10 +918,44 @@ def page_course_detail():
     # ASSIGNMENTS
     # =====================================
     with tabs[3]:
-        import streamlit.components.v1 as components
-        import re
+        st.subheader("📋 Assignments")
+    
+        assignments = supabase.table("assignments").select("*").eq("course_id", cid).execute().data
+        selected_asg_id = st.session_state.get("selected_assignment_id")
+    
+        if assignments:
+            for a in assignments:
+                expanded = selected_asg_id == a["id"]  # otomatis buka assignment yg diklik
+                with st.expander(f"📄 {a['title']}", expanded=expanded):
+                    if expanded:
+                        # reset biar gak auto expand terus
+                        st.session_state.selected_assignment_id = None
+    
+                    st.markdown(f"**Description:**\n\n{a.get('description', '_No description_')}")
+    
+                    if a.get("file_url"):
+                        st.markdown(f"[📎 Download File]({a['file_url']})")
+    
+                    if user["role"] == "student":
+                        uploaded = st.file_uploader("Upload your work:", key=f"upload_{a['id']}")
+                        if uploaded and st.button("📤 Submit", key=f"submit_{a['id']}"):
+                            try:
+                                file_bytes = uploaded.read()
+                                file_path = f"assignments/{user['id']}_{int(datetime.now().timestamp())}_{uploaded.name}"
+                                supabase.storage.from_("thinkverse_uploads").upload(file_path, file_bytes)
+                                file_url = f"{SUPABASE_URL}/storage/v1/object/public/thinkverse_uploads/{file_path}"
+                                supabase.table("assignment_submissions").insert({
+                                    "assignment_id": a["id"],
+                                    "user_id": user["id"],
+                                    "file_url": file_url,
+                                    "submitted_at": str(datetime.now())
+                                }).execute()
+                                st.success("✅ Assignment submitted successfully!")
+                            except Exception as e:
+                                st.error(f"❌ Failed to upload: {e}")
+        else:
+            st.info("No assignments yet.")
 
-        st.subheader("🧩 Assignments")
 
         # === Load Assignments ===
         try:
@@ -1016,10 +1062,22 @@ def page_course_detail():
     # =====================================
     with tabs[4]:
         import streamlit.components.v1 as components
-        import re
-        import markdown
-
+        import re, markdown
+    
         st.subheader("🧠 Quizzes")
+    
+        quizzes = supabase.table("quizzes").select("*").eq("course_id", cid).execute().data
+        selected_quiz_id = st.session_state.get("selected_quiz_id")
+    
+        if quizzes:
+            for q in quizzes:
+                expanded = selected_quiz_id == q["id"]  # auto buka quiz yang diklik dari modul
+    
+                with st.expander(f"📝 {q['title']}", expanded=expanded):
+                    # setelah terbuka, hapus selection biar gak auto-expand terus
+                    if expanded:
+                        st.session_state.selected_quiz_id = None
+                    ...
 
         # === Load all quizzes for this course ===
         quizzes = supabase.table("quizzes").select("*").eq("course_id", cid).execute().data
@@ -1441,4 +1499,5 @@ def main():
 # jalankan aplikasi
 if __name__ == "__main__":
     main()
+
 
