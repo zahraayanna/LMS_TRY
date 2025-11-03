@@ -1207,7 +1207,7 @@ def page_account():
 # === ROUTING ===
 # ======================
 def main():
-init_session_state()
+    init_session_state()
 
     # --- Pastikan session state sudah diinisialisasi ---
     if "initialized" not in st.session_state:
@@ -1294,6 +1294,7 @@ init_session_state()
 # jalankan aplikasi
 if __name__ == "__main__":
     main()
+
 
 
 
