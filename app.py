@@ -1373,13 +1373,11 @@ def main():
     # Navigasi balik setelah keluar course
     if st.session_state.get("_nav_back"):
         del st.session_state["_nav_back"]
-        return main()  # rerender penuh, sidebar muncul lagi
-    
-    # Handle soft navigation without experimental rerun
+        return main()
+
     if st.session_state.get("_nav_trigger"):
         del st.session_state["_nav_trigger"]
-        return main()  # panggil ulang fungsi main() manual, rerender natural
-
+        return main()
 
     # === INISIALISASI SESSION STATE ===
     if "page" not in st.session_state:
@@ -1404,7 +1402,6 @@ def main():
         page_courses()
 
     elif page == "course_detail":
-        # Pastikan course tetap tersimpan
         if st.session_state.get("current_course"):
             page_course_detail()
         elif st.session_state.get("last_course"):
@@ -1415,6 +1412,23 @@ def main():
             st.session_state.page = "courses"
             st.rerun()
 
+    # ✅ Tambahan baru — halaman quiz & assignment detail
+    elif page == "course_detail_quiz":
+        if st.session_state.get("selected_quiz_id"):
+            page_course_detail_quiz()  # pastikan kamu punya fungsi ini
+        else:
+            st.warning("⚠️ No quiz selected. Returning to course...")
+            st.session_state.page = "course_detail"
+            st.rerun()
+
+    elif page == "course_detail_assignment":
+        if st.session_state.get("selected_assignment_id"):
+            page_course_detail_assignment()  # pastikan fungsi ini ada juga
+        else:
+            st.warning("⚠️ No assignment selected. Returning to course...")
+            st.session_state.page = "course_detail"
+            st.rerun()
+
     elif page == "account":
         page_account()
 
@@ -1423,9 +1437,11 @@ def main():
         st.session_state.page = "login"
         st.rerun()
 
+
 # jalankan aplikasi
 if __name__ == "__main__":
     main()
+
 
 
 
