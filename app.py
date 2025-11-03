@@ -776,28 +776,47 @@ def page_course_detail():
                                 }).eq("user_id", user["id"]).eq("module_id", m["id"]).execute()
                             st.success("🎯 Module marked as completed!")
                             st.rerun()
-    
+
                     # === Guru ===
                     if user["role"] == "instructor":
                         st.divider()
-                        col1, col2, col3 = st.columns(3)
-    
+                        col1, col2, col3, col4, col5 = st.columns(5)
+                    
                         with col1:
                             edit_key = f"edit_{cid}_{m['id']}"
-                            if st.button(f"📝 Edit '{m['title']}'", key=edit_key):
+                            if st.button(f"📝 Edit", key=edit_key):
                                 st.session_state.edit_module_id = m["id"]
                                 st.session_state.edit_module_data = m
                                 st.session_state.show_edit_form = True
                                 st.rerun()
-    
+                    
                         with col2:
                             del_key = f"del_{cid}_{m['id']}"
-                            if st.button(f"🗑️ Delete '{m['title']}'", key=del_key):
+                            if st.button(f"🗑️ Delete", key=del_key):
                                 supabase.table("modules").delete().eq("id", m["id"]).execute()
-                                st.success("✅ Module deleted successfully!")
+                                st.success(f"✅ Module '{m['title']}' deleted successfully!")
                                 st.rerun()
-    
+                    
+                        # 🔁 Tombol Reorder
                         with col3:
+                            if idx > 1:
+                                move_up_key = f"moveup_{cid}_{m['id']}"
+                                if st.button("⬆️ Move Up", key=move_up_key):
+                                    prev_module = mods[idx - 2]  # modul sebelumnya
+                                    supabase.table("modules").update({"order_index": prev_module["order_index"]}).eq("id", m["id"]).execute()
+                                    supabase.table("modules").update({"order_index": m["order_index"]}).eq("id", prev_module["id"]).execute()
+                                    st.rerun()
+                    
+                        with col4:
+                            if idx < len(mods):
+                                move_down_key = f"movedown_{cid}_{m['id']}"
+                                if st.button("⬇️ Move Down", key=move_down_key):
+                                    next_module = mods[idx]
+                                    supabase.table("modules").update({"order_index": next_module["order_index"]}).eq("id", m["id"]).execute()
+                                    supabase.table("modules").update({"order_index": m["order_index"]}).eq("id", next_module["id"]).execute()
+                                    st.rerun()
+                    
+                        with col5:
                             with st.form(f"link_form_{cid}_{m['id']}"):
                                 link_type = st.selectbox("Link Type", ["quiz", "assignment"], key=f"linktype_{cid}_{m['id']}")
                                 available = {q["title"]: q["id"] for q in all_quizzes} if link_type == "quiz" else {a["title"]: a["id"] for a in all_assignments}
@@ -814,7 +833,7 @@ def page_course_detail():
                                         st.rerun()
                                 else:
                                     st.info(f"No available {link_type}s to link.")
-    
+
                     previous_completed = (
                         progress_dict.get(m["id"]) == "completed" if user["role"] == "student" else True
                     )
@@ -1408,6 +1427,7 @@ def main():
 # jalankan aplikasi
 if __name__ == "__main__":
     main()
+
 
 
 
