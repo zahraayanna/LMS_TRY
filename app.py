@@ -725,7 +725,7 @@ def page_course_detail():
                             q = next((q for q in all_quizzes if q["id"] == rq["target_id"]), None)
                             if q:
                                 st.markdown(f"🧠 **Quiz:** {q['title']}")
-                                if st.button(f"➡️ Open Quiz", key=f"quiz_{q['id']}"):
+                                if st.button(f"➡️ Open Quiz", key=f"quiz_{m['id']}_{q['id']}"):
                                     supabase.table("module_progress").update({
                                         "status": "completed",
                                         "updated_at": datetime.now().isoformat(),
@@ -737,7 +737,7 @@ def page_course_detail():
                             a = next((a for a in all_assignments if a["id"] == ra["target_id"]), None)
                             if a:
                                 st.markdown(f"📋 **Assignment:** {a['title']}")
-                                if st.button(f"➡️ Open Assignment", key=f"asg_{a['id']}"):
+                                if st.button(f"➡️ Open Assignment", key=f"asg_{m['id']}_{a['id']}"):
                                     supabase.table("module_progress").update({
                                         "status": "completed",
                                         "updated_at": datetime.now().isoformat(),
@@ -1395,6 +1395,7 @@ def main():
 # jalankan aplikasi
 if __name__ == "__main__":
     main()
+
 
 
 
