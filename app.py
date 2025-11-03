@@ -585,7 +585,7 @@ def page_course_detail():
     # =====================================
     with tabs[2]:
         from datetime import datetime
-        import markdown, re, hashlib
+        import markdown, re
         import streamlit.components.v1 as components
     
         st.subheader("📦 Learning Activities (Modules)")
@@ -599,7 +599,7 @@ def page_course_detail():
     
         st.session_state.current_course = cid
     
-        # === Load semua modul (urut berdasarkan order_index) ===
+        # === Load data utama ===
         try:
             mods = (
                 supabase.table("modules")
@@ -614,13 +614,13 @@ def page_course_detail():
             st.error(f"❌ Failed to load modules: {e}")
             mods = []
     
-        # === Load link module-quiz-assignment ===
+        # === Load link module–quiz–assignment ===
         try:
             module_links = supabase.table("module_link").select("*").eq("course_id", cid).execute().data or []
         except Exception:
             module_links = []
     
-        # === Load quiz dan assignment untuk link ===
+        # === Load quiz dan assignment ===
         all_quizzes = supabase.table("quizzes").select("*").eq("course_id", cid).execute().data or []
         all_assignments = supabase.table("assignments").select("*").eq("course_id", cid).execute().data or []
     
@@ -639,10 +639,10 @@ def page_course_detail():
             except Exception:
                 progress_dict = {}
     
-            # === Hitung progress bar ===
             total_modules = len(mods)
             completed_count = sum(1 for s in progress_dict.values() if s == "completed")
             ratio = completed_count / total_modules if total_modules > 0 else 0
+    
             st.progress(ratio)
             st.caption(f"Learning Progress: {completed_count}/{total_modules} modules completed")
     
@@ -671,7 +671,7 @@ def page_course_detail():
                         st.warning("🔒 This module is locked. Complete the previous module first.")
                         continue
     
-                    # === Update progres otomatis ===
+                    # === Auto set "in progress" saat dibuka ===
                     if user["role"] == "student":
                         existing = (
                             supabase.table("module_progress")
@@ -702,6 +702,7 @@ def page_course_detail():
     
                     content_with_embeds = re.sub(embed_pattern, replace_embed, raw_content)
                     rendered_md = markdown.markdown(content_with_embeds, extensions=["fenced_code", "tables", "md_in_html"])
+    
                     html_content = f"""
                     <div style="font-size:16px; line-height:1.7; text-align:justify;">
                         <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
@@ -715,17 +716,17 @@ def page_course_detail():
                     if m.get("video_url"):
                         st.video(m["video_url"])
     
-                    # === Tugas & Quiz terkait ===
+                    # === Related Activities (Quiz & Assignment) ===
                     related_quiz = [l for l in module_links if l["module_id"] == m["id"] and l["type"] == "quiz"]
                     related_asg = [l for l in module_links if l["module_id"] == m["id"] and l["type"] == "assignment"]
     
                     if related_quiz or related_asg:
                         st.markdown("### 🧩 Related Activities")
     
-                        for rq in related_quiz:
+                        for i, rq in enumerate(related_quiz):
                             q = next((q for q in all_quizzes if q["id"] == rq["target_id"]), None)
                             if q:
-                                stable_key = hashlib.md5(f"quiz_{m['id']}_{q['id']}".encode()).hexdigest()
+                                stable_key = f"quiz_{cid}_{m['id']}_{q['id']}_{i}"
                                 st.markdown(f"🧠 **Quiz:** {q.get('title', 'Untitled Quiz')}")
                                 if st.button("➡️ Open Quiz", key=stable_key):
                                     supabase.table("module_progress").update({
@@ -735,10 +736,10 @@ def page_course_detail():
                                     st.success("🎯 Quiz completed! Module marked as completed.")
                                     st.rerun()
     
-                        for ra in related_asg:
+                        for j, ra in enumerate(related_asg):
                             a = next((a for a in all_assignments if a["id"] == ra["target_id"]), None)
                             if a:
-                                stable_key = hashlib.md5(f"asg_{m['id']}_{a['id']}".encode()).hexdigest()
+                                stable_key = f"asg_{cid}_{m['id']}_{a['id']}_{j}"
                                 st.markdown(f"📋 **Assignment:** {a.get('title', 'Untitled Assignment')}")
                                 if st.button("➡️ Open Assignment", key=stable_key):
                                     supabase.table("module_progress").update({
@@ -748,10 +749,10 @@ def page_course_detail():
                                     st.success("🎯 Assignment completed! Module marked as completed.")
                                     st.rerun()
     
-                    # === Tombol selesai manual ===
+                    # === Mark as Complete ===
                     if user["role"] == "student" and status != "completed":
-                        done_key = hashlib.md5(f"done_{m['id']}".encode()).hexdigest()
-                        if st.button(f"✅ Mark as Completed", key=done_key):
+                        done_key = f"done_{cid}_{m['id']}"
+                        if st.button("✅ Mark as Completed", key=done_key):
                             existing = (
                                 supabase.table("module_progress")
                                 .select("id")
@@ -776,12 +777,13 @@ def page_course_detail():
                             st.success("🎯 Module marked as completed!")
                             st.rerun()
     
-                    # === Guru: Edit / Hapus / Link ke Quiz/Assignment ===
+                    # === Guru ===
                     if user["role"] == "instructor":
                         st.divider()
                         col1, col2, col3 = st.columns(3)
+    
                         with col1:
-                            edit_key = hashlib.md5(f"edit_{m['id']}".encode()).hexdigest()
+                            edit_key = f"edit_{cid}_{m['id']}"
                             if st.button(f"📝 Edit '{m['title']}'", key=edit_key):
                                 st.session_state.edit_module_id = m["id"]
                                 st.session_state.edit_module_data = m
@@ -789,19 +791,18 @@ def page_course_detail():
                                 st.rerun()
     
                         with col2:
-                            del_key = hashlib.md5(f"del_{m['id']}".encode()).hexdigest()
+                            del_key = f"del_{cid}_{m['id']}"
                             if st.button(f"🗑️ Delete '{m['title']}'", key=del_key):
                                 supabase.table("modules").delete().eq("id", m["id"]).execute()
                                 st.success("✅ Module deleted successfully!")
                                 st.rerun()
     
                         with col3:
-                            form_key = f"link_form_{m['id']}"
-                            with st.form(form_key):
-                                link_type = st.selectbox("Link Type", ["quiz", "assignment"], key=f"linktype_{m['id']}")
+                            with st.form(f"link_form_{cid}_{m['id']}"):
+                                link_type = st.selectbox("Link Type", ["quiz", "assignment"], key=f"linktype_{cid}_{m['id']}")
                                 available = {q["title"]: q["id"] for q in all_quizzes} if link_type == "quiz" else {a["title"]: a["id"] for a in all_assignments}
                                 if available:
-                                    target = st.selectbox("Select Target", list(available.keys()), key=f"target_{m['id']}")
+                                    target = st.selectbox("Select Target", list(available.keys()), key=f"target_{cid}_{m['id']}")
                                     if st.form_submit_button("🔗 Link"):
                                         supabase.table("module_link").insert({
                                             "course_id": cid,
@@ -875,6 +876,7 @@ def page_course_detail():
                         }).execute()
                         st.success(f"✅ Module '{title}' added successfully!")
                         st.rerun()
+
 
 
 
@@ -1406,6 +1408,7 @@ def main():
 # jalankan aplikasi
 if __name__ == "__main__":
     main()
+
 
 
 
