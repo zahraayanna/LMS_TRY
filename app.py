@@ -490,16 +490,29 @@ def page_course_detail():
             with st.form("create_attendance_session"):
                 st.markdown("### ➕ Create Attendance Session")
                 date = st.date_input("Session Date")
+                start_time = st.time_input("Start Time")
+                end_time = st.time_input("Attendance Deadline (End Time)")
                 note = st.text_input("Session Note (optional)")
                 ok = st.form_submit_button("Create Session")
+
                 if ok:
-                    supabase.table("attendance_sessions").insert({
-                        "course_id": cid,
-                        "date": str(date),
-                        "note": note
-                    }).execute()
-                    st.success("✅ Attendance session created!")
-                    st.rerun()
+                    # gabungkan tanggal dan waktu ke dalam datetime penuh
+                    start_dt = datetime.combine(date, start_time)
+                    deadline_dt = datetime.combine(date, end_time)
+
+                    # validasi
+                    if deadline_dt <= start_dt:
+                        st.error("⚠️ Deadline must be after start time.")
+                    else:
+                        supabase.table("attendance_sessions").insert({
+                            "course_id": cid,
+                            "date": str(date),
+                            "start_time": str(start_time),
+                            "deadline": str(deadline_dt),
+                            "note": note
+                        }).execute()
+                        st.success("✅ Attendance session created!")
+                        st.rerun()
 
         # --- tampilkan semua sesi absensi ---
         if sessions:
@@ -508,6 +521,10 @@ def page_course_detail():
 
                 # ambil semua kehadiran siswa di sesi ini
                 records = supabase.table("attendance").select("*").eq("session_id", s["id"]).execute().data
+
+                # tampilkan deadline
+                if 'deadline' in s:
+                    st.caption(f"🕔 Deadline: {s['deadline']}")
 
                 if user["role"] == "instructor":
                     # tampilkan daftar siswa hadir
@@ -537,16 +554,29 @@ def page_course_detail():
                     if existing:
                         st.success("✅ You are marked present for this session.")
                     else:
-                        if st.button(f"🖋️ Mark as Present ({s['date']})", key=f"mark_{s['id']}"):
-                            supabase.table("attendance").insert({
-                                "session_id": s["id"],
-                                "course_id": cid,
-                                "user_id": user["id"],
-                                "date": str(datetime.now().date()),
-                                "status": "present"
-                            }).execute()
-                            st.success("✅ Your attendance has been recorded!")
-                            st.rerun()
+                        # cek waktu saat ini vs deadline
+                        now = datetime.now()
+                        if 'deadline' in s:
+                            try:
+                                deadline_dt = datetime.fromisoformat(s['deadline'])
+                            except:
+                                deadline_dt = None
+                        else:
+                            deadline_dt = None
+
+                        if deadline_dt and now > deadline_dt:
+                            st.warning("⏰ Attendance time is over. You are marked absent.")
+                        else:
+                            if st.button(f"🖋️ Mark as Present ({s['date']})", key=f"mark_{s['id']}"):
+                                supabase.table("attendance").insert({
+                                    "session_id": s["id"],
+                                    "course_id": cid,
+                                    "user_id": user["id"],
+                                    "timestamp": str(datetime.now()),
+                                    "status": "present"
+                                }).execute()
+                                st.success("✅ Your attendance has been recorded!")
+                                st.rerun()
         else:
             st.info("No attendance sessions created yet.")
 
@@ -1370,4 +1400,5 @@ def main():
 # jalankan aplikasi
 if __name__ == "__main__":
     main()
+
 
