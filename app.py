@@ -800,7 +800,7 @@ def page_course_detail():
                                 available = {q["title"]: q["id"] for q in all_quizzes} if link_type == "quiz" else {a["title"]: a["id"] for a in all_assignments}
                                 if available:
                                     target = st.selectbox("Select Target", list(available.keys()), key=f"target_{m['id']}")
-                                    if st.form_submit_button("🔗 Link", key=f"link_submit_{m['id']}"):
+                                    if st.form_submit_button("🔗 Link"):
                                         supabase.table("module_link").insert({
                                             "course_id": cid,
                                             "module_id": m["id"],
@@ -1402,6 +1402,7 @@ def main():
 # jalankan aplikasi
 if __name__ == "__main__":
     main()
+
 
 
 
