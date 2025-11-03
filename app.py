@@ -719,35 +719,34 @@ def page_course_detail():
                     # === Related Activities (Quiz & Assignment) ===
                     related_quiz = [l for l in module_links if l["module_id"] == m["id"] and l["type"] == "quiz"]
                     related_asg = [l for l in module_links if l["module_id"] == m["id"] and l["type"] == "assignment"]
-    
+                    
                     if related_quiz or related_asg:
                         st.markdown("### 🧩 Related Activities")
-    
+                    
+                        # === Tampilkan quiz terkait ===
                         for i, rq in enumerate(related_quiz):
                             q = next((q for q in all_quizzes if q["id"] == rq["target_id"]), None)
                             if q:
                                 stable_key = f"quiz_{cid}_{m['id']}_{q['id']}_{i}"
                                 st.markdown(f"🧠 **Quiz:** {q.get('title', 'Untitled Quiz')}")
                                 if st.button("➡️ Open Quiz", key=stable_key):
-                                    supabase.table("module_progress").update({
-                                        "status": "completed",
-                                        "updated_at": datetime.now().isoformat(),
-                                    }).eq("user_id", user["id"]).eq("module_id", m["id"]).execute()
-                                    st.success("🎯 Quiz completed! Module marked as completed.")
+                                    # Simpan ID quiz ke session state dan alihkan ke halaman quiz
+                                    st.session_state.selected_quiz_id = q["id"]
+                                    st.session_state.page = "course_detail_quiz"
                                     st.rerun()
-    
+                    
+                        # === Tampilkan assignment terkait ===
                         for j, ra in enumerate(related_asg):
                             a = next((a for a in all_assignments if a["id"] == ra["target_id"]), None)
                             if a:
                                 stable_key = f"asg_{cid}_{m['id']}_{a['id']}_{j}"
                                 st.markdown(f"📋 **Assignment:** {a.get('title', 'Untitled Assignment')}")
                                 if st.button("➡️ Open Assignment", key=stable_key):
-                                    supabase.table("module_progress").update({
-                                        "status": "completed",
-                                        "updated_at": datetime.now().isoformat(),
-                                    }).eq("user_id", user["id"]).eq("module_id", m["id"]).execute()
-                                    st.success("🎯 Assignment completed! Module marked as completed.")
+                                    # Simpan ID assignment ke session state dan alihkan ke halaman tugas
+                                    st.session_state.selected_assignment_id = a["id"]
+                                    st.session_state.page = "course_detail_assignment"
                                     st.rerun()
+
     
                     # === Mark as Complete ===
                     if user["role"] == "student" and status != "completed":
@@ -1427,6 +1426,7 @@ def main():
 # jalankan aplikasi
 if __name__ == "__main__":
     main()
+
 
 
 
