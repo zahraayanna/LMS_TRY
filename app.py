@@ -584,9 +584,7 @@ def page_course_detail():
     # MODULES
     # =====================================
     with tabs[2]:
-        from PIL import Image
-        import io
-        import base64
+        from datetime import datetime
         import markdown
         import re
         import streamlit.components.v1 as components
@@ -602,38 +600,98 @@ def page_course_detail():
     
         st.session_state.current_course = cid
     
-        # === Load semua modul ===
+        # === Load semua modul urut berdasarkan order_index ===
         try:
-            mods = supabase.table("modules").select("*").eq("course_id", int(cid)).execute().data or []
+            mods = (
+                supabase.table("modules")
+                .select("*")
+                .eq("course_id", int(cid))
+                .order("order_index", desc=False)
+                .execute()
+                .data
+                or []
+            )
         except Exception as e:
             st.error(f"❌ Failed to load modules: {e}")
             mods = []
     
-        # === Tampilkan setiap modul ===
+        # === Load progress siswa ===
+        if user["role"] == "student":
+            try:
+                progress_data = (
+                    supabase.table("module_progress")
+                    .select("*")
+                    .eq("user_id", user["id"])
+                    .eq("course_id", cid)
+                    .execute()
+                    .data
+                )
+                progress_dict = {p["module_id"]: p["status"] for p in progress_data}
+            except Exception as e:
+                st.warning(f"⚠️ Could not load progress data: {e}")
+                progress_dict = {}
+    
+            # === Hitung progress bar ===
+            total_modules = len(mods)
+            completed_count = sum(1 for s in progress_dict.values() if s == "completed")
+            ratio = completed_count / total_modules if total_modules > 0 else 0
+            st.progress(ratio)
+            st.caption(f"Learning Progress: {completed_count}/{total_modules} modules completed")
+    
+            if completed_count == total_modules and total_modules > 0:
+                st.success("🎉 Congratulations! You have completed all learning activities.")
+    
+        # === Tampilkan setiap modul (runtut & lock system) ===
         if mods:
-            for m in mods:
-                with st.expander(f"📘 {m['title']}"):
-                    # === Judul modul ===
-                    st.markdown(
-                        f"<h2 style='color:#4338CA; font-weight:700; font-size:26px; text-shadow:1px 1px 2px #cfcfcf;'>{m['title']}</h2>",
-                        unsafe_allow_html=True
-                    )
+            previous_completed = True  # modul pertama selalu bisa diakses
+            for idx, m in enumerate(mods, start=1):
+                title = f"📘 {idx}. {m['title']}"
+                status = progress_dict.get(m["id"], "not_started") if user["role"] == "student" else None
+                locked = not previous_completed and user["role"] == "student"
     
-                    # === Render konten Markdown + LaTeX + Embed ===
+                # tampilkan status modul di judul
+                status_icon = ""
+                if status == "completed":
+                    status_icon = "✅"
+                elif status == "in_progress":
+                    status_icon = "⏳"
+                elif locked:
+                    status_icon = "🔒"
+    
+                with st.expander(f"{status_icon} {title}", expanded=(not locked)):
+                    if locked:
+                        st.warning("🔒 This module is locked. Complete the previous module first.")
+                        continue
+    
+                    # update progres otomatis kalau siswa membuka modul
+                    if user["role"] == "student":
+                        try:
+                            supabase.table("module_progress").upsert(
+                                {
+                                    "user_id": user["id"],
+                                    "module_id": m["id"],
+                                    "course_id": cid,
+                                    "status": "in_progress",
+                                    "updated_at": datetime.now().isoformat(),
+                                },
+                                on_conflict="user_id,module_id",
+                            ).execute()
+                        except Exception:
+                            pass
+    
+                    # === Render Markdown + LaTeX + Embed ===
                     raw_content = m.get("content", "No content available.")
-    
-                    # Ganti tag <embed> jadi iframe
                     embed_pattern = r"<embed\s+src=\"([^\"]+)\"(?:\s+width=\"(\d+)\"|\s*)?(?:\s+height=\"(\d+)\"|\s*)?>"
+    
                     def replace_embed(match):
                         src = match.group(1)
                         width = match.group(2) or "560"
                         height = match.group(3) or "315"
                         return f'<div style="text-align:center; margin:16px 0;"><iframe src="{src}" width="{width}" height="{height}" frameborder="0" allowfullscreen></iframe></div>'
-                    
+    
                     content_with_embeds = re.sub(embed_pattern, replace_embed, raw_content)
                     rendered_md = markdown.markdown(
-                        content_with_embeds,
-                        extensions=["fenced_code", "tables", "md_in_html"]
+                        content_with_embeds, extensions=["fenced_code", "tables", "md_in_html"]
                     )
     
                     html_content = f"""
@@ -647,30 +705,46 @@ def page_course_detail():
     
                     components.html(html_content, height=600, scrolling=True)
     
-                    # === Video (opsional) ===
                     if m.get("video_url"):
                         st.video(m["video_url"])
     
-                    # === Tombol Edit & Delete untuk Guru ===
+                    # === Tombol selesai ===
+                    if user["role"] == "student" and status != "completed":
+                        if st.button(f"✅ Mark as Completed", key=f"done_{m['id']}"):
+                            supabase.table("module_progress").upsert(
+                                {
+                                    "user_id": user["id"],
+                                    "module_id": m["id"],
+                                    "course_id": cid,
+                                    "status": "completed",
+                                    "updated_at": datetime.now().isoformat(),
+                                },
+                                on_conflict="user_id,module_id",
+                            ).execute()
+                            st.success("🎯 Module marked as completed!")
+                            st.rerun()
+    
+                    # === Guru bisa edit & hapus ===
                     if user["role"] == "instructor":
                         st.divider()
                         col1, col2 = st.columns(2)
                         with col1:
-                            if st.button(f"📝 Edit '{m['title']}'", key=f"edit_mod_{m['id']}"):
+                            if st.button(f"📝 Edit '{m['title']}'", key=f"edit_{m['id']}"):
                                 st.session_state.edit_module_id = m["id"]
                                 st.session_state.edit_module_data = m
                                 st.session_state.show_edit_form = True
                                 st.rerun()
     
                         with col2:
-                            if st.button(f"🗑️ Delete '{m['title']}'", key=f"del_mod_{m['id']}"):
-                                try:
-                                    supabase.table("modules").delete().eq("id", m["id"]).execute()
-                                    st.success(f"✅ Module '{m['title']}' deleted successfully!")
-                                    st.session_state.refresh_modules = True
-                                    st.rerun()
-                                except Exception as e:
-                                    st.error(f"❌ Failed to delete module: {e}")
+                            if st.button(f"🗑️ Delete '{m['title']}'", key=f"del_{m['id']}"):
+                                supabase.table("modules").delete().eq("id", m["id"]).execute()
+                                st.success("✅ Module deleted successfully!")
+                                st.rerun()
+    
+                # modul berikutnya dikunci kalau belum selesai
+                previous_completed = (
+                    progress_dict.get(m["id"]) == "completed" if user["role"] == "student" else True
+                )
     
         else:
             st.info("No modules yet for this course.")
@@ -686,36 +760,26 @@ def page_course_detail():
     
                 update_btn = st.form_submit_button("💾 Save Changes")
                 if update_btn:
-                    try:
-                        supabase.table("modules").update({
-                            "title": new_title,
-                            "content": new_content,
-                            "video_url": new_video
-                        }).eq("id", m["id"]).execute()
-                        st.success("✅ Module updated successfully!")
-                        st.session_state.show_edit_form = False
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"❌ Failed to update: {e}")
+                    supabase.table("modules").update({
+                        "title": new_title,
+                        "content": new_content,
+                        "video_url": new_video
+                    }).eq("id", m["id"]).execute()
+                    st.success("✅ Module updated successfully!")
+                    st.session_state.show_edit_form = False
+                    st.rerun()
     
         # === TAMBAH MODUL BARU ===
         if user["role"] == "instructor":
             st.divider()
-            st.markdown("### ➕ Add New Learning Activity (with Images & Equations)")
+            st.markdown("### ➕ Add New Learning Activity")
     
             with st.form("add_module_rich", clear_on_submit=True):
                 title = st.text_input("Module Title")
+                order_index = st.number_input("Order (position in sequence)", min_value=1, value=len(mods) + 1)
                 content = st.text_area("Content (Markdown + LaTeX supported)", height=200)
                 uploaded_image = st.file_uploader("Upload Image (optional)", type=["png", "jpg", "jpeg"])
                 video_url = st.text_input("Video URL (optional)")
-    
-                preview_btn = st.form_submit_button("🔍 Preview Content")
-    
-                if preview_btn:
-                    st.markdown("---")
-                    st.markdown("#### 🖼️ Preview Result:")
-                    st.markdown(content, unsafe_allow_html=True)
-                    st.info("You can include equations like this: `$$E = mc^2$$` or add embeds like `<embed src='URL'>`.")
     
                 submit_btn = st.form_submit_button("💾 Add Module")
     
@@ -723,34 +787,25 @@ def page_course_detail():
                     if not title.strip():
                         st.warning("Please enter a module title.")
                     else:
-                        try:
-                            img_markdown = ""
-                            if uploaded_image:
-                                img_bytes = uploaded_image.read()
-                                file_path = f"uploads/{int(datetime.now().timestamp())}_{uploaded_image.name}"
-                                supabase.storage.from_("thinkverse_uploads").upload(file_path, img_bytes)
-                                img_url = f"{SUPABASE_URL}/storage/v1/object/public/thinkverse_uploads/{file_path}"
-                                img_markdown = f"\n\n![Uploaded Image]({img_url})"
+                        img_markdown = ""
+                        if uploaded_image:
+                            img_bytes = uploaded_image.read()
+                            file_path = f"uploads/{int(datetime.now().timestamp())}_{uploaded_image.name}"
+                            supabase.storage.from_("thinkverse_uploads").upload(file_path, img_bytes)
+                            img_url = f"{SUPABASE_URL}/storage/v1/object/public/thinkverse_uploads/{file_path}"
+                            img_markdown = f"\n\n![Uploaded Image]({img_url})"
     
-                            final_content = (content or "") + (img_markdown or "")
-    
-                            supabase.table("modules").insert({
-                                "course_id": int(cid),
-                                "title": title.strip(),
-                                "content": final_content.strip(),
-                                "video_url": video_url.strip() if video_url else None
-                            }).execute()
-    
-                            st.success(f"✅ Module '{title}' added successfully!")
-                            st.session_state.refresh_modules = True
-                            st.rerun()
-                        except Exception as e:
-                            st.error(f"❌ Failed to add module: {e}")
-    
-        # === Refresh otomatis ===
-        if st.session_state.get("refresh_modules"):
-            st.session_state.refresh_modules = False
-            st.rerun()
+                        final_content = (content or "") + (img_markdown or "")
+                        supabase.table("modules").insert({
+                            "course_id": int(cid),
+                            "title": title.strip(),
+                            "order_index": int(order_index),
+                            "content": final_content.strip(),
+                            "video_url": video_url.strip() if video_url else None
+                        }).execute()
+                        st.success(f"✅ Module '{title}' added successfully!")
+                        st.rerun()
+
 
 
 
@@ -1279,6 +1334,7 @@ def main():
 # jalankan aplikasi
 if __name__ == "__main__":
     main()
+
 
 
 
