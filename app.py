@@ -585,7 +585,7 @@ def page_course_detail():
     # =====================================
     with tabs[2]:
         from datetime import datetime
-        import markdown, re
+        import markdown, re, uuid
         import streamlit.components.v1 as components
     
         st.subheader("📦 Learning Activities (Modules)")
@@ -719,40 +719,38 @@ def page_course_detail():
                     related_quiz = [l for l in module_links if l["module_id"] == m["id"] and l["type"] == "quiz"]
                     related_asg = [l for l in module_links if l["module_id"] == m["id"] and l["type"] == "assignment"]
     
-                    # === Tugas & Quiz terkait ===
                     if related_quiz or related_asg:
                         st.markdown("### 🧩 Related Activities")
-                    
+    
                         for rq in related_quiz:
                             q = next((q for q in all_quizzes if q["id"] == rq["target_id"]), None)
                             if q:
-                                st.markdown(f"🧠 **Quiz:** {q['title']}")
-                                if st.button(f"➡️ Open Quiz", key=f"quiz_btn_{m['id']}_{q['id']}"):
+                                quiz_key = f"quiz_btn_{m.get('id', uuid.uuid4())}_{q.get('id', uuid.uuid4())}"
+                                st.markdown(f"🧠 **Quiz:** {q.get('title', 'Untitled Quiz')}")
+                                if st.button(f"➡️ Open Quiz", key=quiz_key):
                                     supabase.table("module_progress").update({
                                         "status": "completed",
                                         "updated_at": datetime.now().isoformat(),
                                     }).eq("user_id", user["id"]).eq("module_id", m["id"]).execute()
                                     st.success("🎯 Quiz completed! Module marked as completed.")
                                     st.rerun()
-                    
+    
                         for ra in related_asg:
                             a = next((a for a in all_assignments if a["id"] == ra["target_id"]), None)
                             if a:
-                                st.markdown(f"📋 **Assignment:** {a['title']}")
-                                if st.button(f"➡️ Open Assignment", key=f"asg_btn_{m['id']}_{a['id']}"):
+                                asg_key = f"asg_btn_{m.get('id', uuid.uuid4())}_{a.get('id', uuid.uuid4())}"
+                                st.markdown(f"📋 **Assignment:** {a.get('title', 'Untitled Assignment')}")
+                                if st.button(f"➡️ Open Assignment", key=asg_key):
                                     supabase.table("module_progress").update({
                                         "status": "completed",
                                         "updated_at": datetime.now().isoformat(),
                                     }).eq("user_id", user["id"]).eq("module_id", m["id"]).execute()
                                     st.success("🎯 Assignment completed! Module marked as completed.")
                                     st.rerun()
-
-
     
                     # === Tombol selesai manual ===
                     if user["role"] == "student" and status != "completed":
-                        if st.button(f"✅ Mark as Completed", key=f"done_btn_{m['id']}"):
-                            ...
+                        if st.button(f"✅ Mark as Completed", key=f"done_btn_{m.get('id', uuid.uuid4())}"):
                             existing = (
                                 supabase.table("module_progress")
                                 .select("id")
@@ -782,20 +780,20 @@ def page_course_detail():
                         st.divider()
                         col1, col2, col3 = st.columns(3)
                         with col1:
-                            if st.button(f"📝 Edit '{m['title']}'", key=f"edit_btn_{m['id']}"):
+                            if st.button(f"📝 Edit '{m['title']}'", key=f"edit_btn_{m.get('id', uuid.uuid4())}"):
                                 st.session_state.edit_module_id = m["id"]
                                 st.session_state.edit_module_data = m
                                 st.session_state.show_edit_form = True
                                 st.rerun()
-                    
+    
                         with col2:
-                            if st.button(f"🗑️ Delete '{m['title']}'", key=f"del_btn_{m['id']}"):
+                            if st.button(f"🗑️ Delete '{m['title']}'", key=f"del_btn_{m.get('id', uuid.uuid4())}"):
                                 supabase.table("modules").delete().eq("id", m["id"]).execute()
                                 st.success("✅ Module deleted successfully!")
                                 st.rerun()
-                    
+    
                         with col3:
-                            with st.form(f"link_form_{m['id']}_form"):
+                            with st.form(f"link_form_{m.get('id', uuid.uuid4())}"):
                                 link_type = st.selectbox("Link Type", ["quiz", "assignment"], key=f"linktype_{m['id']}")
                                 available = {q["title"]: q["id"] for q in all_quizzes} if link_type == "quiz" else {a["title"]: a["id"] for a in all_assignments}
                                 if available:
@@ -811,7 +809,7 @@ def page_course_detail():
                                         st.rerun()
                                 else:
                                     st.info(f"No available {link_type}s to link.")
-
+    
                     previous_completed = (
                         progress_dict.get(m["id"]) == "completed" if user["role"] == "student" else True
                     )
@@ -873,6 +871,7 @@ def page_course_detail():
                         }).execute()
                         st.success(f"✅ Module '{title}' added successfully!")
                         st.rerun()
+
 
 
 
@@ -1402,6 +1401,7 @@ def main():
 # jalankan aplikasi
 if __name__ == "__main__":
     main()
+
 
 
 
