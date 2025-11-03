@@ -1014,168 +1014,180 @@ def page_course_detail():
     # =====================================
     # QUIZZES (FULL INTERACTIVE)
     # =====================================
-    with tabs[4]:
-        import streamlit.components.v1 as components
+    def page_course_detail_quiz():
         import re
         import markdown
-
-        st.subheader("🧠 Quizzes")
-
-        # === Load all quizzes for this course ===
-        quizzes = supabase.table("quizzes").select("*").eq("course_id", cid).execute().data
-
-        if quizzes:
-            for q in quizzes:
-                with st.expander(f"📝 {q['title']}"):
-
-                    # === Smart Description Rendering (Markdown + YouTube Embed) ===
-                    desc = q.get("description", "")
-                    if desc:
-                        st.markdown("### 📘 Quiz Description:")
-
-                        # Cek apakah mengandung link YouTube
-                        youtube_match = re.search(
-                            r"(https?://(?:www\.)?(?:youtube\.com/watch\?v=|youtu\.be/)[\w\-]+)",
-                            desc,
-                        )
-                        if youtube_match:
-                            youtube_url = youtube_match.group(1)
-                            video_id = (
-                                youtube_url.split("v=")[-1]
-                                if "v=" in youtube_url
-                                else youtube_url.split("/")[-1]
-                            )
-                            st.video(f"https://www.youtube.com/watch?v={video_id}")
-
-                            # Hapus link YouTube dari deskripsi agar tidak dobel
-                            desc = desc.replace(youtube_url, "")
-
-                        # Render Markdown dan LaTeX dari deskripsi
-                        if desc.strip():
-                            rendered_md = markdown.markdown(
-                                desc, extensions=["fenced_code", "tables", "md_in_html"]
-                            )    
-                            html_content = f"""
-                            <div style="font-size:16px; line-height:1.6;">
-                                <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
-                                <script id="MathJax-script" async
-                                    src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js">
-                                </script>
-                                {rendered_md}
-                            </div>
-                            """
-                            components.html(html_content, height=250, scrolling=True)
-
-                    # === Show quiz questions ===
-                    questions = (
-                        supabase.table("quiz_questions").select("*").eq("quiz_id", q["id"]).execute().data
-                    )
-
-                    if questions:
-                        st.markdown("### ✏️ Jawab Semua Pertanyaan di Bawah:")
-
-                        answers = {}
-
-                        for i, qs in enumerate(questions, 1):
-                            st.markdown(f"**{i}. {qs['question']}**")
-
-                            if qs["type"] == "multiple_choice":
-                                choices = qs["choices"].split("|")
-                                ans = st.radio(
-                                    "Pilih jawaban:",
-                                    choices,
-                                    key=f"ans_{qs['id']}"
-                                )
-                            else:
-                                ans = st.text_input(
-                                    "Jawaban singkat:",
-                                    key=f"ans_{qs['id']}"
-                                )
-
-                            answers[qs["id"]] = ans
-
-                        # === Tombol Kumpulkan Jawaban ===
-                        if user["role"] == "student":
-                            if st.button("✅ Kumpulkan Jawaban", key=f"submit_quiz_{q['id']}"):
-                                score = 0
-                                total = len(questions)
-
-                                for qs in questions:
-                                    correct = qs["correct_answer"].strip()
-                                    user_ans = answers.get(qs["id"], "").strip()
-
-                                    if qs["type"] == "multiple_choice":
-                                        if user_ans == correct:
-                                            score += 1
-                                    else:
-                                        if user_ans.lower() == correct.lower():
-                                            score += 1
-
-                                # === Menampilkan hasil ===
-                                st.success(f"🎉 Quiz Selesai! Skor kamu: {score}/{total}")
-
-                                # === (Opsional) Simpan hasil ke database ===
-                                try:
-                                    supabase.table("quiz_submissions").insert({
-                                        "quiz_id": q["id"],
-                                        "user_id": user["id"],
-                                        "score": score,
-                                        "total": total,
-                                        "submitted_at": str(datetime.now())
-                                    }).execute()
-                                except:
-                                    pass  # kalau tabel belum ada, biarkan aja untuk sekarang
-
-                            # 🗑️ Delete question
-                            if user["role"] == "instructor":
-                                if st.button(f"🗑️ Delete Question {i}", key=f"del_q_{qs['id']}"):
-                                    supabase.table("quiz_questions").delete().eq("id", qs["id"]).execute()
-                                    st.success(f"Question {i} deleted!")
-                                    st.rerun()
-                    else:
-                        st.info("No questions yet.")
-
-                    # 🗑️ Delete Entire Quiz
-                    if user["role"] == "instructor":
-                        if st.button(f"🗑️ Delete Quiz '{q['title']}'", key=f"del_quiz_{q['id']}"):
-                            supabase.table("quiz_questions").delete().eq("quiz_id", q["id"]).execute()
-                            supabase.table("quizzes").delete().eq("id", q["id"]).execute()
-                            st.success("Quiz deleted!")
-                            st.rerun()
-        else:
-            st.info("No quizzes yet.")
-
-        # --- Create a new quiz ---
-        if user["role"] == "instructor":
-            with st.form("add_quiz"):
-                title = st.text_input("Quiz Title")
-                desc = st.text_area("Quiz Description (supports Markdown, LaTeX, and YouTube link)")
-                ok = st.form_submit_button("➕ Create Quiz")
-
-                if ok and title:
-                    supabase.table("quizzes").insert(
-                        {"course_id": cid, "title": title, "description": desc}
-                    ).execute()
-                    st.success("✅ Quiz created successfully!")
+        import streamlit.components.v1 as components
+        from PIL import Image
+        import io, base64
+        from datetime import datetime
+    
+        st.subheader("🧠 Quiz Activity")
+    
+        quiz_id = st.session_state.get("selected_quiz_id")
+        if not quiz_id:
+            st.warning("⚠️ No quiz selected.")
+            return
+    
+        # === Load quiz ===
+        try:
+            quiz = supabase.table("quizzes").select("*").eq("id", quiz_id).execute().data
+            if not quiz:
+                st.error("❌ Quiz not found.")
+                return
+            quiz = quiz[0]
+        except Exception as e:
+            st.error(f"❌ Failed to load quiz: {e}")
+            return
+    
+        # === Render Title & Description (Markdown + YouTube + LaTeX) ===
+        st.markdown(f"### 📝 {quiz['title']}")
+        desc = quiz.get("description", "")
+        if desc:
+            # YouTube Embed
+            youtube_match = re.search(
+                r"(https?://(?:www\.)?(?:youtube\.com/watch\?v=|youtu\.be/)[\w\-]+)", desc
+            )
+            if youtube_match:
+                youtube_url = youtube_match.group(1)
+                video_id = (
+                    youtube_url.split("v=")[-1]
+                    if "v=" in youtube_url
+                    else youtube_url.split("/")[-1]
+                )
+                st.video(f"https://www.youtube.com/watch?v={video_id}")
+                desc = desc.replace(youtube_url, "")
+    
+            # Markdown + LaTeX Rendering
+            rendered_md = markdown.markdown(
+                desc, extensions=["fenced_code", "tables", "md_in_html"]
+            )
+            html_content = f"""
+            <div style="font-size:16px; line-height:1.6;">
+                <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+                <script id="MathJax-script" async
+                    src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js">
+                </script>
+                {rendered_md}
+            </div>
+            """
+            components.html(html_content, height=250, scrolling=True)
+    
+        st.divider()
+    
+        # === Load Questions ===
+        questions = supabase.table("quiz_questions").select("*").eq("quiz_id", quiz_id).execute().data
+    
+        if not questions:
+            st.info("No questions yet.")
+            if st.button("⬅️ Back to Course"):
+                st.session_state.page = "course_detail"
+                st.rerun()
+            return
+    
+        st.markdown("### ✏️ Jawab Semua Pertanyaan di Bawah:")
+        answers = {}
+    
+        for i, qs in enumerate(questions, 1):
+            st.markdown(f"**{i}. {qs['question']}**")
+    
+            if qs["type"] == "multiple_choice":
+                choices = qs["choices"].split("|")
+                ans = st.radio(
+                    "Pilih jawaban:",
+                    choices,
+                    key=f"quiz_ans_{quiz_id}_{qs['id']}"
+                )
+            else:
+                ans = st.text_input(
+                    "Jawaban singkat:",
+                    key=f"quiz_ans_{quiz_id}_{qs['id']}"
+                )
+    
+            answers[qs["id"]] = ans
+    
+            # === Delete question (guru) ===
+            if user["role"] == "instructor":
+                if st.button(f"🗑️ Delete Question {i}", key=f"del_q_{quiz_id}_{qs['id']}"):
+                    supabase.table("quiz_questions").delete().eq("id", qs["id"]).execute()
+                    st.success(f"Question {i} deleted!")
                     st.rerun()
-
-        # --- Add Question to Quiz ---
-        if user["role"] == "instructor" and quizzes:
-            from PIL import Image
-            import io
-            import base64
-
-            st.markdown("### ➕ Add Question to Quiz (Rich Version)")
-            quiz_list = {q["title"]: q["id"] for q in quizzes}
-            selected_quiz = st.selectbox("Select Quiz", list(quiz_list.keys()))
-            qid = quiz_list[selected_quiz]
-
-            with st.form("add_question_rich"):
+    
+        # === Submit answers ===
+        if user["role"] == "student":
+            if st.button("✅ Kumpulkan Jawaban", key=f"submit_quiz_{quiz_id}"):
+                score = 0
+                total = len(questions)
+    
+                for qs in questions:
+                    correct = qs["correct_answer"].strip()
+                    user_ans = answers.get(qs["id"], "").strip()
+    
+                    if qs["type"] == "multiple_choice":
+                        if user_ans == correct:
+                            score += 1
+                    else:
+                        if user_ans.lower() == correct.lower():
+                            score += 1
+    
+                # === Show result ===
+                st.success(f"🎉 Quiz Selesai! Skor kamu: {score}/{total}")
+    
+                # === Save result ===
+                try:
+                    supabase.table("quiz_submissions").insert({
+                        "quiz_id": quiz_id,
+                        "user_id": user["id"],
+                        "score": score,
+                        "total": total,
+                        "submitted_at": str(datetime.now())
+                    }).execute()
+                except:
+                    pass
+    
+                # === Update progress otomatis (jika ada link modul)
+                try:
+                    current_course = st.session_state.get("current_course")
+                    if current_course:
+                        linked = supabase.table("module_link").select("*").eq("target_id", quiz_id).eq("type", "quiz").execute().data
+                        if linked:
+                            module_id = linked[0]["module_id"]
+                            supabase.table("module_progress").upsert({
+                                "user_id": user["id"],
+                                "module_id": module_id,
+                                "course_id": current_course,
+                                "status": "completed",
+                                "updated_at": datetime.now().isoformat()
+                            }, on_conflict="user_id,module_id").execute()
+                except Exception as e:
+                    st.warning(f"⚠️ Failed to update progress: {e}")
+    
+        # === Delete quiz (guru) ===
+        if user["role"] == "instructor":
+            st.divider()
+            if st.button(f"🗑️ Delete Quiz '{quiz['title']}'", key=f"del_quiz_{quiz_id}"):
+                supabase.table("quiz_questions").delete().eq("quiz_id", quiz_id).execute()
+                supabase.table("quizzes").delete().eq("id", quiz_id).execute()
+                st.success("✅ Quiz deleted successfully!")
+                st.rerun()
+    
+        # === Back button ===
+        st.divider()
+        if st.button("⬅️ Back to Course", key=f"back_course_{quiz_id}"):
+            st.session_state.page = "course_detail"
+            st.rerun()
+    
+        # === Instructor: Add Question Section ===
+        if user["role"] == "instructor":
+            st.divider()
+            st.markdown("### ➕ Add Question to This Quiz (Rich Version)")
+    
+            with st.form(f"add_question_rich_{quiz_id}"):
                 question_text = st.text_area("Question Text (Markdown + LaTeX supported)", height=150)
                 question_image = st.file_uploader("Upload Question Image (optional)", type=["png", "jpg", "jpeg"])
-
+    
                 q_type = st.selectbox("Type", ["multiple_choice", "short_answer"])
-
+    
                 img_markdown = ""
                 if question_image:
                     try:
@@ -1186,19 +1198,19 @@ def page_course_detail():
                         img_markdown = f"\n\n![Question Image]({img_url})"
                     except Exception as e:
                         st.error(f"⚠️ Failed to upload question image: {e}")
-
+    
                 if q_type == "multiple_choice":
                     st.markdown("#### ✏️ Multiple Choice Options")
                     choices = []
                     for ch in ["A", "B", "C", "D", "E"]:
                         col1, col2 = st.columns([3, 2])
                         with col1:
-                            opt_text = st.text_input(f"Option {ch} Text (Markdown/Equation allowed)", key=f"text_{ch}")
+                            opt_text = st.text_input(f"Option {ch} Text (Markdown/Equation allowed)", key=f"text_{ch}_{quiz_id}")
                         with col2:
                             opt_img = st.file_uploader(
-                                f"Upload Image for Option {ch}", type=["png", "jpg", "jpeg"], key=f"img_{ch}"
+                                f"Upload Image for Option {ch}", type=["png", "jpg", "jpeg"], key=f"img_{ch}_{quiz_id}"
                             )
-
+    
                         img_opt_md = ""
                         if opt_img:
                             try:
@@ -1209,19 +1221,19 @@ def page_course_detail():
                                 img_opt_md = f"\n\n![Option {ch}]({img_url})"
                             except Exception as e:
                                 st.error(f"⚠️ Failed to upload image for Option {ch}: {e}")
-
+    
                         full_choice = (opt_text or "") + img_opt_md
                         choices.append(full_choice.strip())
-
+    
                     correct = st.selectbox("Correct Answer", ["A", "B", "C", "D", "E"])
                     ok = st.form_submit_button("💾 Add Question")
-
+    
                     if ok and question_text:
                         try:
                             final_question = question_text + img_markdown
                             supabase.table("quiz_questions").insert(
                                 {
-                                    "quiz_id": qid,
+                                    "quiz_id": quiz_id,
                                     "question": final_question,
                                     "type": "multiple_choice",
                                     "choices": "|".join(choices),
@@ -1232,18 +1244,18 @@ def page_course_detail():
                             st.rerun()
                         except Exception as e:
                             st.error(f"❌ Failed to add question: {e}")
-
+    
                 else:  # short answer
                     st.markdown("#### ✏️ Short Answer Question")
                     correct_ans = st.text_input("Correct Answer (text or equation)")
                     ok = st.form_submit_button("💾 Add Question")
-
+    
                     if ok and question_text:
                         try:
                             final_question = question_text + img_markdown
                             supabase.table("quiz_questions").insert(
                                 {
-                                    "quiz_id": qid,
+                                    "quiz_id": quiz_id,
                                     "question": final_question,
                                     "type": "short_answer",
                                     "correct_answer": correct_ans,
@@ -1253,6 +1265,8 @@ def page_course_detail():
                             st.rerun()
                         except Exception as e:
                             st.error(f"❌ Failed to add question: {e}")
+
+
 
 
     # =====================================
@@ -1441,6 +1455,7 @@ def main():
 # jalankan aplikasi
 if __name__ == "__main__":
     main()
+
 
 
 
