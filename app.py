@@ -429,12 +429,12 @@ def page_course_detail():
 
     # --- Tabs ---
     tabs = st.tabs([
-        "🏠 Dashboard",
-        "🕒 Attendance",
-        "📦 Modules",
-        "🧩 Assignments",
-        "🧠 Quizzes",
-        "📣 Announcements"
+        "🏠 Halaman Utama",
+        "🕒 Absensi",
+        "📦 Aktifitas Pembelajaran",
+        "🧩 Tugas",
+        "🧠 Kuis",
+        "📣 Pengumuman"
     ])
 
     # =====================================
@@ -1370,3 +1370,4 @@ def main():
 # jalankan aplikasi
 if __name__ == "__main__":
     main()
+
