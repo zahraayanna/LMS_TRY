@@ -427,15 +427,32 @@ def page_course_detail():
                 st.session_state.current_course = None
                 st.rerun()
 
+    # Cek apakah user baru saja klik "Open Quiz" atau "Open Assignment"
+    active_tab = st.session_state.get("active_tab", "overview")
+    
+    if active_tab == "quiz":
+        # langsung tampilkan tab quiz tanpa render tab lain
+        show_quiz_only = True
+    elif active_tab == "assignment":
+        show_assignment_only = True
+    else:
+        show_quiz_only = False
+        show_assignment_only = False
+
     # --- Tabs ---
-    tabs = st.tabs([
-        "📚 Overview",
-        "🕒 Attendance",
-        "📦 Learning Modules",
-        "📋 Assignments",
-        "🧠 Quizzes",
-        "📣 Announcements"
-    ])
+    if st.session_state.get("active_tab") in ["quiz", "assignment"]:
+        # Jangan render semua tab — langsung render yang dipilih
+        pass
+    else:
+        tabs = st.tabs([
+            "📚 Overview",
+            "🕒 Attendance",
+            "📦 Learning Modules",
+            "📋 Assignments",
+            "🧠 Quizzes",
+            "📣 Announcements"
+        ])
+
 
     # === Deteksi tab aktif dari session state ===
     active_tab = st.session_state.get("active_tab", "overview")
@@ -449,7 +466,33 @@ def page_course_detail():
         "quiz": 4,
         "announcement": 5
     }
-
+    # === Render khusus kalau user klik tombol di modul ===
+    if st.session_state.get("active_tab") == "quiz":
+        st.session_state.active_tab = None  # reset biar gak nempel terus
+        st.markdown("## 🧠 Quizzes")
+        selected_quiz_id = st.session_state.get("selected_quiz_id")
+    
+        quizzes = supabase.table("quizzes").select("*").eq("course_id", cid).execute().data
+        for q in quizzes:
+            expanded = selected_quiz_id == q["id"]
+            with st.expander(f"📝 {q['title']}", expanded=expanded):
+                if expanded:
+                    st.session_state.selected_quiz_id = None
+                st.markdown(q.get("description", "_No description_"))
+    
+    elif st.session_state.get("active_tab") == "assignment":
+        st.session_state.active_tab = None
+        st.markdown("## 📋 Assignments")
+        selected_assignment_id = st.session_state.get("selected_assignment_id")
+    
+        assignments = supabase.table("assignments").select("*").eq("course_id", cid).execute().data
+        for a in assignments:
+            expanded = selected_assignment_id == a["id"]
+            with st.expander(f"📄 {a['title']}", expanded=expanded):
+                if expanded:
+                    st.session_state.selected_assignment_id = None
+                st.markdown(a.get("description", "_No description_"))
+    
 
     # =====================================
     # DASHBOARD
@@ -1485,6 +1528,7 @@ def main():
 # === Panggil fungsi utama ===
 if __name__ == "__main__":
     main()
+
 
 
 
