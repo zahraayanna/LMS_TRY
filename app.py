@@ -627,7 +627,20 @@ def page_course_detail():
                                 with col1:
                                     st.markdown(f"🧠 **{quiz_data['title']}** *(Quiz)*")
                                 with col2:
-                                    if st.button("➡️ Open", key=f"open_quiz_{m['id']}_{quiz_data['id']}"):
+                                    import uuid  # Pastikan ini ada di bagian atas file kamu (kalau belum)
+
+                                    unique_id = str(uuid.uuid4())
+                                    if st.button("➡️ Open", key=f"open_quiz_{m['id']}_{quiz_data['id']}_{unique_id}"):
+                                        st.session_state.selected_quiz_id = quiz_data["id"]
+                                        st.session_state.page = "course_detail_quiz"
+                                        st.rerun()
+
+                                    if user["role"] == "instructor":
+                                        if st.button("❌ Unlink", key=f"unlink_quiz_{m['id']}_{quiz_data['id']}_{unique_id}"):
+                                            supabase.table("module_link").delete().eq("id", rq["id"]).execute()
+                                            st.success("🔗 Quiz unlinked successfully.")
+                                            st.rerun()
+
                                         st.session_state.selected_quiz_id = quiz_data["id"]
                                         st.session_state.page = "course_detail_quiz"
                                         st.rerun()
@@ -644,7 +657,18 @@ def page_course_detail():
                                 with col1:
                                     st.markdown(f"📋 **{asg_data['title']}** *(Assignment)*")
                                 with col2:
-                                    if st.button("➡️ Open", key=f"open_asg_{m['id']}_{asg_data['id']}"):
+                                    unique_id = str(uuid.uuid4())
+                                    if st.button("➡️ Open", key=f"open_asg_{m['id']}_{asg_data['id']}_{unique_id}"):
+                                        st.session_state.selected_assignment_id = asg_data["id"]
+                                        st.session_state.page = "course_detail_assignment"
+                                        st.rerun()
+
+                                    if user["role"] == "instructor":
+                                        if st.button("❌ Unlink", key=f"unlink_asg_{m['id']}_{asg_data['id']}_{unique_id}"):
+                                            supabase.table("module_link").delete().eq("id", ra["id"]).execute()
+                                            st.success("🔗 Assignment unlinked successfully.")
+                                            st.rerun()
+
                                         st.session_state.selected_assignment_id = asg_data["id"]
                                         st.session_state.page = "course_detail_assignment"
                                         st.rerun()
@@ -1237,6 +1261,7 @@ def main():
 # jalankan aplikasi
 if __name__ == "__main__":
     main()
+
 
 
 
