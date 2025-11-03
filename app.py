@@ -969,8 +969,50 @@ def page_course_detail():
                         embed_links = [url.strip() for url in a["embed_url"].split("|") if url.strip()]
     
                     # tampilkan masing-masing embed
+                    # === Display embedded resources (PhET, Liveworksheet, HTML) ===
                     for i, link in enumerate(embed_links, 1):
                         st.markdown(f"### 🔗 Embedded Resource {i}:")
+                        clean_link = link.strip()
+                    
+                        # kalau langsung iframe HTML (dari Supabase atau input form)
+                        if "<iframe" in clean_link:
+                            st.success(f"🧩 Embedded Custom HTML {i}:")
+                            try:
+                                # render langsung HTML asli
+                                components.html(clean_link, height=800, scrolling=True)
+                            except Exception as e:
+                                st.warning(f"⚠️ Failed to render custom HTML: {e}")
+                            continue
+                    
+                        # deteksi otomatis berdasarkan domain
+                        if "phet.colorado.edu" in clean_link:
+                            st.success("🧪 Embedded PhET Simulation:")
+                            iframe_html = f"""
+                            <iframe src="{clean_link}" width="100%" height="600"
+                                    allowfullscreen style="border:1px solid #ccc; border-radius:10px;">
+                            </iframe>
+                            """
+                            components.html(iframe_html, height=620, scrolling=False)
+                    
+                        elif "liveworksheets.com" in clean_link:
+                            st.success("🧾 Embedded Liveworksheet:")
+                            iframe_html = f"""
+                            <iframe src="{clean_link}" width="100%" height="800"
+                                    style="border:2px solid #ddd; border-radius:10px;" allowfullscreen>
+                            </iframe>
+                            """
+                            components.html(iframe_html, height=820, scrolling=True)
+                    
+                        elif clean_link.endswith(".html"):
+                            st.success("🧩 Embedded HTML Resource:")
+                            components.html(f'<iframe src="{clean_link}" width="100%" height="700"></iframe>', height=720)
+                    
+                        elif re.match(r"^https?://", clean_link):
+                            st.markdown(f"[🌐 Open External Resource]({clean_link})")
+                    
+                        else:
+                            st.info("ℹ️ Invalid or unsupported embed link.")
+
     
                         # 1️⃣ PhET Simulation
                         if "phet.colorado.edu" in link:
@@ -1542,6 +1584,7 @@ def main():
 # === Panggil fungsi utama ===
 if __name__ == "__main__":
     main()
+
 
 
 
