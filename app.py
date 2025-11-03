@@ -1427,6 +1427,9 @@ def page_account():
 # ======================
 # === ROUTING ===
 # ======================
+# =========================
+# === ROUTER UTAMA APP ===
+# =========================
 def main():
     # Navigasi balik setelah keluar course
     if st.session_state.get("_nav_back"):
@@ -1449,7 +1452,7 @@ def main():
 
     page = st.session_state.page
 
-    # === ROUTER HALAMAN ===
+    # === ROUTING LOGIC ===
     if page == "login":
         page_login()
 
@@ -1464,27 +1467,10 @@ def main():
             page_course_detail()
         elif st.session_state.get("last_course"):
             st.session_state.current_course = st.session_state.last_course
-            raise st.script_runner.RerunException(st.script_request_queue.RerunData(None))
+            st.rerun()
         else:
-            st.warning("⚠️ No course selected. Please return to the Courses page.")
+            st.warning("⚠️ No course selected.")
             st.session_state.page = "courses"
-            st.rerun()
-
-    # ✅ Tambahan baru — halaman quiz & assignment detail
-    elif page == "course_detail_quiz":
-        if st.session_state.get("selected_quiz_id"):
-            page_course_detail_quiz()  # pastikan kamu punya fungsi ini
-        else:
-            st.warning("⚠️ No quiz selected. Returning to course...")
-            st.session_state.page = "course_detail"
-            st.rerun()
-
-    elif page == "course_detail_assignment":
-        if st.session_state.get("selected_assignment_id"):
-            page_course_detail_assignment()  # pastikan fungsi ini ada juga
-        else:
-            st.warning("⚠️ No assignment selected. Returning to course...")
-            st.session_state.page = "course_detail"
             st.rerun()
 
     elif page == "account":
@@ -1496,8 +1482,10 @@ def main():
         st.rerun()
 
 
-# jalankan aplikasi
+# === Panggil fungsi utama ===
 if __name__ == "__main__":
     main()
+
+
 
 
