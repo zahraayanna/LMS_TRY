@@ -585,8 +585,7 @@ def page_course_detail():
     # =====================================
     with tabs[2]:
         from datetime import datetime
-        import markdown
-        import re
+        import markdown, re
         import streamlit.components.v1 as components
     
         st.subheader("📦 Learning Activities (Modules)")
@@ -600,7 +599,7 @@ def page_course_detail():
     
         st.session_state.current_course = cid
     
-        # === Load semua modul urut berdasarkan order_index ===
+        # === Load semua modul (urut berdasarkan order_index) ===
         try:
             mods = (
                 supabase.table("modules")
@@ -615,6 +614,16 @@ def page_course_detail():
             st.error(f"❌ Failed to load modules: {e}")
             mods = []
     
+        # === Load link module-quiz-assignment ===
+        try:
+            module_links = supabase.table("module_link").select("*").eq("course_id", cid).execute().data or []
+        except Exception:
+            module_links = []
+    
+        # === Load quiz dan assignment untuk link ===
+        all_quizzes = supabase.table("quizzes").select("*").eq("course_id", cid).execute().data or []
+        all_assignments = supabase.table("assignments").select("*").eq("course_id", cid).execute().data or []
+    
         # === Load progress siswa ===
         if user["role"] == "student":
             try:
@@ -627,8 +636,7 @@ def page_course_detail():
                     .data
                 )
                 progress_dict = {p["module_id"]: p["status"] for p in progress_data}
-            except Exception as e:
-                st.warning(f"⚠️ Could not load progress data: {e}")
+            except Exception:
                 progress_dict = {}
     
             # === Hitung progress bar ===
@@ -641,15 +649,15 @@ def page_course_detail():
             if completed_count == total_modules and total_modules > 0:
                 st.success("🎉 Congratulations! You have completed all learning activities.")
     
-        # === Tampilkan setiap modul (runtut & lock system) ===
+        # === Tampilkan setiap modul ===
         if mods:
-            previous_completed = True  # modul pertama selalu bisa diakses
+            previous_completed = True
             for idx, m in enumerate(mods, start=1):
                 title = f"📘 {idx}. {m['title']}"
                 status = progress_dict.get(m["id"], "not_started") if user["role"] == "student" else None
                 locked = not previous_completed and user["role"] == "student"
     
-                # tampilkan status modul di judul
+                # ikon status
                 status_icon = ""
                 if status == "completed":
                     status_icon = "✅"
@@ -663,23 +671,26 @@ def page_course_detail():
                         st.warning("🔒 This module is locked. Complete the previous module first.")
                         continue
     
-                    # update progres otomatis kalau siswa membuka modul
+                    # === Update progres otomatis ===
                     if user["role"] == "student":
-                        try:
-                            supabase.table("module_progress").upsert(
-                                {
-                                    "user_id": user["id"],
-                                    "module_id": m["id"],
-                                    "course_id": cid,
-                                    "status": "in_progress",
-                                    "updated_at": datetime.now().isoformat(),
-                                },
-                                on_conflict="user_id,module_id",
-                            ).execute()
-                        except Exception:
-                            pass
+                        existing = (
+                            supabase.table("module_progress")
+                            .select("id")
+                            .eq("user_id", user["id"])
+                            .eq("module_id", m["id"])
+                            .execute()
+                            .data
+                        )
+                        if not existing:
+                            supabase.table("module_progress").insert({
+                                "user_id": user["id"],
+                                "module_id": m["id"],
+                                "course_id": int(cid),
+                                "status": "in_progress",
+                                "updated_at": datetime.now().isoformat(),
+                            }).execute()
     
-                    # === Render Markdown + LaTeX + Embed ===
+                    # === Render konten modul ===
                     raw_content = m.get("content", "No content available.")
                     embed_pattern = r"<embed\s+src=\"([^\"]+)\"(?:\s+width=\"(\d+)\"|\s*)?(?:\s+height=\"(\d+)\"|\s*)?>"
     
@@ -690,10 +701,7 @@ def page_course_detail():
                         return f'<div style="text-align:center; margin:16px 0;"><iframe src="{src}" width="{width}" height="{height}" frameborder="0" allowfullscreen></iframe></div>'
     
                     content_with_embeds = re.sub(embed_pattern, replace_embed, raw_content)
-                    rendered_md = markdown.markdown(
-                        content_with_embeds, extensions=["fenced_code", "tables", "md_in_html"]
-                    )
-    
+                    rendered_md = markdown.markdown(content_with_embeds, extensions=["fenced_code", "tables", "md_in_html"])
                     html_content = f"""
                     <div style="font-size:16px; line-height:1.7; text-align:justify;">
                         <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
@@ -702,71 +710,104 @@ def page_course_detail():
                         <article class="markdown-body">{rendered_md}</article>
                     </div>
                     """
-    
                     components.html(html_content, height=600, scrolling=True)
     
                     if m.get("video_url"):
                         st.video(m["video_url"])
     
-                    # === Tombol selesai ===
-                    if user["role"] == "student" and status != "completed":
-                        if st.button(f"✅ Mark as Completed", key=f"done_{m['id']}"):
-                            try:
-                                # 1️⃣ Cek apakah sudah ada data progres untuk modul ini
-                                existing = supabase.table("module_progress") \
-                                    .select("id") \
-                                    .eq("user_id", user["id"]) \
-                                    .eq("module_id", m["id"]) \
-                                    .execute().data
-                        
-                                # 2️⃣ Kalau belum ada → insert
-                                if not existing:
-                                    supabase.table("module_progress").insert({
-                                        "user_id": user["id"],
-                                        "module_id": m["id"],
-                                        "course_id": int(cid),
-                                        "status": "completed",
-                                        "updated_at": datetime.now().isoformat()
-                                    }).execute()
-                                else:
-                                    # 3️⃣ Kalau sudah ada → update status ke 'completed'
+                    # === Tugas & Quiz terkait ===
+                    related_quiz = [l for l in module_links if l["module_id"] == m["id"] and l["type"] == "quiz"]
+                    related_asg = [l for l in module_links if l["module_id"] == m["id"] and l["type"] == "assignment"]
+    
+                    if related_quiz or related_asg:
+                        st.markdown("### 🧩 Related Activities")
+                        for rq in related_quiz:
+                            q = next((q for q in all_quizzes if q["id"] == rq["target_id"]), None)
+                            if q:
+                                st.markdown(f"🧠 **Quiz:** {q['title']}")
+                                if st.button(f"➡️ Open Quiz", key=f"quiz_{q['id']}"):
                                     supabase.table("module_progress").update({
                                         "status": "completed",
-                                        "updated_at": datetime.now().isoformat()
-                                    }) \
-                                    .eq("user_id", user["id"]) \
-                                    .eq("module_id", m["id"]) \
-                                    .execute()
-                        
-                                st.success("🎯 Module marked as completed!")
-                                st.rerun()
-                        
-                            except Exception as e:
-                                st.error(f"❌ Failed to update progress: {e}")
-
-
+                                        "updated_at": datetime.now().isoformat(),
+                                    }).eq("user_id", user["id"]).eq("module_id", m["id"]).execute()
+                                    st.success("🎯 Quiz completed! Module marked as completed.")
+                                    st.rerun()
     
-                    # === Guru bisa edit & hapus ===
+                        for ra in related_asg:
+                            a = next((a for a in all_assignments if a["id"] == ra["target_id"]), None)
+                            if a:
+                                st.markdown(f"📋 **Assignment:** {a['title']}")
+                                if st.button(f"➡️ Open Assignment", key=f"asg_{a['id']}"):
+                                    supabase.table("module_progress").update({
+                                        "status": "completed",
+                                        "updated_at": datetime.now().isoformat(),
+                                    }).eq("user_id", user["id"]).eq("module_id", m["id"]).execute()
+                                    st.success("🎯 Assignment completed! Module marked as completed.")
+                                    st.rerun()
+    
+                    # === Tombol selesai manual ===
+                    if user["role"] == "student" and status != "completed":
+                        if st.button(f"✅ Mark as Completed", key=f"done_{m['id']}"):
+                            existing = (
+                                supabase.table("module_progress")
+                                .select("id")
+                                .eq("user_id", user["id"])
+                                .eq("module_id", m["id"])
+                                .execute()
+                                .data
+                            )
+                            if not existing:
+                                supabase.table("module_progress").insert({
+                                    "user_id": user["id"],
+                                    "module_id": m["id"],
+                                    "course_id": int(cid),
+                                    "status": "completed",
+                                    "updated_at": datetime.now().isoformat(),
+                                }).execute()
+                            else:
+                                supabase.table("module_progress").update({
+                                    "status": "completed",
+                                    "updated_at": datetime.now().isoformat(),
+                                }).eq("user_id", user["id"]).eq("module_id", m["id"]).execute()
+                            st.success("🎯 Module marked as completed!")
+                            st.rerun()
+    
+                    # === Guru: Edit / Hapus / Link ke Quiz/Assignment ===
                     if user["role"] == "instructor":
                         st.divider()
-                        col1, col2 = st.columns(2)
+                        col1, col2, col3 = st.columns(3)
                         with col1:
                             if st.button(f"📝 Edit '{m['title']}'", key=f"edit_{m['id']}"):
                                 st.session_state.edit_module_id = m["id"]
                                 st.session_state.edit_module_data = m
                                 st.session_state.show_edit_form = True
                                 st.rerun()
-    
                         with col2:
                             if st.button(f"🗑️ Delete '{m['title']}'", key=f"del_{m['id']}"):
                                 supabase.table("modules").delete().eq("id", m["id"]).execute()
                                 st.success("✅ Module deleted successfully!")
                                 st.rerun()
+                        with col3:
+                            with st.form(f"link_form_{m['id']}"):
+                                link_type = st.selectbox("Link Type", ["quiz", "assignment"], key=f"linktype_{m['id']}")
+                                available = {q["title"]: q["id"] for q in all_quizzes} if link_type == "quiz" else {a["title"]: a["id"] for a in all_assignments}
+                                if available:
+                                    target = st.selectbox("Select Target", list(available.keys()))
+                                    if st.form_submit_button("🔗 Link"):
+                                        supabase.table("module_link").insert({
+                                            "course_id": cid,
+                                            "module_id": m["id"],
+                                            "type": link_type,
+                                            "target_id": available[target],
+                                        }).execute()
+                                        st.success(f"✅ {link_type.title()} linked successfully!")
+                                        st.rerun()
+                                else:
+                                    st.info(f"No available {link_type}s to link.")
     
-                # modul berikutnya dikunci kalau belum selesai
-                previous_completed = (
-                    progress_dict.get(m["id"]) == "completed" if user["role"] == "student" else True
-                )
+                    previous_completed = (
+                        progress_dict.get(m["id"]) == "completed" if user["role"] == "student" else True
+                    )
     
         else:
             st.info("No modules yet for this course.")
@@ -779,13 +820,12 @@ def page_course_detail():
                 new_title = st.text_input("Module Title", m["title"])
                 new_content = st.text_area("Content (Markdown + LaTeX supported)", m["content"], height=200)
                 new_video = st.text_input("Video URL (optional)", m.get("video_url", ""))
-    
                 update_btn = st.form_submit_button("💾 Save Changes")
                 if update_btn:
                     supabase.table("modules").update({
                         "title": new_title,
                         "content": new_content,
-                        "video_url": new_video
+                        "video_url": new_video,
                     }).eq("id", m["id"]).execute()
                     st.success("✅ Module updated successfully!")
                     st.session_state.show_edit_form = False
@@ -802,7 +842,6 @@ def page_course_detail():
                 content = st.text_area("Content (Markdown + LaTeX supported)", height=200)
                 uploaded_image = st.file_uploader("Upload Image (optional)", type=["png", "jpg", "jpeg"])
                 video_url = st.text_input("Video URL (optional)")
-    
                 submit_btn = st.form_submit_button("💾 Add Module")
     
                 if submit_btn:
@@ -823,7 +862,7 @@ def page_course_detail():
                             "title": title.strip(),
                             "order_index": int(order_index),
                             "content": final_content.strip(),
-                            "video_url": video_url.strip() if video_url else None
+                            "video_url": video_url.strip() if video_url else None,
                         }).execute()
                         st.success(f"✅ Module '{title}' added successfully!")
                         st.rerun()
@@ -1356,6 +1395,7 @@ def main():
 # jalankan aplikasi
 if __name__ == "__main__":
     main()
+
 
 
 
