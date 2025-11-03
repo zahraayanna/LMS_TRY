@@ -1092,7 +1092,6 @@ def page_course_detail():
                     # setelah terbuka, hapus selection biar gak auto-expand terus
                     if expanded:
                         st.session_state.selected_quiz_id = None
-                    ...
 
         # === Load all quizzes for this course ===
         quizzes = supabase.table("quizzes").select("*").eq("course_id", cid).execute().data
@@ -1500,6 +1499,7 @@ def main():
 # === Panggil fungsi utama ===
 if __name__ == "__main__":
     main()
+
 
 
 
