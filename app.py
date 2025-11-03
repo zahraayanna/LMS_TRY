@@ -460,17 +460,6 @@ import base64
 import re
 from datetime import datetime
 
-def page_course_detail():
-    if "user" not in st.session_state or not st.session_state.user:
-        st.warning("⚠️ Please log in again.")
-        st.session_state.page = "login"
-        st.rerun()
-
-    cid = st.session_state.get("current_course")
-    if not cid:
-        st.error("❌ No course selected.")
-        st.session_state.page = "courses"
-        st.rerun()
 
 # --- upload helper ---
 def upload_to_supabase(file):
@@ -1347,6 +1336,7 @@ def page_account():
 
 if __name__ == "__main__":
     main()
+
 
 
 
