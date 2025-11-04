@@ -544,7 +544,8 @@ def page_course_detail():
         "📦 Learning Modules",
         "📋 Assignments",
         "🧠 Quizzes",
-        "📣 Announcements"
+        "📣 Announcements",
+        "💬 Discussion Forum"   # 🆕 Tambahan tab baru
     ])
     
     # === Map nama tab ke indeks ===
@@ -554,8 +555,10 @@ def page_course_detail():
         "module": 2,
         "assignment": 3,
         "quiz": 4,
-        "announcement": 5
+        "announcement": 5,
+        "discussion": 6     # 🆕 Tambahkan juga ke mapping
     }
+
     
     # === Inject JavaScript untuk auto-switch tab ===
     if active_tab in ["quiz", "assignment"]:
@@ -1638,6 +1641,131 @@ def page_course_detail():
             st.error(f"❌ Failed to load announcements: {e}")
 
 
+    # =====================================
+    # FORUM DISKUSI
+    # =====================================
+    with tabs[6]:
+        from datetime import datetime
+    
+        st.subheader("💬 Forum Diskusi Kursus")
+    
+        # === FORM TAMBAH DISKUSI BARU ===
+        with st.expander("➕ Mulai Diskusi Baru", expanded=False):
+            with st.form("new_discussion_form", clear_on_submit=True):
+                title = st.text_input("Judul Diskusi")
+                content = st.text_area("Isi Diskusi (pertanyaan, pendapat, atau topik diskusi)", height=120)
+                submit = st.form_submit_button("💬 Posting Diskusi")
+    
+                if submit:
+                    if not title.strip() or not content.strip():
+                        st.warning("⚠️ Harap isi judul dan isi diskusi terlebih dahulu.")
+                    else:
+                        try:
+                            supabase.table("discussions").insert({
+                                "course_id": cid,
+                                "user_id": user["id"],
+                                "title": title.strip(),
+                                "content": content.strip(),
+                                "created_at": datetime.now().isoformat()
+                            }).execute()
+                            st.success("✅ Diskusi baru berhasil diposting!")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"❌ Gagal membuat diskusi: {e}")
+    
+        # === TAMPILKAN SEMUA DISKUSI ===
+        try:
+            discussions = (
+                supabase.table("discussions")
+                .select("*")
+                .eq("course_id", cid)
+                .order("created_at", desc=True)
+                .execute()
+                .data
+            )
+    
+            if discussions:
+                for d in discussions:
+                    with st.expander(f"💭 {d['title']} — oleh User #{d['user_id']}"):
+                        # === Konten utama diskusi ===
+                        st.markdown(f"""
+                        <div style="
+                            background-color:#f9fafb;
+                            border-left:5px solid #3B82F6;
+                            padding:12px;
+                            border-radius:8px;
+                            margin-bottom:8px;">
+                            <p style="margin:0;color:#1e293b;">{d['content']}</p>
+                            <small style="color:#6b7280;">🕒 {d['created_at']}</small>
+                        </div>
+                        """, unsafe_allow_html=True)
+    
+                        # === Menampilkan semua balasan ===
+                        try:
+                            replies = (
+                                supabase.table("discussion_replies")
+                                .select("*")
+                                .eq("discussion_id", d["id"])
+                                .order("created_at", asc=True)
+                                .execute()
+                                .data
+                            )
+                            if replies:
+                                st.markdown("**💬 Tanggapan:**")
+                                for r in replies:
+                                    st.markdown(f"""
+                                    <div style="
+                                        background-color:#f3f4f6;
+                                        border-radius:8px;
+                                        padding:10px 12px;
+                                        margin:6px 0;">
+                                        <b>User #{r['user_id']}</b> berkata:
+                                        <p style="margin:6px 0; color:#374151;">{r['reply']}</p>
+                                        <small style="color:#6b7280;">🕒 {r['created_at']}</small>
+                                    </div>
+                                    """, unsafe_allow_html=True)
+                            else:
+                                st.info("Belum ada tanggapan untuk diskusi ini.")
+                        except Exception as e:
+                            st.error(f"⚠️ Gagal memuat tanggapan: {e}")
+    
+                        # === Form untuk menambah balasan ===
+                        with st.form(f"reply_form_{d['id']}", clear_on_submit=True):
+                            reply = st.text_area("Tulis tanggapan kamu:", key=f"reply_input_{d['id']}")
+                            send = st.form_submit_button("✉️ Kirim Balasan")
+    
+                            if send:
+                                if not reply.strip():
+                                    st.warning("⚠️ Tanggapan tidak boleh kosong.")
+                                else:
+                                    try:
+                                        supabase.table("discussion_replies").insert({
+                                            "discussion_id": d["id"],
+                                            "user_id": user["id"],
+                                            "reply": reply.strip(),
+                                            "created_at": datetime.now().isoformat()
+                                        }).execute()
+                                        st.success("💬 Balasan berhasil dikirim!")
+                                        st.rerun()
+                                    except Exception as e:
+                                        st.error(f"❌ Gagal mengirim balasan: {e}")
+    
+                        # === Tombol hapus (hanya untuk instructor) ===
+                        if user["role"] == "instructor":
+                            col1, col2 = st.columns([1, 6])
+                            with col1:
+                                if st.button("🗑️ Hapus Diskusi", key=f"del_disc_{d['id']}"):
+                                    supabase.table("discussions").delete().eq("id", d["id"]).execute()
+                                    st.success("🗑️ Diskusi dihapus!")
+                                    st.rerun()
+    
+            else:
+                st.info("📭 Belum ada diskusi di kursus ini. Jadilah yang pertama memulai!")
+        except Exception as e:
+            st.error(f"❌ Gagal memuat forum diskusi: {e}")
+
+
+
 def page_account(): 
     st.header("👤 Account Page") 
     st.info("This section is under construction.")
@@ -1708,6 +1836,7 @@ def main():
 # === Panggil fungsi utama ===
 if __name__ == "__main__":
     main()
+
 
 
 
