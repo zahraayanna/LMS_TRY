@@ -730,7 +730,7 @@ def page_course_detail():
         import markdown, re
         import streamlit.components.v1 as components
     
-        st.subheader("📦 Learning Activities (Modules)")
+        st.subheader("📦 Learning Activities")
     
         # === Pastikan CID valid ===
         if not cid:
@@ -924,7 +924,7 @@ def page_course_detail():
                                     "status": "completed",
                                     "updated_at": datetime.now().isoformat(),
                                 }).eq("user_id", user["id"]).eq("module_id", m["id"]).execute()
-                            st.success("🎯 Module marked as completed!")
+                            st.success("🎯 learning activity marked as completed!")
                             st.rerun()
 
                     # === Guru ===
@@ -994,9 +994,9 @@ def page_course_detail():
         # === FORM EDIT MODUL ===
         if st.session_state.get("show_edit_form"):
             m = st.session_state.edit_module_data
-            st.markdown("## ✏️ Edit Module")
+            st.markdown("## ✏️ Edit Learning Activity")
             with st.form("edit_module_form"):
-                new_title = st.text_input("Module Title", m["title"])
+                new_title = st.text_input("Learning Activity Title", m["title"])
                 new_content = st.text_area("Content (Markdown + LaTeX supported)", m["content"], height=200)
                 new_video = st.text_input("Video URL (optional)", m.get("video_url", ""))
                 update_btn = st.form_submit_button("💾 Save Changes")
@@ -1043,7 +1043,7 @@ def page_course_detail():
                             "content": final_content.strip(),
                             "video_url": video_url.strip() if video_url else None,
                         }).execute()
-                        st.success(f"✅ Module '{title}' added successfully!")
+                        st.success(f"✅ Learning Acttivity '{title}' added successfully!")
                         st.rerun()
 
 
@@ -1285,7 +1285,7 @@ def page_course_detail():
         from PIL import Image
         import io, base64
     
-        st.subheader("🧠 Quizzes")
+        st.subheader("🧠 Quiz")
     
         # === Load semua quiz ===
         quizzes = supabase.table("quizzes").select("*").eq("course_id", cid).execute().data or []
@@ -1904,6 +1904,7 @@ def main():
 # === Panggil fungsi utama ===
 if __name__ == "__main__":
     main()
+
 
 
 
