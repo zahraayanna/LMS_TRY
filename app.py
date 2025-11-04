@@ -223,20 +223,87 @@ def page_login():
 # === DASHBOARD ===
 # ======================
 def page_dashboard():
+    from datetime import date
     u = st.session_state.user
+
+    # === SIDEBAR ===
     st.sidebar.title("ThinkVerse LMS")
     st.sidebar.markdown(f"👋 **{u['name']}**\n\n📧 {u['email']}\n\nRole: *{u['role']}*")
     nav = st.sidebar.radio("Navigasi", ["🏠 Dashboard", "📘 Kursus", "👤 Akun"])
+
+    # === DASHBOARD UTAMA ===
     if nav == "🏠 Dashboard":
         st.header("🏠 Dashboard Utama")
         st.info("Selamat datang di ThinkVerse LMS! Pilih menu di sebelah kiri untuk melanjutkan.")
+
+        # === Hanya untuk siswa: tampilkan notifikasi pengumuman baru ===
+        if u["role"] == "student":
+            import time
+            import streamlit.components.v1 as components
+
+            # Simpan waktu terakhir pengecekan pengumuman
+            if "last_announcement_check" not in st.session_state:
+                st.session_state.last_announcement_check = None
+
+            try:
+                # Ambil daftar kursus yang diikuti siswa
+                enrolled = supabase.table("enrollments").select("course_id").eq("user_id", u["id"]).execute().data
+                course_ids = [e["course_id"] for e in enrolled]
+
+                if course_ids:
+                    # Ambil pengumuman terbaru dari kursus yang diikuti
+                    latest_ann = supabase.table("announcements")\
+                        .select("*, courses(title)")\
+                        .in_("course_id", course_ids)\
+                        .order("date", desc=True)\
+                        .limit(1)\
+                        .execute().data
+
+                    if latest_ann:
+                        latest = latest_ann[0]
+                        latest_date = latest["date"]
+                        latest_title = latest["title"]
+                        course_name = latest.get("courses", {}).get("title", "Unknown Course")
+
+                        # Tampilkan hanya jika pengumuman ini baru
+                        if st.session_state.last_announcement_check != latest_date:
+                            st.markdown(f"""
+                            <div style="
+                                background-color:#EFF6FF;
+                                border-left:6px solid #3B82F6;
+                                padding:14px;
+                                border-radius:10px;
+                                margin-top:15px;">
+                                <h4 style="margin:0;">📢 Pengumuman Baru!</h4>
+                                <p style="margin:4px 0; color:#1e293b;">
+                                    <b>{latest_title}</b> dari <i>{course_name}</i><br>
+                                    <small>📅 {latest_date}</small>
+                                </p>
+                                <div style="color:#334155;">{latest['content']}</div>
+                            </div>
+                            """, unsafe_allow_html=True)
+
+                            st.session_state.last_announcement_check = latest_date
+                        else:
+                            st.markdown("<p style='color:#64748b;'>Tidak ada pengumuman baru hari ini 💬</p>", unsafe_allow_html=True)
+                    else:
+                        st.markdown("<p style='color:#64748b;'>Belum ada pengumuman di kursusmu.</p>", unsafe_allow_html=True)
+                else:
+                    st.warning("Kamu belum terdaftar di kursus mana pun.")
+            except Exception as e:
+                st.error(f"Gagal memuat notifikasi pengumuman: {e}")
+
+    # === KURSUS ===
     elif nav == "📘 Kursus":
         page_courses()
+
+    # === AKUN ===
     elif nav == "👤 Akun":
         st.header("👤 Profil Pengguna")
         if st.button("Logout"):
             st.session_state.clear()
             st.rerun()
+
 
 
 # ======================
@@ -1581,7 +1648,11 @@ def page_account():
 # === ROUTER UTAMA APP ===
 # =========================
 def main():
-    # Navigasi balik setelah keluar course
+    # === SIMPAN WAKTU TERAKHIR SISWA BACA PENGUMUMAN ===
+    if "last_announcement_check" not in st.session_state:
+        st.session_state.last_announcement_check = None
+
+    # === NAVIGASI BALIK JIKA KELUAR DARI COURSE ===
     if st.session_state.get("_nav_back"):
         del st.session_state["_nav_back"]
         return main()
@@ -1627,14 +1698,17 @@ def main():
         page_account()
 
     else:
-        # fallback ke login
+        # === FALLBACK KE LOGIN ===
         st.session_state.page = "login"
         st.rerun()
+
+
 
 
 # === Panggil fungsi utama ===
 if __name__ == "__main__":
     main()
+
 
 
 
