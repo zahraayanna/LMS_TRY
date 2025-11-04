@@ -194,21 +194,26 @@ def page_login():
 
     # --- LUPA PASSWORD ---
     with tabs[2]:
+        st.subheader("🔑 Lupa Password")
+    
         with st.form("forgot_pw_form"):
             email_fp = st.text_input("Masukkan email kamu")
             new_pw = st.text_input("Password baru", type="password")
             new_pw2 = st.text_input("Ulangi password baru", type="password")
             ok3 = st.form_submit_button("Reset Password")
+    
+            if ok3:
+                if not email_fp or not new_pw or not new_pw2:
+                    st.warning("⚠️ Harap isi semua kolom.")
+                elif new_pw != new_pw2:
+                    st.error("❌ Password tidak sama.")
+                else:
+                    success = reset_password(email_fp, new_pw)
+                    if success:
+                        st.success("✅ Password berhasil direset! Silakan login ulang.")
+                    else:
+                        st.error("⚠️ Email tidak ditemukan atau gagal mengupdate password.")
 
-        if ok3:
-            if not email_fp or not new_pw or not new_pw2:
-                st.warning("⚠️ Harap isi semua kolom.")
-            elif new_pw != new_pw2:
-                st.error("❌ Password tidak sama.")
-            elif reset_password(email_fp, new_pw):
-                st.success("✅ Password berhasil direset! Silakan login ulang.")
-            else:
-                st.error("⚠️ Gagal mereset password. Periksa email dan coba lagi.")
 
 
 # ======================
@@ -1616,6 +1621,7 @@ def main():
 # === Panggil fungsi utama ===
 if __name__ == "__main__":
     main()
+
 
 
 
