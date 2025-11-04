@@ -548,6 +548,8 @@ def page_course_detail():
         "💬 Discussion Forum"   # ← Tambahkan baris ini
     ])
 
+    st.write("Jumlah tab:", len(tabs))
+
     
     # === Map nama tab ke indeks ===
     tab_index = {
@@ -1837,6 +1839,7 @@ def main():
 # === Panggil fungsi utama ===
 if __name__ == "__main__":
     main()
+
 
 
 
