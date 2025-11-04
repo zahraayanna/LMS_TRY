@@ -129,7 +129,7 @@ def register_user(name, email, password, role):
 def reset_password(email, new_password):
     """
     Fungsi untuk reset password user di tabel users Supabase.
-    Mengembalikan True jika berhasil, False jika gagal.
+    Menggunakan kolom 'password_hash' sebagai penyimpanan hash.
     """
     try:
         # Cari user berdasarkan email
@@ -143,14 +143,16 @@ def reset_password(email, new_password):
         import hashlib
         hashed_pw = hashlib.sha256(new_password.encode()).hexdigest()
 
-        # Update password user di Supabase
-        supabase.table("users").update({"password": hashed_pw}).eq("email", email).execute()
+        # Update kolom password_hash
+        supabase.table("users").update({"password_hash": hashed_pw}).eq("email", email).execute()
 
+        st.success("✅ Password berhasil direset!")
         return True
 
     except Exception as e:
         st.error(f"⚠️ Gagal mereset password: {e}")
         return False
+
 
 
 # =====================
@@ -213,6 +215,7 @@ def page_login():
                         st.success("✅ Password berhasil direset! Silakan login ulang.")
                     else:
                         st.error("⚠️ Email tidak ditemukan atau gagal mengupdate password.")
+
 
 
 
@@ -1621,6 +1624,7 @@ def main():
 # === Panggil fungsi utama ===
 if __name__ == "__main__":
     main()
+
 
 
 
