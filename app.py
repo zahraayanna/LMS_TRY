@@ -229,7 +229,7 @@ def page_dashboard():
     # === SIDEBAR ===
     st.sidebar.title("ThinkVerse LMS")
     st.sidebar.markdown(f"👋 **{u['name']}**\n\n📧 {u['email']}\n\nRole: *{u['role']}*")
-    nav = st.sidebar.radio("Navigasi", ["🏠 Dashboard", "📘 Classroom", "👤 Account"])
+    nav = st.sidebar.radio("Navigasi", ["🏠 Dashboard", "📘 Kursus", "👤 Akun"])
 
     # === DASHBOARD UTAMA ===
     if nav == "🏠 Dashboard":
@@ -312,7 +312,7 @@ def page_dashboard():
 def page_courses():
     import uuid
     import random, string
-    st.title("🎓 My Classroom")
+    st.title("🎓 My Courses")
 
     user = st.session_state.get("user")
     if not user:
@@ -321,7 +321,7 @@ def page_courses():
 
     # === INSTRUCTOR ONLY SECTION ===
     if user["role"] == "instructor":
-        st.subheader("➕ Create New Classroom")
+        st.subheader("➕ Create New Course")
 
         with st.form("create_course_form", clear_on_submit=True):
             new_code = st.text_input("Course Code (unique, e.g. PHY101)")
@@ -359,16 +359,16 @@ def page_courses():
                         "instructor_email": user["email"]
                     }).execute()
 
-                    st.success(f"✅ Classroom '{new_title}' created successfully! Access code: `{access_code}`")
+                    st.success(f"✅ Course '{new_title}' created successfully! Access code: `{access_code}`")
                     st.rerun()
 
     # === STUDENT SECTION ===
     else:
-        st.subheader("📥 Join Classroom with Access Code")
+        st.subheader("📥 Join Course with Access Code")
 
         # siswa wajib masukin kode akses
         with st.form("join_form", clear_on_submit=True):
-            join_code = st.text_input("Enter Classroom Access Code", placeholder="e.g. X7J9Q2")
+            join_code = st.text_input("Enter Course Access Code", placeholder="e.g. X7J9Q2")
             join_submit = st.form_submit_button("Join")
 
         if join_submit:
@@ -386,18 +386,18 @@ def page_courses():
                         .eq("course_id", course_id).execute().data
 
                     if enrolled:
-                        st.info("📚 You are already enrolled in this classroom.")
+                        st.info("📚 You are already enrolled in this course.")
                     else:
                         supabase.table("enrollments").insert({
                             "user_id": user["id"],
                             "course_id": course_id,
                             "role": "student"
                         }).execute()
-                        st.success(f"✅ Successfully joined the classroom '{course[0]['title']}'!")
+                        st.success(f"✅ Successfully joined the course '{course[0]['title']}'!")
                         st.rerun()
 
     st.divider()
-    st.subheader("📘 My Classroom")
+    st.subheader("📘 My Courses")
 
     # === LOAD COURSES ===
     if user["role"] == "instructor":
@@ -411,9 +411,9 @@ def page_courses():
 
     if not courses:
         if user["role"] == "instructor":
-            st.info("📭 You haven't created any classroom yet.")
+            st.info("📭 You haven't created any courses yet.")
         else:
-            st.info("📭 You haven't joined any classroom yet.")
+            st.info("📭 You haven't joined any courses yet.")
         return
 
     # === DISPLAY COURSE LIST ===
@@ -1904,6 +1904,25 @@ def main():
 # === Panggil fungsi utama ===
 if __name__ == "__main__":
     main()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
