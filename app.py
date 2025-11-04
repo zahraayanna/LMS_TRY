@@ -809,13 +809,17 @@ def page_course_detail():
                             if a:
                                 stable_key = f"asg_{cid}_{m['id']}_{a['id']}_{j}"
                                 st.markdown(f"📋 **Assignment:** {a.get('title', 'Untitled Assignment')}")
-                                asg_id = "none"
                                 if "asg_data" in locals() and isinstance(asg_data, dict) and "id" in asg_data:
                                     asg_id = asg_data["id"]
-                                if st.button(f"➡️ Open Assignment", key=f"open_asg_{m['id']}_{asg_id}"):
-                                    st.session_state.selected_assignment_id = asg_data["id"]
-                                    st.session_state.active_tab = "assignment"
-                                    st.rerun()
+                                
+                                if st.button(f"➡️ Open Assignment", key=f"open_asg_{m['id']}_{asg_id or 'none'}"):
+                                    if asg_id:
+                                        st.session_state.selected_assignment_id = asg_id
+                                        st.session_state.active_tab = "assignment"
+                                        st.rerun()
+                                    else:
+                                        st.warning("⚠️ Belum ada assignment yang terhubung dengan modul ini.")
+
 
     
                     # === Mark as Complete ===
@@ -1627,6 +1631,7 @@ def main():
 # === Panggil fungsi utama ===
 if __name__ == "__main__":
     main()
+
 
 
 
