@@ -541,7 +541,7 @@ def page_course_detail():
     tabs = st.tabs([
         "📚 Overview",
         "🕒 Attendance",
-        "📦 Learning Activitty",
+        "📦 Learning Activity",
         "📋 Assignments",
         "🧠 Quiz",
         "📣 Announcements",
@@ -1904,6 +1904,7 @@ def main():
 # === Panggil fungsi utama ===
 if __name__ == "__main__":
     main()
+
 
 
 
