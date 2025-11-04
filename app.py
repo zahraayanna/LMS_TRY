@@ -1647,6 +1647,8 @@ def page_course_detail():
     # =====================================
     # FORUM DISKUSI
     # =====================================
+    st.write("DEBUG: Masuk ke bagian forum diskusi ✅")
+
     with tabs[6]:
         from datetime import datetime
     
@@ -1839,6 +1841,7 @@ def main():
 # === Panggil fungsi utama ===
 if __name__ == "__main__":
     main()
+
 
 
 
