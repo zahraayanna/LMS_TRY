@@ -545,8 +545,9 @@ def page_course_detail():
         "📋 Assignments",
         "🧠 Quizzes",
         "📣 Announcements",
-        "💬 Discussion Forum"   # 🆕 Tambahan tab baru
+        "💬 Discussion Forum"   # ← Tambahkan baris ini
     ])
+
     
     # === Map nama tab ke indeks ===
     tab_index = {
@@ -1836,6 +1837,7 @@ def main():
 # === Panggil fungsi utama ===
 if __name__ == "__main__":
     main()
+
 
 
 
