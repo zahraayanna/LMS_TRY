@@ -126,6 +126,33 @@ def register_user(name, email, password, role):
     st.success("Akun berhasil dibuat!")
     return True
 
+def reset_password(email, new_password):
+    """
+    Fungsi untuk reset password user di tabel users Supabase.
+    Mengembalikan True jika berhasil, False jika gagal.
+    """
+    try:
+        # Cari user berdasarkan email
+        user = supabase.table("users").select("*").eq("email", email).execute().data
+
+        if not user:
+            st.error("❌ Email tidak ditemukan di database.")
+            return False
+
+        # Hash password baru
+        import hashlib
+        hashed_pw = hashlib.sha256(new_password.encode()).hexdigest()
+
+        # Update password user di Supabase
+        supabase.table("users").update({"password": hashed_pw}).eq("email", email).execute()
+
+        return True
+
+    except Exception as e:
+        st.error(f"⚠️ Gagal mereset password: {e}")
+        return False
+
+
 # =====================
 # === PAGE: LOGIN ===
 # =====================
@@ -174,10 +201,15 @@ def page_login():
             ok3 = st.form_submit_button("Reset Password")
 
         if ok3:
-            if new_pw != new_pw2:
-                st.error("Password tidak sama.")
+            if not email_fp or not new_pw or not new_pw2:
+                st.warning("⚠️ Harap isi semua kolom.")
+            elif new_pw != new_pw2:
+                st.error("❌ Password tidak sama.")
             elif reset_password(email_fp, new_pw):
                 st.success("✅ Password berhasil direset! Silakan login ulang.")
+            else:
+                st.error("⚠️ Gagal mereset password. Periksa email dan coba lagi.")
+
 
 # ======================
 # === DASHBOARD ===
@@ -1584,6 +1616,7 @@ def main():
 # === Panggil fungsi utama ===
 if __name__ == "__main__":
     main()
+
 
 
 
