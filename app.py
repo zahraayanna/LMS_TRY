@@ -300,6 +300,60 @@ def page_dashboard():
     # === AKUN ===
     elif nav == "👤 Akun":
         st.header("👤 Profil Pengguna")
+    
+        u = st.session_state.user
+    
+        # ====== FOTO PROFIL ======
+        st.subheader("Foto Profil")
+    
+        col1, col2 = st.columns([1, 3])
+    
+        with col1:
+            # tampilkan foto profil (kalau belum ada → generate avatar)
+            if u.get("avatar_url"):
+                st.image(u["avatar_url"], width=120)
+            else:
+                st.image(
+                    "https://ui-avatars.com/api/?name=" + u["name"].replace(" ", "+"),
+                    width=120
+                )
+    
+        with col2:
+            uploaded = st.file_uploader("Ganti foto profil", type=["png", "jpg", "jpeg"])
+            if uploaded:
+                import uuid
+    
+                file_bytes = uploaded.read()
+                file_name = f"{uuid.uuid4()}.png"
+    
+                try:
+                    # Upload ke Supabase Storage (folder: profile_pics)
+                    supabase.storage.from_("profile_pics").upload(file_name, file_bytes)
+    
+                    public_url = supabase.storage.from_("profile_pics").get_public_url(file_name)
+    
+                    # Simpan ke tabel users
+                    supabase.table("users").update({"avatar_url": public_url}).eq("id", u["id"]).execute()
+    
+                    u["avatar_url"] = public_url
+                    st.success("Foto profil berhasil diperbarui!")
+                    st.rerun()
+    
+                except Exception as e:
+                    st.error(f"Gagal upload foto: {e}")
+    
+        st.markdown("---")
+    
+        # ====== INFORMASI AKUN ======
+        st.subheader("Informasi Akun")
+    
+        st.write(f"**Nama Lengkap:** {u['name']}")
+        st.write(f"**Email:** {u['email']}")
+        st.write(f"**Role:** {'Guru' if u['role']=='instructor' else 'Siswa'}")
+    
+        st.markdown("---")
+    
+        # ====== LOGOUT ======
         if st.button("Logout"):
             st.session_state.clear()
             st.rerun()
@@ -1961,6 +2015,7 @@ def main():
 # === Panggil fungsi utama ===
 if __name__ == "__main__":
     main()
+
 
 
 
