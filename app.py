@@ -1717,47 +1717,40 @@ def page_course_detail():
             return colors[uid % len(colors)]
     
         # ---------------------------------------
-        #  FORM BUAT TOPIK DISKUSI (KHUSUS GURU)
+        #  FORM BUAT TOPIK DISKUSI (KHUSUS INSTRUCTOR)
         # ---------------------------------------
         if user["role"] == "instructor":
             with st.expander("➕ Buat Topik Diskusi Baru", expanded=False):
                 with st.form("new_topic_form", clear_on_submit=True):
                     title = st.text_input("Judul Topik Diskusi")
-                    content = st.text_area("Isi Diskusi (materi/pertanyaan/instruksi)", height=150)
+                    content = st.text_area("Isi Diskusi", height=150)
                     submit_topic = st.form_submit_button("💬 Posting Topik")
     
                     if submit_topic:
                         if not title.strip() or not content.strip():
-                            st.warning("Harap isi judul dan isi diskusi.")
+                            st.warning("Judul dan isi tidak boleh kosong.")
                         else:
-                            try:
-                                supabase.table("discussions").insert({
-                                    "course_id": cid,
-                                    "user_id": user["id"],
-                                    "title": title.strip(),
-                                    "content": content.strip(),
-                                    "created_at": datetime.now().isoformat()
-                                }).execute()
-                                st.success("Topik diskusi berhasil dibuat!")
-                                st.rerun()
-                            except Exception as e:
-                                st.error(f"❌ Gagal membuat topik: {e}")
+                            supabase.table("discussions").insert({
+                                "course_id": cid,
+                                "user_id": user["id"],
+                                "title": title.strip(),
+                                "content": content.strip(),
+                                "created_at": datetime.now().isoformat()
+                            }).execute()
+                            st.success("Topik diskusi berhasil dibuat!")
+                            st.rerun()
     
         # ---------------------------------------
-        #  AMBIL SEMUA TOPIK DISKUSI
+        #  AMBIL SEMUA TOPIK
         # ---------------------------------------
-        try:
-            topics = (
-                supabase.table("discussions")
-                .select("*")
-                .eq("course_id", cid)
-                .order("created_at", desc=True)
-                .execute()
-                .data
-            )
-        except Exception as e:
-            st.error(f"❌ Gagal memuat topik diskusi: {e}")
-            topics = []
+        topics = (
+            supabase.table("discussions")
+            .select("*")
+            .eq("course_id", cid)
+            .order("created_at", desc=True)
+            .execute()
+            .data
+        )
     
         if not topics:
             st.info("📭 Belum ada topik diskusi.")
@@ -1768,50 +1761,49 @@ def page_course_detail():
         # ---------------------------------------
         for t in topics:
     
-            # ============================
-            # TAMPILKAN TOPIK
-            # ============================
-            st.markdown(f"""
-                <div style='background:#F1F5F9;
-                            padding:15px;
-                            border-radius:10px;
-                            margin-bottom:8px;
-                            border-left:6px solid #3B82F6;'>
-                    <h3 style='margin:0;'>💭 {t['title']}</h3>
-                    <p style='margin-top:5px;color:#334155;'>{t['content']}</p>
-                    <small style='color:#64748B;'>🕒 {datetime.fromisoformat(t['created_at']).strftime('%d %b %Y, %H:%M')}</small>
-                </div>
-            """, unsafe_allow_html=True)
+            # — Ambil nama pembuat topik
+            nq = supabase.table("users").select("name").eq("id", t["user_id"]).execute()
+            topic_owner = nq.data[0]["name"] if nq.data else f"User #{t['user_id']}"
     
-            # BUTTON HAPUS TOPIK (GURU SAJA)
+            # — TAMPILKAN TOPIK
+            st.markdown(
+                f"""
+                <div style='background:#F1F5F9; padding:15px; border-radius:10px;
+                            margin-bottom:8px; border-left:6px solid #3B82F6;'>
+                    <h3 style='margin:0;'>💭 {t['title']}</h3>
+                    <small><b>{topic_owner}</b></small><br>
+                    <p style='margin-top:6px;color:#334155;'>{t['content']}</p>
+                    <small style='color:#64748B;'>
+                        🕒 {datetime.fromisoformat(t['created_at']).strftime('%d %b %Y, %H:%M')}
+                    </small>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+    
+            # — BUTTON HAPUS TOPIK
             if user["role"] == "instructor":
                 if st.button(f"🗑️ Hapus Topik '{t['title']}'", key=f"del_topic_{t['id']}"):
-                    try:
-                        supabase.table("discussion_replies").delete().eq("discussion_id", t["id"]).execute()
-                        supabase.table("discussions").delete().eq("id", t["id"]).execute()
-                        st.success("Topik & komentarnya dihapus.")
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"Gagal menghapus topik: {e}")
+                    supabase.table("discussion_replies").delete().eq("discussion_id", t["id"]).execute()
+                    supabase.table("discussions").delete().eq("id", t["id"]).execute()
+                    st.success("Topik & semua komentarnya terhapus.")
+                    st.rerun()
     
             st.markdown("### 💬 Komentar")
     
             # ---------------------------------------
-            # AMBIL SEMUA KOMENTAR
+            #  AMBIL SEMUA KOMENTAR
             # ---------------------------------------
-            try:
-                replies = (
-                    supabase.table("discussion_replies")
-                    .select("*")
-                    .eq("discussion_id", t["id"])
-                    .order("created_at", desc=False)
-                    .execute()
-                    .data
-                )
-            except:
-                replies = []
+            replies = (
+                supabase.table("discussion_replies")
+                .select("*")
+                .eq("discussion_id", t["id"])
+                .order("created_at", desc=False)
+                .execute()
+                .data
+            )
     
-            # Buat reply_map berdasarkan parent_id
+            # Map parent → children
             reply_map = {}
             for r in replies:
                 reply_map.setdefault(r.get("parent_id"), []).append(r)
@@ -1819,76 +1811,78 @@ def page_course_detail():
             top_level = reply_map.get(None, [])
     
             # ---------------------------------------
-            # TAMPILKAN KOMENTAR LEVEL 1
+            #  TAMPILKAN KOMENTAR LEVEL 1
             # ---------------------------------------
             for r in top_level:
+    
+                # Ambil nama user
+                uq = supabase.table("users").select("name").eq("id", r["user_id"]).execute()
+                uname = uq.data[0]["name"] if uq.data else f"User #{r['user_id']}"
+    
                 avatar_color = user_avatar(r["user_id"])
     
-                # AMBIL NAMA USER
-                qname = supabase.table("users").select("name").eq("id", r["user_id"]).execute()
-                name = qname.data[0]["name"] if qname.data else f"User #{r['user_id']}"
-    
-                html = f"""
-                <div style='background:#F8FAFC;
-                            padding:12px;
-                            border-radius:10px;
-                            margin-bottom:10px;'>
-                    <div style='display:flex; gap:10px;'>
-                        <div style='width:40px;height:40px;border-radius:50%;
-                                    background:{avatar_color};
-                                    color:white;display:flex;
-                                    align-items:center;justify-content:center;
-                                    font-weight:bold;'>
-                            {r['user_id'] % 100}
-                        </div>
-                        <div style='flex:1;'>
-                            <b>{name}</b><br>
-                            <div style='margin-top:5px;'>{r['reply']}</div>
-                            <small style='color:#64748B;'>🕒 {datetime.fromisoformat(r['created_at']).strftime('%d %b %Y, %H:%M')}</small>
+                st.markdown(
+                    f"""
+                    <div style='background:#F8FAFC; padding:12px; border-radius:10px;
+                                margin-bottom:10px;'>
+                        <div style='display:flex; gap:10px;'>
+                            <div style='width:40px;height:40px;border-radius:50%;
+                                        background:{avatar_color};
+                                        color:white;display:flex;align-items:center;
+                                        justify-content:center;font-weight:bold;'>
+                                {r['user_id'] % 100}
+                            </div>
+                            <div style='flex:1;'>
+                                <b>{uname}</b><br>
+                                <div style='margin-top:5px;'>{r['reply']}</div>
+                                <small style='color:#64748B;'>
+                                    🕒 {datetime.fromisoformat(r['created_at']).strftime('%d %b %Y, %H:%M')}
+                                </small>
+                            </div>
                         </div>
                     </div>
-                </div>
-                """
-                st.markdown(html, unsafe_allow_html=True)
+                    """,
+                    unsafe_allow_html=True,
+                )
     
-                # DELETE COMMENT (GURU / PEMILIK)
+                # DELETE KOMENTAR
                 if user["role"] == "instructor" or user["id"] == r["user_id"]:
-                    if st.button("🗑️ Hapus Komentar", key=f"del_rep_{r['id']}"):
+                    if st.button("🗑️ Hapus Komentar", key=f"del_reply_{r['id']}"):
                         supabase.table("discussion_replies").delete().eq("id", r["id"]).execute()
                         st.rerun()
     
                 # ---------------------------------------
-                #  TAMPILKAN BALASAN (LEVEL 2)
+                #  TAMPILKAN BALASAN LEVEL 2
                 # ---------------------------------------
                 children = reply_map.get(r["id"], [])
                 for child in children:
-    
+                    uq2 = supabase.table("users").select("name").eq("id", child["user_id"]).execute()
+                    child_name = uq2.data[0]["name"] if uq2.data else f"User #{child['user_id']}"
                     child_color = user_avatar(child["user_id"])
     
-                    # ambil nama balasan
-                    q2 = supabase.table("users").select("name").eq("id", child["user_id"]).execute()
-                    child_name = q2.data[0]["name"] if q2.data else f"User #{child['user_id']}"
-    
-                    html_child = f"""
-                    <div style='margin-left:45px; background:#EEF2FF;
-                                padding:12px; border-radius:10px;
-                                margin-bottom:10px;'>
-                        <div style='display:flex; gap:10px;'>
-                            <div style='width:34px;height:34px;border-radius:50%;
-                                        background:{child_color};
-                                        color:white;display:flex;
-                                        align-items:center;justify-content:center;'>
-                                {child['user_id'] % 100}
-                            </div>
-                            <div style='flex:1;'>
-                                <b>{child_name}</b><br>
-                                <div style='margin-top:5px;'>{child['reply']}</div>
-                                <small style='color:#64748B;'>🕒 {datetime.fromisoformat(child['created_at']).strftime('%d %b %Y, %H:%M')}</small>
+                    st.markdown(
+                        f"""
+                        <div style='margin-left:45px; background:#EEF2FF; padding:12px;
+                                    border-radius:10px; margin-bottom:10px;'>
+                            <div style='display:flex; gap:10px;'>
+                                <div style='width:34px;height:34px;border-radius:50%;
+                                            background:{child_color};
+                                            color:white;display:flex;
+                                            align-items:center;justify-content:center;'>
+                                    {child['user_id'] % 100}
+                                </div>
+                                <div style='flex:1;'>
+                                    <b>{child_name}</b><br>
+                                    <div style='margin-top:5px;'>{child['reply']}</div>
+                                    <small style='color:#64748B;'>
+                                        🕒 {datetime.fromisoformat(child['created_at']).strftime('%d %b %Y, %H:%M')}
+                                    </small>
+                                </div>
                             </div>
                         </div>
-                    </div>
-                    """
-                    st.markdown(html_child, unsafe_allow_html=True)
+                        """,
+                        unsafe_allow_html=True,
+                    )
     
                     if user["role"] == "instructor" or user["id"] == child["user_id"]:
                         if st.button("🗑️ Hapus Balasan", key=f"del_child_{child['id']}"):
@@ -1896,16 +1890,14 @@ def page_course_detail():
                             st.rerun()
     
                 # ---------------------------------------
-                # FORM BALASAN CHILD
+                #  FORM BALAS (LEVEL 2)
                 # ---------------------------------------
                 with st.form(f"reply_child_form_{r['id']}", clear_on_submit=True):
-                    reply2 = st.text_input("Balas komentar ini:", key=f"inp_child_{r['id']}")
+                    reply2 = st.text_input("Balas komentar ini:", key=f"child_input_{r['id']}")
                     send2 = st.form_submit_button("↪ Balas")
     
                     if send2:
-                        if not reply2.strip():
-                            st.warning("Balasan tidak boleh kosong.")
-                        else:
+                        if reply2.strip():
                             supabase.table("discussion_replies").insert({
                                 "discussion_id": t["id"],
                                 "user_id": user["id"],
@@ -1917,7 +1909,7 @@ def page_course_detail():
                             st.rerun()
     
             # ---------------------------------------
-            # FORM KOMENTAR LEVEL 1 (TOP-LEVEL)
+            #  FORM KOMENTAR LEVEL 1
             # ---------------------------------------
             st.markdown("### ✏️ Tambah Komentar")
             with st.form(f"add_comment_{t['id']}", clear_on_submit=True):
@@ -1925,9 +1917,7 @@ def page_course_detail():
                 send_comment = st.form_submit_button("Kirim")
     
                 if send_comment:
-                    if not new_comment.strip():
-                        st.warning("Komentar tidak boleh kosong.")
-                    else:
+                    if new_comment.strip():
                         supabase.table("discussion_replies").insert({
                             "discussion_id": t["id"],
                             "user_id": user["id"],
@@ -1937,6 +1927,7 @@ def page_course_detail():
                         }).execute()
                         st.success("Komentar ditambahkan!")
                         st.rerun()
+
 
 
 
@@ -2015,6 +2006,7 @@ def main():
 # === Panggil fungsi utama ===
 if __name__ == "__main__":
     main()
+
 
 
 
