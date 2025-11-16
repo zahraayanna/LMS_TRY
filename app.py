@@ -1767,10 +1767,31 @@ def page_course_detail():
                                         {r['user_id'] % 100}
                                     </div>
                                     <div style='flex:1;'>
-                                        # ambil nama user
-                                        u = supabase.table("users").select("name").eq("id", r["user_id"]).execute()
-                                        name = u.data[0]["name"] if u.data else f"User #{r['user_id']}"
-                                        <b>{name}</b><br>
+                                    # --- ambil nama user ---
+                                    user_query = supabase.table("users").select("name").eq("id", r["user_id"]).execute()
+                                    name = user_query.data[0]["name"] if user_query.data else f"User #{r['user_id']}"
+                                    
+                                    st.markdown(f"""
+                                        <div style='background:#F8FAFC;
+                                                    padding:10px 12px;
+                                                    border-radius:8px;
+                                                    margin-bottom:8px;'>
+                                            <div style='display:flex; gap:10px; align-items:flex-start;'>
+                                                <div style='width:38px;height:38px;border-radius:50%;
+                                                            background:{avatar_color};
+                                                            display:flex;align-items:center;
+                                                            justify-content:center;color:white;font-weight:bold;'>
+                                                    {r['user_id'] % 100}
+                                                </div>
+                                                <div style='flex:1;'>
+                                                    <b>{name}</b><br>
+                                                    <div style='margin-top:6px;color:#1f2937;'>{r['reply']}</div>
+                                                    <small style='color:#64748B;'>🕒 {datetime.fromisoformat(r['created_at']).strftime('%d %b %Y, %H:%M')}</small>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    """, unsafe_allow_html=True)
+
                                         <div style='margin-top:6px;color:#1f2937;'>{r['reply']}</div>
                                         <small style='color:#64748B;'>🕒 {datetime.fromisoformat(r['created_at']).strftime('%d %b %Y, %H:%M')}</small>
                                     </div>
@@ -1803,9 +1824,28 @@ def page_course_detail():
                                             {child['user_id'] % 100}
                                         </div>
                                         <div style='flex:1;'>
-                                            u2 = supabase.table("users").select("name").eq("id", child["user_id"]).execute()
-                                            name2 = u2.data[0]["name"] if u2.data else f"User #{child['user_id']}"
-                                            <b>{name2}</b><br>
+                                        # --- ambil nama user (child) ---
+                                        child_query = supabase.table("users").select("name").eq("id", child["user_id"]).execute()
+                                        child_name = child_query.data[0]["name"] if child_query.data else f"User #{child['user_id']}"
+                                            
+                                        st.markdown(f"""
+                                            <div style='margin-left:46px; background:#EEF2FF;
+                                                        padding:10px 12px; border-radius:8px; margin-bottom:8px;'>
+                                                <div style='display:flex; gap:10px; align-items:flex-start;'>
+                                                    <div style='width:32px;height:32px;border-radius:50%;
+                                                                background:{child_color};
+                                                                color:white;display:flex;align-items:center;justify-content:center;'>
+                                                        {child['user_id'] % 100}
+                                                    </div>
+                                                    <div style='flex:1;'>
+                                                        <b>{child_name}</b><br>
+                                                        <div style='margin-top:6px;color:#1f2937;'>{child['reply']}</div>
+                                                        <small style='color:#64748B;'>🕒 {datetime.fromisoformat(child['created_at']).strftime('%d %b %Y, %H:%M')}</small>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        """, unsafe_allow_html=True)
+
                                             <div style='margin-top:6px;color:#1f2937;'>{child['reply']}</div>
                                             <small style='color:#64748B;'>🕒 {datetime.fromisoformat(child['created_at']).strftime('%d %b %Y, %H:%M')}</small>
                                         </div>
@@ -1984,6 +2024,7 @@ def main():
 # === Panggil fungsi utama ===
 if __name__ == "__main__":
     main()
+
 
 
 
