@@ -1645,159 +1645,182 @@ def page_course_detail():
 
 
     # =====================================
-    # FORUM DISKUSI (REVISI TOTAL)
+    # FORUM DISKUSI (REVISI: includes delete + safe insert)
     # =====================================
     with tabs[6]:
         from datetime import datetime
         import random
+        import traceback
     
         st.subheader("💬 Forum Diskusi Kursus")
     
-        # ========== Fungsi Avatar ==========
         def user_avatar(uid):
             random.seed(uid)
             colors = ["#3B82F6", "#10B981", "#F59E0B", "#EF4444", "#8B5CF6", "#EC4899"]
             return colors[uid % len(colors)]
     
-        # ==============================
-        # FORM TAMBAH TOPIK DISKUSI (khusus guru)
-        # ==============================
+        # --- FORM BIKIN TOPIK (HANYA INSTRUCTOR) ---
         if user["role"] == "instructor":
             with st.expander("➕ Buat Topik Diskusi Baru", expanded=False):
                 with st.form("new_topic_form", clear_on_submit=True):
                     title = st.text_input("Judul Topik Diskusi")
-                    content = st.text_area("Isi Diskusi (materi, pertanyaan, atau instruksi)", height=150)
+                    content = st.text_area("Isi Diskusi (materi/pertanyaan/instruksi)", height=150)
                     submit_topic = st.form_submit_button("💬 Posting Topik")
     
                     if submit_topic:
                         if not title.strip() or not content.strip():
                             st.warning("Harap isi judul dan isi diskusi.")
                         else:
-                            supabase.table("discussions").insert({
-                                "course_id": cid,
-                                "user_id": user["id"],
-                                "title": title.strip(),
-                                "content": content.strip(),
-                                "created_at": datetime.now().isoformat()
-                            }).execute()
-                            st.success("Topik diskusi berhasil dibuat!")
-                            st.rerun()
+                            try:
+                                supabase.table("discussions").insert({
+                                    "course_id": cid,
+                                    "user_id": user["id"],
+                                    "title": title.strip(),
+                                    "content": content.strip(),
+                                    "created_at": datetime.now().isoformat()
+                                }).execute()
+                                st.success("Topik diskusi berhasil dibuat!")
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"❌ Gagal membuat topik: {e}")
     
-        # ==============================
-        # AMBIL SEMUA TOPIK DISKUSI
-        # ==============================
-        topics = (
-            supabase.table("discussions")
-            .select("*")
-            .eq("course_id", cid)
-            .order("created_at", desc=True)
-            .execute()
-            .data
-        )
+        # --- AMBIL SEMUA TOPIK ---
+        try:
+            topics = (
+                supabase.table("discussions")
+                .select("*")
+                .eq("course_id", cid)
+                .order("created_at", desc=True)
+                .execute()
+                .data
+            )
+        except Exception as e:
+            st.error(f"❌ Gagal memuat topik diskusi: {e}")
+            topics = []
     
         if not topics:
             st.info("📭 Belum ada topik diskusi. Guru dapat membuat topik pertama.")
         else:
             for t in topics:
-    
                 st.markdown(f"""
                     <div style='background:#F1F5F9;
                                 padding:15px;
                                 border-radius:10px;
-                                margin-bottom:15px;
+                                margin-bottom:6px;
                                 border-left:6px solid #3B82F6;'>
-                        <h3 style='margin:0;'>💭 {t["title"]}</h3>
-                        <p style='margin-top:5px;color:#334155;'>{t["content"]}</p>
-                        <small style='color:#64748B;'>
-                            🕒 {datetime.fromisoformat(t['created_at']).strftime('%d %b %Y, %H:%M')}
-                        </small>
+                        <h3 style='margin:0;'>💭 {t['title']}</h3>
+                        <p style='margin-top:5px;color:#334155;'>{t['content']}</p>
+                        <small style='color:#64748B;'>🕒 {datetime.fromisoformat(t['created_at']).strftime('%d %b %Y, %H:%M')}</small>
                     </div>
                 """, unsafe_allow_html=True)
     
+                # --- Tombol delete topik (hanya instructor) ---
+                if user["role"] == "instructor":
+                    if st.button(f"🗑️ Hapus Topik '{t['title']}'", key=f"del_topic_{t['id']}"):
+                        try:
+                            supabase.table("discussion_replies").delete().eq("discussion_id", t["id"]).execute()
+                            supabase.table("discussions").delete().eq("id", t["id"]).execute()
+                            st.success("Topik dan semua komentarnya dihapus.")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Gagal menghapus topik: {e}")
+    
                 st.markdown("### 💬 Komentar")
     
-                # ==============================
-                # AMBIL KOMENTAR LEVEL 1
-                # ==============================
-                replies = (
-                    supabase.table("discussion_replies")
-                    .select("*")
-                    .eq("discussion_id", t["id"])
-                    .order("created_at", desc=False)
-                    .execute()
-                    .data
-                )
+                # --- Ambil semua komentar (replies) untuk topik ini ---
+                try:
+                    replies = (
+                        supabase.table("discussion_replies")
+                        .select("*")
+                        .eq("discussion_id", t["id"])
+                        .order("created_at", desc=False)
+                        .execute()
+                        .data
+                    )
+                except Exception as e:
+                    st.error(f"❌ Gagal memuat komentar: {e}")
+                    replies = []
     
-                # MAP KOMENTAR → REPLY ANAK
+                # --- susun map parent -> children (None = top-level comment) ---
                 reply_map = {}
                 for r in replies:
                     parent = r.get("parent_id")
                     reply_map.setdefault(parent, []).append(r)
     
-                # ==============================
-                # TAMPILKAN KOMENTAR LEVEL 1
-                # ==============================
-                if None in reply_map:
-                    for r in reply_map[None]:
-    
+                # --- tampilkan komentar top-level ---
+                top_level = reply_map.get(None, [])
+                if not top_level:
+                    st.info("Belum ada komentar pada topik ini.")
+                else:
+                    for r in top_level:
                         avatar_color = user_avatar(r["user_id"])
-    
                         st.markdown(f"""
                             <div style='background:#F8FAFC;
                                         padding:10px 12px;
-                                        border-radius:10px;
-                                        margin-bottom:10px;'>
-                                <div style='display:flex; gap:10px;'>
+                                        border-radius:8px;
+                                        margin-bottom:8px;'>
+                                <div style='display:flex; gap:10px; align-items:flex-start;'>
                                     <div style='width:38px;height:38px;border-radius:50%;
                                                 background:{avatar_color};
                                                 display:flex;align-items:center;
                                                 justify-content:center;color:white;font-weight:bold;'>
-                                        {r["user_id"] % 100}
+                                        {r['user_id'] % 100}
                                     </div>
-                                    <div>
-                                        <b>User #{r["user_id"]}</b><br>
-                                        {r["reply"]}<br>
-                                        <small style='color:#64748B;'>
-                                            🕒 {datetime.fromisoformat(r['created_at']).strftime('%d %b %Y, %H:%M')}
-                                        </small>
+                                    <div style='flex:1;'>
+                                        <b>User #{r['user_id']}</b><br>
+                                        <div style='margin-top:6px;color:#1f2937;'>{r['reply']}</div>
+                                        <small style='color:#64748B;'>🕒 {datetime.fromisoformat(r['created_at']).strftime('%d %b %Y, %H:%M')}</small>
                                     </div>
                                 </div>
                             </div>
                         """, unsafe_allow_html=True)
     
-                        # ========== BALASAN LEVEL 2 ==========
-                        if r["id"] in reply_map:
-                            for child in reply_map[r["id"]]:
+                        # --- delete comment (owner atau instructor) ---
+                        can_delete = (user["role"] == "instructor") or (user["id"] == r["user_id"])
+                        if can_delete:
+                            if st.button("🗑️ Hapus Komentar", key=f"del_reply_{r['id']}"):
+                                try:
+                                    supabase.table("discussion_replies").delete().eq("id", r["id"]).execute()
+                                    st.success("Komentar dihapus.")
+                                    st.rerun()
+                                except Exception as e:
+                                    st.error(f"Gagal menghapus komentar: {e}")
     
-                                child_color = user_avatar(child["user_id"])
-    
-                                st.markdown(f"""
-                                    <div style='margin-left:50px;
-                                                background:#EEF2FF;
-                                                padding:10px 12px;
-                                                border-radius:10px;
-                                                margin-bottom:8px;'>
-                                        <div style='display:flex; gap:10px;'>
-                                            <div style='width:32px;height:32px;border-radius:50%;
-                                                        background:{child_color};
-                                                        color:white;
-                                                        display:flex;align-items:center;
-                                                        justify-content:center;'>
-                                                {child["user_id"] % 100}
-                                            </div>
-                                            <div>
-                                                <b>User #{child["user_id"]}</b><br>
-                                                {child["reply"]}<br>
-                                                <small style='color:#64748B;'>
-                                                    🕒 {datetime.fromisoformat(child['created_at']).strftime('%d %b %Y, %H:%M')}
-                                                </small>
-                                            </div>
+                        # --- tampilkan balasan (child replies) ---
+                        children = reply_map.get(r["id"], [])
+                        for child in children:
+                            child_color = user_avatar(child["user_id"])
+                            st.markdown(f"""
+                                <div style='margin-left:46px; background:#EEF2FF;
+                                            padding:10px 12px; border-radius:8px; margin-bottom:8px;'>
+                                    <div style='display:flex; gap:10px; align-items:flex-start;'>
+                                        <div style='width:32px;height:32px;border-radius:50%;
+                                                    background:{child_color};
+                                                    color:white;display:flex;align-items:center;justify-content:center;'>
+                                            {child['user_id'] % 100}
+                                        </div>
+                                        <div style='flex:1;'>
+                                            <b>User #{child['user_id']}</b><br>
+                                            <div style='margin-top:6px;color:#1f2937;'>{child['reply']}</div>
+                                            <small style='color:#64748B;'>🕒 {datetime.fromisoformat(child['created_at']).strftime('%d %b %Y, %H:%M')}</small>
                                         </div>
                                     </div>
-                                """, unsafe_allow_html=True)
+                                </div>
+                            """, unsafe_allow_html=True)
     
-                        # ========== FORM BALASAN (LEVEL 2) ==========
-                        with st.form(f"reply_child_{r['id']}", clear_on_submit=True):
+                            # delete child (owner or instructor)
+                            can_delete_child = (user["role"] == "instructor") or (user["id"] == child["user_id"])
+                            if can_delete_child:
+                                if st.button("🗑️ Hapus Balasan", key=f"del_child_{child['id']}"):
+                                    try:
+                                        supabase.table("discussion_replies").delete().eq("id", child["id"]).execute()
+                                        st.success("Balasan dihapus.")
+                                        st.rerun()
+                                    except Exception as e:
+                                        st.error(f"Gagal menghapus balasan: {e}")
+    
+                        # --- FORM BALAS (level 2) untuk setiap komentar top-level ---
+                        with st.form(f"reply_child_form_{r['id']}", clear_on_submit=True):
                             reply2 = st.text_input("Balas komentar ini:", key=f"child_input_{r['id']}")
                             send2 = st.form_submit_button("↪ Balas")
     
@@ -1805,22 +1828,40 @@ def page_course_detail():
                                 if not reply2.strip():
                                     st.warning("Balasan tidak boleh kosong.")
                                 else:
-                                    supabase.table("discussion_replies").insert({
+                                    # coba insert dengan parent_id; jika gagal karena kolom tidak ada, fallback tanpa parent_id
+                                    payload = {
                                         "discussion_id": t["id"],
                                         "user_id": user["id"],
                                         "reply": reply2.strip(),
                                         "parent_id": r["id"],
                                         "created_at": datetime.now().isoformat()
-                                    }).execute()
-                                    st.success("Balasan terkirim!")
-                                    st.rerun()
+                                    }
+                                    try:
+                                        supabase.table("discussion_replies").insert(payload).execute()
+                                        st.success("Balasan terkirim!")
+                                        st.rerun()
+                                    except Exception as e:
+                                        msg = str(e)
+                                        # jika error karena kolom parent_id tidak ada, coba tanpa parent_id
+                                        if "parent_id" in msg or "Could not find the 'parent_id'" in msg or "column \"parent_id\" does not exist" in msg:
+                                            try:
+                                                fallback = {
+                                                    "discussion_id": t["id"],
+                                                    "user_id": user["id"],
+                                                    "reply": reply2.strip(),
+                                                    "created_at": datetime.now().isoformat()
+                                                }
+                                                supabase.table("discussion_replies").insert(fallback).execute()
+                                                st.warning("Catatan: database belum memiliki kolom parent_id — balasan disimpan sebagai top-level.")
+                                                st.rerun()
+                                            except Exception as e2:
+                                                st.error(f"❌ Gagal mengirim balasan: {e2}")
+                                                st.error(traceback.format_exc())
+                                        else:
+                                            st.error(f"❌ Gagal mengirim balasan: {e}")
+                                            st.error(traceback.format_exc())
     
-                else:
-                    st.info("Belum ada komentar.")
-    
-                # ==============================
-                # FORM KOMENTAR LEVEL 1
-                # ==============================
+                # --- FORM Tambah komentar top-level ---
                 st.markdown("### ✏️ Tambah Komentar")
                 with st.form(f"add_comment_{t['id']}", clear_on_submit=True):
                     new_comment = st.text_area("Tulis komentar:", height=100)
@@ -1830,15 +1871,38 @@ def page_course_detail():
                         if not new_comment.strip():
                             st.warning("Komentar tidak boleh kosong.")
                         else:
-                            supabase.table("discussion_replies").insert({
+                            payload = {
                                 "discussion_id": t["id"],
                                 "user_id": user["id"],
                                 "reply": new_comment.strip(),
                                 "parent_id": None,
                                 "created_at": datetime.now().isoformat()
-                            }).execute()
-                            st.success("Komentar ditambahkan!")
-                            st.rerun()
+                            }
+                            try:
+                                supabase.table("discussion_replies").insert(payload).execute()
+                                st.success("Komentar ditambahkan!")
+                                st.rerun()
+                            except Exception as e:
+                                # fallback jika kolom parent_id belum ada
+                                msg = str(e)
+                                if "parent_id" in msg or "column \"parent_id\" does not exist" in msg:
+                                    try:
+                                        fallback = {
+                                            "discussion_id": t["id"],
+                                            "user_id": user["id"],
+                                            "reply": new_comment.strip(),
+                                            "created_at": datetime.now().isoformat()
+                                        }
+                                        supabase.table("discussion_replies").insert(fallback).execute()
+                                        st.warning("Catatan: database belum memiliki kolom parent_id — komentar disimpan, tapi balasan threaded tidak akan berfungsi sampai schema diupdate.")
+                                        st.rerun()
+                                    except Exception as e2:
+                                        st.error(f"❌ Gagal mengirim komentar: {e2}")
+                                        st.error(traceback.format_exc())
+                                else:
+                                    st.error(f"❌ Gagal mengirim komentar: {e}")
+                                    st.error(traceback.format_exc())
+
 
 
 
@@ -1915,6 +1979,7 @@ def main():
 # === Panggil fungsi utama ===
 if __name__ == "__main__":
     main()
+
 
 
 
