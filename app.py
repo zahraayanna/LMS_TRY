@@ -1767,7 +1767,10 @@ def page_course_detail():
                                         {r['user_id'] % 100}
                                     </div>
                                     <div style='flex:1;'>
-                                        <b>User #{r['user_id']}</b><br>
+                                        # ambil nama user
+                                        u = supabase.table("users").select("name").eq("id", r["user_id"]).execute()
+                                        name = u.data[0]["name"] if u.data else f"User #{r['user_id']}"
+                                        <b>{name}</b><br>
                                         <div style='margin-top:6px;color:#1f2937;'>{r['reply']}</div>
                                         <small style='color:#64748B;'>🕒 {datetime.fromisoformat(r['created_at']).strftime('%d %b %Y, %H:%M')}</small>
                                     </div>
@@ -1800,7 +1803,9 @@ def page_course_detail():
                                             {child['user_id'] % 100}
                                         </div>
                                         <div style='flex:1;'>
-                                            <b>User #{child['user_id']}</b><br>
+                                            u2 = supabase.table("users").select("name").eq("id", child["user_id"]).execute()
+                                            name2 = u2.data[0]["name"] if u2.data else f"User #{child['user_id']}"
+                                            <b>{name2}</b><br>
                                             <div style='margin-top:6px;color:#1f2937;'>{child['reply']}</div>
                                             <small style='color:#64748B;'>🕒 {datetime.fromisoformat(child['created_at']).strftime('%d %b %Y, %H:%M')}</small>
                                         </div>
@@ -1979,6 +1984,7 @@ def main():
 # === Panggil fungsi utama ===
 if __name__ == "__main__":
     main()
+
 
 
 
