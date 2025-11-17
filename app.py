@@ -1816,7 +1816,7 @@ def page_course_detail():
             #  TAMPILKAN KOMENTAR LEVEL 1
             # ---------------------------------------
             for r in top_level:
-    
+            
                 # Ambil nama user
                 try:
                     qname = supabase.table("users").select("name").eq("id", r["user_id"]).execute()
@@ -1826,39 +1826,37 @@ def page_course_detail():
                     st.error(str(e))
                     st.error(f"user_id yang dicari = {r['user_id']}")
                     st.stop()
-
-    
+            
                 avatar_color = user_avatar(r["user_id"])
-    
-                st.markdown(
-                    f"""
-                    <div style='background:#F8FAFC; padding:12px; border-radius:10px;
-                                margin-bottom:10px;'>
-                        <div style='display:flex; gap:10px;'>
-                            <div style='width:40px;height:40px;border-radius:50%;
-                                        background:{avatar_color};
-                                        color:white;display:flex;align-items:center;
-                                        justify-content:center;font-weight:bold;'>
-                                {r['user_id'] % 100}
-                            </div>
-                            <div style='flex:1;'>
-                                <b>{uname}</b><br>
-                                <div style='margin-top:5px;'>{r['reply']}</div>
-                                <small style='color:#64748B;'>
-                                    🕒 {datetime.fromisoformat(r['created_at']).strftime('%d %b %Y, %H:%M')}
-                                </small>
-                            </div>
+            
+                html = f"""
+                <div style="background:#F8FAFC; padding:12px; border-radius:10px;
+                            margin-bottom:10px;">
+                    <div style="display:flex; gap:10px;">
+                        <div style="width:40px;height:40px;border-radius:50%;
+                                    background:{avatar_color};
+                                    color:white;display:flex;align-items:center;
+                                    justify-content:center;font-weight:bold;">
+                            {r['user_id'] % 100}
+                        </div>
+                        <div style="flex:1;">
+                            <b>{name}</b><br>
+                            <div style="margin-top:5px;">{r['reply']}</div>
+                            <small style="color:#64748B;">
+                                🕒 {datetime.fromisoformat(r['created_at']).strftime('%d %b %Y, %H:%M')}
+                            </small>
                         </div>
                     </div>
-                    """,
-                    unsafe_allow_html=True,
-                )
-    
+                </div>
+                """
+                st.markdown(html, unsafe_allow_html=True)
+            
                 # DELETE KOMENTAR
                 if user["role"] == "instructor" or user["id"] == r["user_id"]:
                     if st.button("🗑️ Hapus Komentar", key=f"del_reply_{r['id']}"):
                         supabase.table("discussion_replies").delete().eq("id", r["id"]).execute()
                         st.rerun()
+
     
                 # ---------------------------------------
                 #  TAMPILKAN BALASAN LEVEL 2
@@ -2015,6 +2013,7 @@ def main():
 # === Panggil fungsi utama ===
 if __name__ == "__main__":
     main()
+
 
 
 
