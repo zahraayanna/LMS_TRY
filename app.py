@@ -517,6 +517,8 @@ def upload_to_supabase(file):
 # (All previous features + delete system)
 # ============================================
 def page_course_detail():
+    from datetime import datetime
+
     if "current_course" not in st.session_state and "last_course" in st.session_state:
         st.session_state.current_course = st.session_state.last_course
 
@@ -2006,6 +2008,7 @@ def main():
 # === Panggil fungsi utama ===
 if __name__ == "__main__":
     main()
+
 
 
 
