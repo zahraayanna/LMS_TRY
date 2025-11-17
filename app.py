@@ -594,15 +594,27 @@ def page_course_detail():
     active_tab = st.session_state.get("active_tab", "overview")
     
     # === Buat semua tab ===
-    tabs = st.tabs([
-        "📚 Overview",
-        "🕒 Attendance",
-        "📦 Learning Activity",
-        "📋 Assignments",
-        "🧠 Quiz",
-        "📣 Announcements",
-        "💬 Discussion Forum"   # ← Tambahkan baris ini
-    ])
+    if user["role"] == "instructor":
+        tabs = st.tabs([
+            "📚 Overview",
+            "🕒 Attendance",
+            "📦 Learning Activity",
+            "📋 Assignments",
+            "🧠 Quiz",
+            "📣 Announcements",
+            "💬 Discussion Forum",
+            "👥 Students"
+        ])
+    else:
+        tabs = st.tabs([
+            "📚 Overview",
+            "🕒 Attendance",
+            "📦 Learning Activity",
+            "📋 Assignments",
+            "🧠 Quiz",
+            "📣 Announcements",
+            "💬 Discussion Forum"
+        ])
 
     st.write("Jumlah tab:", len(tabs))
 
@@ -1935,12 +1947,48 @@ def page_course_detail():
                         st.success("Komentar ditambahkan!")
                         st.rerun()
 
-
-
-
-
-
-
+    # =============================
+    # TAB 7 — STUDENT LIST (GURU)
+    # =============================
+    if user["role"] == "instructor":
+        with tabs[7]:
+            st.subheader("👥 Daftar Siswa di Kursus Ini")
+    
+            # Ambil semua siswa terdaftar di kursus ini
+            enroll = (
+                supabase.table("enrollments")
+                .select("user_id")
+                .eq("course_id", cid)
+                .eq("role", "student")
+                .execute()
+                .data
+            )
+    
+            if not enroll:
+                st.info("Belum ada siswa yang bergabung di kursus ini.")
+                st.stop()
+    
+            student_ids = [e["user_id"] for e in enroll]
+    
+            # Ambil detail setiap siswa melalui tabel users
+            students = (
+                supabase.table("users")
+                .select("id, name, email")
+                .in_("id", student_ids)
+                .execute()
+                .data
+            )
+    
+            # Tampilan tabel siswa
+            for s in students:
+                st.markdown(f"""
+                    <div style='padding:12px; margin-bottom:10px; background:#F8FAFC;
+                                border-radius:8px; border-left:5px solid #10B981;'>
+                        <b>Nama:</b> {s['name']} <br>
+                        <b>Email:</b> {s['email']} <br>
+                        <b>User ID:</b> {s['id']}
+                    </div>
+                """, unsafe_allow_html=True)
 
 
 def page_account(): 
@@ -2008,68 +2056,7 @@ def main():
         st.rerun()
 
 
-
-
 # === Panggil fungsi utama ===
 if __name__ == "__main__":
     main()
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
