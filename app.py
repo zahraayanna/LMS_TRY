@@ -1948,13 +1948,14 @@ def page_course_detail():
                         st.rerun()
 
     # =============================
-    # TAB 7 — STUDENT LIST (GURU)
+    # TAB 7 — STUDENT PROGRESS (GURU)
     # =============================
     if user["role"] == "instructor":
         with tabs[7]:
+    
             st.subheader("👥 Daftar Siswa di Kursus Ini")
     
-            # Ambil semua siswa terdaftar di kursus ini
+            # Ambil semua siswa terdaftar
             enroll = (
                 supabase.table("enrollments")
                 .select("user_id")
@@ -1970,7 +1971,7 @@ def page_course_detail():
     
             student_ids = [e["user_id"] for e in enroll]
     
-            # Ambil detail setiap siswa melalui tabel users
+            # Ambil data siswa
             students = (
                 supabase.table("users")
                 .select("id, name, email")
@@ -1979,16 +1980,117 @@ def page_course_detail():
                 .data
             )
     
-            # Tampilan tabel siswa
+            selected_student = st.session_state.get("selected_student", None)
+    
+            # ========== LIST SISWA ==========
             for s in students:
-                st.markdown(f"""
-                    <div style='padding:12px; margin-bottom:10px; background:#F8FAFC;
-                                border-radius:8px; border-left:5px solid #10B981;'>
-                        <b>Nama:</b> {s['name']} <br>
-                        <b>Email:</b> {s['email']} <br>
-                        <b>User ID:</b> {s['id']}
-                    </div>
-                """, unsafe_allow_html=True)
+                col1, col2 = st.columns([0.7, 0.3])
+    
+                with col1:
+                    st.markdown(f"""
+                        <div style='padding:12px; margin-bottom:10px; background:#F8FAFC;
+                                    border-radius:8px; border-left:5px solid #10B981;'>
+                            <b>{s['name']}</b> <br>
+                            <small>{s['email']}</small><br>
+                            <small>User ID: {s['id']}</small>
+                        </div>
+                    """, unsafe_allow_html=True)
+    
+                with col2:
+                    if st.button("Lihat Progress", key=f"progress_{s['id']}"):
+                        st.session_state["selected_student"] = s["id"]
+                        st.rerun()
+    
+            # Jika belum memilih siswa → stop
+            if not selected_student:
+                st.info("Klik tombol **Lihat Progress** untuk melihat perkembangan siswa.")
+                st.stop()
+    
+            st.markdown("---")
+            st.markdown(f"## 📊 Progress Siswa — ID {selected_student}")
+    
+            # ====================
+            # 1. Kehadiran
+            # ====================
+            st.markdown("### 🕒 Kehadiran")
+    
+            att = (
+                supabase.table("attendance")
+                .select("*")
+                .eq("course_id", cid)
+                .eq("user_id", selected_student)
+                .execute()
+                .data
+            )
+    
+            total = len(att)
+            hadir = sum(1 for a in att if a["status"] == "present")
+            percent = round((hadir / total) * 100, 2) if total > 0 else 0
+    
+            st.write(f"Hadir **{hadir}/{total}** kali — {percent}%.")
+    
+            # ====================
+            # 2. Assignments
+            # ====================
+            st.markdown("### 📝 Tugas")
+    
+            assignments = (
+                supabase.table("assignments")
+                .select("*")
+                .eq("course_id", cid)
+                .execute()
+                .data
+            )
+    
+            for a in assignments:
+                sub = (
+                    supabase.table("assignment_submissions")
+                    .select("*")
+                    .eq("assignment_id", a["id"])
+                    .eq("student_id", selected_student)
+                    .execute()
+                    .data
+                )
+    
+                if not sub:
+                    status = "❌ Belum Mengerjakan"
+                else:
+                    sdata = sub[0]
+                    if sdata["score"] is None:
+                        status = "⏳ Menunggu Penilaian"
+                    else:
+                        status = f"✔️ Selesai (Skor {sdata['score']})"
+    
+                st.markdown(f"- **{a['title']}** — {status}")
+    
+            # ====================
+            # 3. Quiz
+            # ====================
+            st.markdown("### 🧠 Quiz")
+    
+            quizzes = (
+                supabase.table("quizzes")
+                .select("*")
+                .eq("course_id", cid)
+                .execute()
+                .data
+            )
+    
+            for q in quizzes:
+                attempt = (
+                    supabase.table("quiz_attempts")
+                    .select("*")
+                    .eq("quiz_id", q["id"])
+                    .eq("user_id", selected_student)
+                    .execute()
+                    .data
+                )
+    
+                if not attempt:
+                    st.markdown(f"- **{q['title']}** — ❌ Belum Mengerjakan")
+                else:
+                    score = attempt[0].get("score", None)
+                    st.markdown(f"- **{q['title']}** — ✔️ Skor: {score}")
 
 
 def page_account(): 
@@ -2059,4 +2161,5 @@ def main():
 # === Panggil fungsi utama ===
 if __name__ == "__main__":
     main()
+
 
