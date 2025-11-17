@@ -1818,8 +1818,15 @@ def page_course_detail():
             for r in top_level:
     
                 # Ambil nama user
-                uq = supabase.table("users").select("name").eq("id", r["user_id"]).execute()
-                uname = uq.data[0]["name"] if uq.data else f"User #{r['user_id']}"
+                try:
+                    qname = supabase.table("users").select("name").eq("id", r["user_id"]).execute()
+                    name = qname.data[0]["name"] if qname.data else f"User #{r['user_id']}"
+                except Exception as e:
+                    st.error("❌ SUPABASE ERROR SAAT AMBIL NAMA USER:")
+                    st.error(str(e))
+                    st.error(f"user_id yang dicari = {r['user_id']}")
+                    st.stop()
+
     
                 avatar_color = user_avatar(r["user_id"])
     
@@ -2008,6 +2015,7 @@ def main():
 # === Panggil fungsi utama ===
 if __name__ == "__main__":
     main()
+
 
 
 
