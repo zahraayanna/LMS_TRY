@@ -1350,36 +1350,28 @@ def page_course_detail():
         import streamlit.components.v1 as components
         import re, markdown
         from datetime import datetime
-        from PIL import Image
-        import io, base64
-        import math
     
         st.subheader("🧠 Quiz")
     
-        # -------------------
-        # Helper: ambil rubrik untuk question
-        # -------------------
-        def load_rubrics_for_question(qid):
-            try:
-                rows = supabase.table("quiz_rubrics").select("*").eq("question_id", qid).order("rubric_score", desc=True).execute().data or []
-                return rows
-            except Exception:
-                return []
-    
-        # -------------------
-        # Load semua quiz
-        # -------------------
+        # === Load semua quiz ===
         quizzes = supabase.table("quizzes").select("*").eq("course_id", cid).execute().data or []
         selected_quiz_id = st.session_state.get("selected_quiz_id")
     
+        # ========================================
+        # LOOP SEMUA QUIZ DALAM COURSE
+        # ========================================
         if quizzes:
             for q in quizzes:
                 expanded = selected_quiz_id == q["id"]
+    
                 with st.expander(f"📝 {q['title']}", expanded=expanded):
+    
                     if expanded:
                         st.session_state.selected_quiz_id = None
     
-                    # ---------- Deskripsi ----------
+                    # ==============================================================
+                    #  DESKRIPSI QUIZ (YouTube, Markdown, LaTeX)
+                    # ==============================================================
                     desc = q.get("description", "")
                     if desc:
                         st.markdown("### 📘 Quiz Description:")
@@ -1392,7 +1384,7 @@ def page_course_detail():
                             st.video(f"https://www.youtube.com/watch?v={video_id}")
                             desc = desc.replace(youtube_url, "")
     
-                        rendered_md = markdown.markdown(desc, extensions=["fenced_code", "tables", "md_in_html"])
+                        rendered_md = markdown.markdown(desc, extensions=["fenced_code", "tables"])
                         components.html(
                             f"""
                             <div style="font-size:16px; line-height:1.6;">
@@ -1402,440 +1394,242 @@ def page_course_detail():
                                 </script>
                                 {rendered_md}
                             </div>
-                            """, height=220, scrolling=True
+                            """,
+                            height=250,
+                            scrolling=True,
                         )
     
-                    # ---------- Instructor area: edit quiz + rubrik ----------
+                    # ==============================================================
+                    #  EDIT QUIZ
+                    # ==============================================================
                     if user["role"] == "instructor":
                         st.divider()
-                        st.markdown("#### ✏️ Edit This Quiz")
-                        with st.container():
-                            with st.form(f"edit_quiz_{q['id']}"):
-                                new_title = st.text_input("Quiz Title", q["title"])
-                                new_desc = st.text_area("Quiz Description (Markdown/LaTeX allowed)", q.get("description", ""))
-                                save_edit = st.form_submit_button("💾 Save Changes")
-                                if save_edit:
-                                    supabase.table("quizzes").update({"title": new_title, "description": new_desc}).eq("id", q["id"]).execute()
-                                    st.success("✅ Quiz updated successfully!")
-                                    st.rerun()
+                        st.markdown("#### ✏️ Edit Quiz")
     
-                        # === Rubrik manager (NEW) ===
-                        st.markdown("#### 🧾 Rubrik Penilaian (per soal esai)")
-                        # tampilkan semua soal dan rubriknya
-                        try:
-                            questions_all = supabase.table("quiz_questions").select("*").eq("quiz_id", q["id"]).order("id", asc=True).execute().data or []
-                        except Exception as e:
-                            questions_all = []
-                            st.error(f"Failed to load questions for rubrik editor: {e}")
+                        with st.form(f"edit_quiz_{q['id']}"):
+                            new_title = st.text_input("Quiz Title", q["title"])
+                            new_desc = st.text_area("Description", q.get("description", ""))
+                            new_attempt_limit = st.number_input(
+                                "Attempt Limit (0 = unlimited)",
+                                value=q.get("attempt_limit", 1),
+                                min_value=0
+                            )
+                            preview = st.form_submit_button("🔍 Preview Description")
+                            if preview:
+                                st.write("### Preview:")
+                                st.markdown(new_desc)
     
-                        if questions_all:
-                            for qs in questions_all:
-                                st.markdown(f"**Soal #{qs['id']}**")
-                                st.markdown(qs.get("question", ""))
+                            save = st.form_submit_button("💾 Save Changes")
+                            if save:
+                                supabase.table("quizzes").update(
+                                    {
+                                        "title": new_title,
+                                        "description": new_desc,
+                                        "attempt_limit": new_attempt_limit,
+                                    }
+                                ).eq("id", q["id"]).execute()
+                                st.success("Quiz updated!")
+                                st.rerun()
     
-                                rubs = load_rubrics_for_question(qs["id"])
-                                if rubs:
-                                    for r in rubs:
-                                        st.markdown(f"- `{r['rubric_score']}` / {r['max_score']} — {r.get('rubric_label','')}")
-                                else:
-                                    st.info("Belum ada rubrik untuk soal ini (gunakan form di bawah untuk menambah).")
+                    # ==============================================================
+                    #  LOAD QUESTIONS (rubrik sekarang ikut)
+                    # ==============================================================
+                    questions = (
+                        supabase.table("quiz_questions")
+                        .select("*")
+                        .eq("quiz_id", q["id"])
+                        .order("id")
+                        .execute()
+                        .data
+                        or []
+                    )
     
-                                with st.expander(f"Tambah / Ubah Rubrik untuk Soal #{qs['id']}", expanded=False):
-                                    with st.form(f"rubric_form_{qs['id']}", clear_on_submit=True):
-                                        max_score = st.number_input("Max score untuk soal ini", value=int(rubs[0]['max_score']) if rubs else 100, min_value=1)
-                                        new_score = st.number_input("Nilai rubrik (mis: 20, 10, 5, 0)", min_value=0)
-                                        label = st.text_input("Deskripsi kriteria untuk nilai ini")
-                                        add_r = st.form_submit_button("➕ Tambah Rubrik")
-                                        if add_r:
-                                            try:
-                                                supabase.table("quiz_rubrics").insert({
-                                                    "quiz_id": q["id"],
-                                                    "question_id": qs["id"],
-                                                    "max_score": int(max_score),
-                                                    "rubric_score": float(new_score),
-                                                    "rubric_label": label
-                                                }).execute()
-                                                st.success("✅ Rubrik ditambahkan.")
-                                                st.rerun()
-                                            except Exception as e:
-                                                st.error(f"❌ Gagal menambah rubrik: {e}")
+                    # ==============================================================
+                    #  TAMBAH PERTANYAAN (instruktur)
+                    # ==============================================================
+                    if user["role"] == "instructor" and questions:
+                        st.markdown("### ➕ Add Question")
     
-                        else:
-                            st.info("Belum ada soal untuk quiz ini (buat soal dulu).")
-    
-                    # ---------- Load questions dan tampilkan (lama) ----------
-                    questions = supabase.table("quiz_questions").select("*").eq("quiz_id", q["id"]).order("id", asc=True).execute().data or []
-                    if questions:
-                        st.markdown("### ✏️ Questions:")
+                    # ==============================================================
+                    #  Tampilkan soal untuk siswa mengerjakan
+                    # ==============================================================
+                    if user["role"] == "student":
+                        st.markdown("### ✏️ Jawab Pertanyaan")
                         answers = {}
                         for i, qs in enumerate(questions, 1):
-                            st.markdown(f"**{i}.** {qs['question']}")
+                            st.markdown(f"#### {i}. {qs['question']}")
+    
                             if qs["type"] == "multiple_choice":
                                 choices = qs["choices"].split("|")
-                                ans = st.radio("Pilih jawaban:", choices, key=f"ans_{qs['id']}")
-                            else:
-                                ans = st.text_input("Jawaban singkat / esai:", key=f"ans_{qs['id']}")
-                            answers[qs["id"]] = ans
+                                ans = st.radio("", choices, key=f"ans_{qs['id']}")
+                                answers[qs["id"]] = ans
     
-                            # instructor edit question (kept)
-                            if user["role"] == "instructor":
-                                with st.container():
-                                    with st.form(f"edit_q_{qs['id']}"):
-                                        new_q_text = st.text_area("Question Text", qs["question"])
-                                        if qs["type"] == "multiple_choice":
-                                            new_choices = st.text_area("Choices (pisahkan dengan | )", qs["choices"])
-                                            new_correct = st.text_input("Correct Answer", qs["correct_answer"])
-                                        else:
-                                            new_choices = ""
-                                            new_correct = st.text_input("Correct Answer", qs["correct_answer"])
-                                        save_q = st.form_submit_button("💾 Save Question")
-                                        if save_q:
-                                            update_data = {"question": new_q_text, "correct_answer": new_correct}
-                                            if new_choices:
-                                                update_data["choices"] = new_choices
-                                            supabase.table("quiz_questions").update(update_data).eq("id", qs["id"]).execute()
-                                            st.success("✅ Question updated successfully!")
-                                            st.rerun()
+                            else:  # short answer
+                                ans = st.text_area("", key=f"ans_{qs['id']}")
+                                answers[qs["id"]] = ans
     
-                            # delete question
-                            if user["role"] == "instructor":
-                                if st.button(f"🗑️ Delete Question {i}", key=f"del_q_{qs['id']}"):
-                                    supabase.table("quiz_questions").delete().eq("id", qs["id"]).execute()
-                                    st.success(f"Question {i} deleted!")
-                                    st.rerun()
+                        if st.button("✅ Kumpulkan Jawaban"):
+                            # ===== CEK ATTEMPT LIMIT =====
+                            attempts = (
+                                supabase.table("quiz_submissions")
+                                .select("id")
+                                .eq("quiz_id", q["id"])
+                                .eq("user_id", user["id"])
+                                .execute()
+                                .data
+                            )
+                            limit = q.get("attempt_limit", 1)
     
-                        # -------------------------
-                        # Submit quiz (student)
-                        # -------------------------
-                        if user["role"] == "student":
-                            # Simple attempt counting: if quiz has attempt_limit column use it; else allow
-                            attempt_limit = q.get("attempt_limit", None)  # if you added this column earlier
-                            # count existing attempts for this user
-                            try:
-                                past = supabase.table("quiz_submissions").select("*").eq("quiz_id", q["id"]).eq("user_id", user["id"]).execute().data or []
-                            except Exception:
-                                past = []
+                            if limit != 0 and len(attempts) >= limit:
+                                st.error("❌ Attempt limit reached.")
+                                st.stop()
     
-                            attempts_done = len(past)
-                            can_submit = True
-                            if attempt_limit is not None:
-                                try:
-                                    if attempts_done >= int(attempt_limit):
-                                        can_submit = False
-                                except:
-                                    can_submit = True
+                            # ===== NILAI AUTOMATIC PILIHAN GANDA =====
+                            auto_score = 0
+                            auto_total = 0
+                            for qs in questions:
+                                if qs["type"] == "multiple_choice":
+                                    auto_total += 1
+                                    if answers.get(qs["id"], "").strip() == qs["correct_answer"]:
+                                        auto_score += 1
     
-                            if not can_submit:
-                                st.warning("⚠️ Kamu sudah mencapai batas percobaan untuk quiz ini.")
-                            else:
-                                if st.button("✅ Kumpulkan Jawaban", key=f"submit_quiz_{q['id']}"):
-                                    # --- scoring auto for MCQ ---
-                                    auto_score = 0
-                                    total_q = len(questions)
-                                    mcq_total = 0
-                                    mcq_correct = 0
-                                    for qs in questions:
-                                        if qs["type"] == "multiple_choice":
-                                            mcq_total += 1
-                                            user_ans = answers.get(qs["id"], "").strip()
-                                            correct = (qs.get("correct_answer") or "").strip()
-                                            if user_ans and correct and user_ans == correct:
-                                                mcq_correct += 1
-                                    if mcq_total > 0:
-                                        # Normalize MCQ to 100 if wanted; here store raw count and let teacher decide scaling later
-                                        auto_score = mcq_correct
-                                    else:
-                                        auto_score = 0
+                            # Konversi MCQ → max 100
+                            mcq_score_scaled = (auto_score / auto_total * 100) if auto_total else 0
     
-                                    # Save submission (use quiz_submissions existing table; relies on schema you described)
-                                    try:
-                                        supabase.table("quiz_submissions").insert({
-                                            "quiz_id": q["id"],
-                                            "user_id": user["id"],
-                                            "score": auto_score,   # auto part (count of correct MCQ)
-                                            "total": total_q,
-                                            "submitted_at": str(datetime.now()),
-                                            "manual_score": None,
-                                            "teacher_feedback": None
-                                        }).execute()
-                                        st.success("🎉 Quiz dikumpulkan! Tunggu penilaian guru untuk soal esai.")
-                                        st.rerun()
-                                    except Exception as e:
-                                        st.error(f"❌ Failed to save submission: {e}")
+                            # Buat submission
+                            sub = (
+                                supabase.table("quiz_submissions")
+                                .insert(
+                                    {
+                                        "quiz_id": q["id"],
+                                        "user_id": user["id"],
+                                        "score": mcq_score_scaled,  # otomatis
+                                        "total": 100,
+                                        "submitted_at": str(datetime.now()),
+                                    }
+                                )
+                                .execute()
+                            )
+                            attempt_id = sub.data[0]["id"]
     
-                    else:
-                        st.info("No questions yet.")
+                            # Simpan jawaban ke quiz_answers (supaya bisa dinilai guru)
+                            for qs in questions:
+                                a = answers.get(qs["id"], "")
+                                supabase.table("quiz_answers").insert(
+                                    {
+                                        "attempt_id": attempt_id,
+                                        "question_id": qs["id"],
+                                        "text_answer": a,
+                                    }
+                                ).execute()
     
-                    # ---------- Instructor grading UI (NEW) ----------
+                            st.success("🎉 Quiz submitted!")
+                            st.rerun()
+    
+                    # ==============================================================
+                    #  FITUR GURU: LIHAT & NILAI JAWABAN
+                    # ==============================================================
                     if user["role"] == "instructor":
                         st.divider()
-                        st.markdown("### 🧾 Nilai & Lihat Jawaban Siswa")
-                        # load submissions for this quiz
-                        subs = supabase.table("quiz_submissions").select("*").eq("quiz_id", q["id"]).order("submitted_at", desc=True).execute().data or []
+                        st.markdown("### 👨‍🏫 Review & Grade Student Answers")
+    
+                        subs = (
+                            supabase.table("quiz_submissions")
+                            .select("*")
+                            .eq("quiz_id", q["id"])
+                            .order("submitted_at", desc=True)
+                            .execute()
+                            .data
+                        )
     
                         if not subs:
-                            st.info("Belum ada siswa yang mengumpulkan quiz ini.")
+                            st.info("Belum ada siswa yang mengerjakan.")
                         else:
-                            # show list of submissions
-                            for sidx, sub in enumerate(subs, 1):
-                                # get student info
-                                try:
-                                    u = supabase.table("users").select("id,name,email").eq("id", sub["user_id"]).execute().data
-                                    userinfo = u[0] if u else {"id": sub["user_id"], "name": f"User #{sub['user_id']}", "email": ""}
-                                except Exception:
-                                    userinfo = {"id": sub["user_id"], "name": f"User #{sub['user_id']}", "email": ""}
+                            # dropdown list students
+                            sub_map = {
+                                f"{s['user_id']} — submitted {s['submitted_at']}": s["id"] for s in subs
+                            }
+                            picked = st.selectbox(
+                                "Pilih jawaban siswa:",
+                                list(sub_map.keys()),
+                                key=f"pick_sub_{q['id']}"
+                            )
     
-                                st.markdown(f"#### {sidx}. {userinfo['name']} — {userinfo.get('email','')}")
-                                st.markdown(f"Attempt submitted: {sub.get('submitted_at')}")
-                                st.markdown(f"Auto Score (MCQ count): **{sub.get('score','-')}** / {sub.get('total','-')}")
+                            chosen_attempt = sub_map[picked]
     
-                                # Button to view detail & grade
-                                if st.button(f"🔎 Lihat & Nilai — {userinfo['name']}", key=f"view_attempt_{sub['id']}"):
-                                    st.session_state.viewing_submission = sub["id"]
-                                    st.session_state.viewing_user = userinfo["id"]
-                                    st.session_state.viewing_quiz = q["id"]
+                            # load answers
+                            ans = (
+                                supabase.table("quiz_answers")
+                                .select("*")
+                                .eq("attempt_id", chosen_attempt)
+                                .execute()
+                                .data
+                            )
+    
+                            st.markdown("---")
+                            st.markdown("### 📝 Student Answers")
+    
+                            # tampil satu per satu
+                            for i, qs in enumerate(questions, 1):
+                                st.markdown(f"#### {i}. {qs['question']}")
+                                a = next((x for x in ans if x["question_id"] == qs["id"]), None)
+    
+                                st.markdown(f"**Jawaban siswa:** {a['text_answer'] if a else '-'}")
+    
+                                # tampilkan rubrik
+                                st.markdown(f"**Rubric Max Score:** {qs.get('rubric_score', 0)}")
+    
+                                # form nilai guru
+                                teacher_score = st.number_input(
+                                    f"Nilai untuk soal {i}",
+                                    min_value=0,
+                                    max_value=qs.get("rubric_score", 0),
+                                    key=f"score_{chosen_attempt}_{qs['id']}",
+                                )
+    
+                                if st.button(f"💾 Simpan nilai soal {i}", key=f"save_score_{chosen_attempt}_{qs['id']}"):
+                                    supabase.table("quiz_answers").update(
+                                        {"is_correct": teacher_score}
+                                    ).eq("attempt_id", chosen_attempt).eq("question_id", qs["id"]).execute()
+    
+                                    st.success("Score saved!")
                                     st.rerun()
     
-                            # If an instructor clicked view, show detail
-                            viewing = st.session_state.get("viewing_submission")
-                            if viewing:
-                                try:
-                                    sub_detail = supabase.table("quiz_submissions").select("*").eq("id", viewing).execute().data[0]
-                                except Exception as e:
-                                    st.error(f"Failed to load submission detail: {e}")
-                                    sub_detail = None
-    
-                                if sub_detail:
-                                    st.markdown("---")
-                                    st.markdown("### Detail Jawaban (tampilkan jawaban tiap soal)")
-    
-                                    # load the student's answers for this submission from quiz_answers
-                                    answers_rows = supabase.table("quiz_answers").select("*").eq("attempt_id", viewing).execute().data or []
-                                    # If quiz_answers are stored differently in your app (e.g. they were stored with quiz_submissions id as attempt_id),
-                                    # ensure attempt_id used above matches your storage. If you didn't create quiz_answers per attempt, you may need to adapt.
-    
-                                    # Show each question and student's answer
-                                    for qs in questions:
-                                        st.markdown(f"**Soal:** {qs['question']}")
-                                        # find answer record
-                                        ans_row = next((a for a in answers_rows if a.get("question_id") == qs["id"]), None)
-                                        if qs["type"] == "multiple_choice":
-                                            student_text = ans_row.get("choice_id") if ans_row else answers.get(qs["id"], "")
-                                            st.markdown(f"- Jawaban siswa (pilihan): {student_text}")
-                                        else:
-                                            # esai
-                                            student_text = ans_row.get("text_answer") if ans_row else ""
-                                            st.markdown(f"- Jawaban siswa (esai):")
-                                            st.info(student_text or "_(tidak ada teks tersimpan)_")
-    
-                                        # Rubrik & manual scoring (only for esai)
-                                        if qs["type"] != "multiple_choice":
-                                            rubs = load_rubrics_for_question(qs["id"])
-                                            if rubs:
-                                                st.markdown("Pilih nilai dari rubrik berikut:")
-                                                # present radio with label and score; store selection in session_state keyed by sub id + question id
-                                                sel_key = f"grade_{viewing}_{qs['id']}"
-                                                choices_for_radio = [f"{int(r['rubric_score'])} — {r.get('rubric_label','')}" for r in rubs]
-                                                # default: previously saved value? try to load from DB (not implemented here fully)
-                                                sel = st.radio("", choices_for_radio, key=sel_key)
-                                            else:
-                                                st.info("Belum ada rubrik untuk soal ini. Kamu bisa beri nilai numerik manual.")
-                                                sel_key = f"grade_{viewing}_{qs['id']}"
-                                                numeric_val = st.number_input("Masukkan nilai manual untuk soal ini", min_value=0.0, step=1.0, key=sel_key)
-    
-                                    # Save manual grading: compute manual_score as sum of selected rubric_score (scaled by max if needed)
-                                    with st.form(f"save_manual_{viewing}", clear_on_submit=False):
-                                        teacher_feedback = st.text_area("Feedback untuk siswa (opsional)", height=120)
-                                        save_manual = st.form_submit_button("💾 Simpan Nilai Manual & Feedback")
-                                        if save_manual:
-                                            # compute manual_sum
-                                            manual_sum = 0.0
-                                            for qs in questions:
-                                                if qs["type"] != "multiple_choice":
-                                                    sel_key = f"grade_{viewing}_{qs['id']}"
-                                                    selval = st.session_state.get(sel_key)
-                                                    if selval:
-                                                        # if radio style "20 — label", extract number
-                                                        if isinstance(selval, str) and "—" in selval:
-                                                            try:
-                                                                numeric = float(selval.split("—")[0].strip())
-                                                            except:
-                                                                numeric = 0.0
-                                                        else:
-                                                            try:
-                                                                numeric = float(selval)
-                                                            except:
-                                                                numeric = 0.0
-                                                        manual_sum += numeric
-                                            # Save to quiz_submissions (manual_score, teacher_feedback)
-                                            try:
-                                                supabase.table("quiz_submissions").update({
-                                                    "manual_score": manual_sum,
-                                                    "teacher_feedback": teacher_feedback
-                                                }).eq("id", viewing).execute()
-                                                st.success("✅ Nilai manual dan feedback tersimpan.")
-                                                st.rerun()
-                                            except Exception as e:
-                                                st.error(f"❌ Gagal menyimpan nilai manual: {e}")
-    
-                                    # Optionally: finalize computing final_score (teacher may want auto+manual combined)
-                                    if st.button("🔢 Hitung Final Score (Auto + Manual)", key=f"compute_final_{viewing}"):
-                                        try:
-                                            sub_now = supabase.table("quiz_submissions").select("*").eq("id", viewing).execute().data[0]
-                                            auto_part = float(sub_now.get("score") or 0)
-                                            manual_part = float(sub_now.get("manual_score") or 0)
-    
-                                            # compute weights:
-                                            # - define auto portion = MCQ fraction (mcq_total / total_q)
-                                            mcq_count = sum(1 for qq in questions if qq["type"] == "multiple_choice")
-                                            total_qs = len(questions)
-                                            if total_qs == 0:
-                                                total_qs = 1
-                                            # Let's scale mcq to 100 and manual to their sum, then compute final as average if both exist
-                                            # Approach: compute auto_percent = (auto_part / mcq_count)*100 if mcq_count>0 else 0
-                                            auto_percent = (auto_part / mcq_count * 100) if mcq_count > 0 else 0
-                                            # manual_sum is already raw rubric points; to combine, we need to scale manual_sum to 100 range based on sum of max_scores of esai questions
-                                            esai_max_total = 0
-                                            for qq in questions:
-                                                if qq["type"] != "multiple_choice":
-                                                    # get max_score from rubrics (assume consistent per question)
-                                                    rubs = load_rubrics_for_question(qq["id"])
-                                                    if rubs:
-                                                        esai_max_total += float(rubs[0].get("max_score", 100))
-                                                    else:
-                                                        esai_max_total += 100
-                                            manual_percent = (manual_part / esai_max_total * 100) if esai_max_total > 0 else 0
-    
-                                            # final percent: average of auto_percent and manual_percent weighted by number of question types
-                                            if mcq_count > 0 and esai_max_total > 0:
-                                                final_percent = (auto_percent + manual_percent) / 2.0
-                                            elif mcq_count > 0:
-                                                final_percent = auto_percent
-                                            else:
-                                                final_percent = manual_percent
-    
-                                            # store final in submissions (field final_score or reuse score? we'll store in manual_score_final or final_score)
-                                            # Try to update final_score column if exists; else update 'score' with scaled final percent
-                                            try:
-                                                supabase.table("quiz_submissions").update({
-                                                    "final_score": float(final_percent)
-                                                }).eq("id", viewing).execute()
-                                            except:
-                                                # fallback: update score with final_percent
-                                                supabase.table("quiz_submissions").update({
-                                                    "score": float(final_percent)
-                                                }).eq("id", viewing).execute()
-    
-                                            st.success(f"✅ Final score dihitung: {final_percent:.2f} (percent scale)")
-                                            st.rerun()
-                                        except Exception as e:
-                                            st.error(f"❌ Gagal menghitung final score: {e}")
-    
-                    # ---------- Delete entire quiz (kept) ----------
+                    # ==============================================================
+                    #  DELETE QUIZ
+                    # ==============================================================
                     if user["role"] == "instructor":
                         st.divider()
-                        if st.button(f"🗑️ Delete Quiz '{q['title']}'", key=f"del_quiz_{q['id']}"):
+                        if st.button(f"🗑 Delete Quiz '{q['title']}'"):
                             supabase.table("quiz_questions").delete().eq("quiz_id", q["id"]).execute()
                             supabase.table("quizzes").delete().eq("id", q["id"]).execute()
-                            st.success("🗑️ Quiz deleted!")
+                            st.success("Quiz deleted!")
                             st.rerun()
+    
         else:
             st.info("No quizzes yet.")
     
-        # =============================
-        # Create new quiz (kept)
-        # =============================
+        # ==============================================================
+        # CREATE NEW QUIZ
+        # ==============================================================
         if user["role"] == "instructor":
             with st.form("add_quiz"):
                 title = st.text_input("Quiz Title")
-                desc = st.text_area("Quiz Description (supports Markdown, LaTeX, and YouTube link)")
+                desc = st.text_area("Description")
+                attempt = st.number_input("Attempt Limit (0 = unlimited)", min_value=0, value=1)
+    
                 ok = st.form_submit_button("➕ Create Quiz")
                 if ok and title:
                     supabase.table("quizzes").insert(
-                        {"course_id": cid, "title": title, "description": desc}
+                        {
+                            "course_id": cid,
+                            "title": title,
+                            "description": desc,
+                            "attempt_limit": attempt,
+                        }
                     ).execute()
-                    st.success("✅ Quiz created successfully!")
+                    st.success("Quiz created!")
                     st.rerun()
-    
-        # =============================
-        # Add question (kept)
-        # =============================
-        if user["role"] == "instructor" and quizzes:
-            st.markdown("### ➕ Add Question to Quiz (Rich Version)")
-            quiz_list = {q["title"]: q["id"] for q in quizzes}
-            selected_quiz = st.selectbox("Select Quiz", list(quiz_list.keys()))
-            qid = quiz_list[selected_quiz]
-    
-            with st.form("add_question_rich"):
-                question_text = st.text_area("Question Text (Markdown + LaTeX supported)", height=150)
-                question_image = st.file_uploader("Upload Question Image (optional)", type=["png", "jpg", "jpeg"])
-                q_type = st.selectbox("Type", ["multiple_choice", "short_answer"])
-                img_markdown = ""
-                if question_image:
-                    try:
-                        img_bytes = question_image.read()
-                        file_path = f"uploads/{int(datetime.now().timestamp())}_{question_image.name}"
-                        supabase.storage.from_("thinkverse_uploads").upload(file_path, img_bytes)
-                        img_url = f"{SUPABASE_URL}/storage/v1/object/public/thinkverse_uploads/{file_path}"
-                        img_markdown = f"\n\n![Question Image]({img_url})"
-                    except Exception as e:
-                        st.error(f"⚠️ Failed to upload question image: {e}")
-    
-                if q_type == "multiple_choice":
-                    st.markdown("#### ✏️ Multiple Choice Options")
-                    choices = []
-                    for ch in ["A", "B", "C", "D", "E"]:
-                        col1, col2 = st.columns([3, 2])
-                        with col1:
-                            opt_text = st.text_input(f"Option {ch} Text", key=f"text_{ch}")
-                        with col2:
-                            opt_img = st.file_uploader(f"Upload Image for Option {ch}", type=["png", "jpg", "jpeg"], key=f"img_{ch}")
-                        img_opt_md = ""
-                        if opt_img:
-                            try:
-                                img_bytes = opt_img.read()
-                                file_path = f"uploads/{int(datetime.now().timestamp())}_{opt_img.name}"
-                                supabase.storage.from_("thinkverse_uploads").upload(file_path, img_bytes)
-                                img_url = f"{SUPABASE_URL}/storage/v1/object/public/thinkverse_uploads/{file_path}"
-                                img_opt_md = f"\n\n![Option {ch}]({img_url})"
-                            except Exception as e:
-                                st.error(f"⚠️ Failed to upload image for Option {ch}: {e}")
-                        full_choice = (opt_text or "") + img_opt_md
-                        choices.append(full_choice.strip())
-    
-                    correct = st.selectbox("Correct Answer", ["A", "B", "C", "D", "E"])
-                    ok = st.form_submit_button("💾 Add Question")
-                    if ok and question_text:
-                        try:
-                            final_question = question_text + img_markdown
-                            supabase.table("quiz_questions").insert({
-                                "quiz_id": qid,
-                                "question": final_question,
-                                "type": "multiple_choice",
-                                "choices": "|".join(choices),
-                                "correct_answer": correct,
-                            }).execute()
-                            st.success("✅ Question added successfully!")
-                            st.rerun()
-                        except Exception as e:
-                            st.error(f"❌ Failed to add question: {e}")
-                else:
-                    st.markdown("#### ✏️ Short Answer Question")
-                    correct_ans = st.text_input("Correct Answer (text or equation)")
-                    ok = st.form_submit_button("💾 Add Question")
-                    if ok and question_text:
-                        try:
-                            final_question = question_text + img_markdown
-                            supabase.table("quiz_questions").insert({
-                                "quiz_id": qid,
-                                "question": final_question,
-                                "type": "short_answer",
-                                "correct_answer": correct_ans,
-                            }).execute()
-                            st.success("✅ Short-answer question added!")
-                            st.rerun()
-                        except Exception as e:
-                            st.error(f"❌ Failed to add question: {e}")
 
 
 
@@ -2418,6 +2212,7 @@ def main():
 # === Panggil fungsi utama ===
 if __name__ == "__main__":
     main()
+
 
 
 
