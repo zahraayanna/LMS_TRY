@@ -1350,292 +1350,501 @@ def page_course_detail():
         import streamlit.components.v1 as components
         import re, markdown
         from datetime import datetime
+        from PIL import Image
+        import io, base64
+        import json
     
         st.subheader("🧠 Quiz")
     
-        # === Load semua quiz ===
-        quizzes = supabase.table("quizzes").select("*").eq("course_id", cid).execute().data or []
+        # --- Helper: safe order ascending (PostgREST expects desc=True/False) ---
+        def load_quizzes_for_course(course_id):
+            return supabase.table("quizzes").select("*").eq("course_id", course_id).execute().data or []
+    
+        # --- Load quizzes and related items ---
+        quizzes = load_quizzes_for_course(cid)
         selected_quiz_id = st.session_state.get("selected_quiz_id")
     
-        # ========================================
-        # LOOP SEMUA QUIZ DALAM COURSE
-        # ========================================
-        if quizzes:
+        # If no quizzes
+        if not quizzes:
+            st.info("No quizzes yet.")
+        else:
+            # Iterate quizzes
             for q in quizzes:
+                # show expanders same as before, allow auto-open when selected_quiz_id set
                 expanded = selected_quiz_id == q["id"]
-    
                 with st.expander(f"📝 {q['title']}", expanded=expanded):
-    
                     if expanded:
+                        # clear selection so it won't stay open forever
                         st.session_state.selected_quiz_id = None
     
-                    # ==============================================================
-                    #  DESKRIPSI QUIZ (YouTube, Markdown, LaTeX)
-                    # ==============================================================
-                    desc = q.get("description", "")
-                    if desc:
+                    # --- Description rendering (Markdown + YouTube + MathJax) ---
+                    desc = q.get("description", "") or ""
+                    if desc.strip():
                         st.markdown("### 📘 Quiz Description:")
-                        youtube_match = re.search(
-                            r"(https?://(?:www\.)?(?:youtube\.com/watch\?v=|youtu\.be/)[\w\-]+)", desc
-                        )
+                        youtube_match = re.search(r"(https?://(?:www\.)?(?:youtube\.com/watch\?v=|youtu\.be/)[\w\-]+)", desc)
                         if youtube_match:
                             youtube_url = youtube_match.group(1)
                             video_id = youtube_url.split("v=")[-1] if "v=" in youtube_url else youtube_url.split("/")[-1]
                             st.video(f"https://www.youtube.com/watch?v={video_id}")
                             desc = desc.replace(youtube_url, "")
     
-                        rendered_md = markdown.markdown(desc, extensions=["fenced_code", "tables"])
-                        components.html(
-                            f"""
-                            <div style="font-size:16px; line-height:1.6;">
-                                <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
-                                <script id="MathJax-script" async
-                                    src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js">
-                                </script>
-                                {rendered_md}
-                            </div>
-                            """,
-                            height=250,
-                            scrolling=True,
-                        )
+                        rendered_md = markdown.markdown(desc, extensions=["fenced_code", "tables", "md_in_html"])
+                        html_content = f"""
+                        <div style="font-size:16px; line-height:1.6;">
+                            <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+                            <script id="MathJax-script" async
+                                src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js">
+                            </script>
+                            {rendered_md}
+                        </div>
+                        """
+                        components.html(html_content, height=250, scrolling=True)
     
-                    # ==============================================================
-                    #  EDIT QUIZ
-                    # ==============================================================
+                    # --- Instructor: Edit Quiz (preserve old edit features) ---
                     if user["role"] == "instructor":
                         st.divider()
-                        st.markdown("#### ✏️ Edit Quiz")
+                        with st.container():
+                            st.markdown("#### ✏️ Edit This Quiz")
+                            with st.form(f"edit_quiz_{q['id']}"):
+                                new_title = st.text_input("Quiz Title", q.get("title", ""))
+                                new_desc = st.text_area("Quiz Description (Markdown/LaTeX allowed)", q.get("description", ""))
+                                # new field: attempt_limit (0 = unlimited)
+                                attempt_limit_val = q.get("attempt_limit", 0)
+                                attempt_limit = st.number_input("Attempt limit (0 = unlimited)", min_value=0, value=int(attempt_limit_val or 0), step=1)
+                                save_edit = st.form_submit_button("💾 Save Changes")
+                                if save_edit:
+                                    try:
+                                        supabase.table("quizzes").update({
+                                            "title": new_title,
+                                            "description": new_desc,
+                                            "attempt_limit": int(attempt_limit)
+                                        }).eq("id", q["id"]).execute()
+                                        st.success("✅ Quiz updated successfully!")
+                                        st.rerun()
+                                    except Exception as e:
+                                        st.error(f"❌ Failed to update quiz: {e}")
     
-                        with st.form(f"edit_quiz_{q['id']}"):
-                            new_title = st.text_input("Quiz Title", q["title"])
-                            new_desc = st.text_area("Description", q.get("description", ""))
-                            new_attempt_limit = st.number_input(
-                                "Attempt Limit (0 = unlimited)",
-                                value=q.get("attempt_limit", 1),
-                                min_value=0
-                            )
-                            preview = st.form_submit_button("🔍 Preview Description")
-                            if preview:
-                                st.write("### Preview:")
-                                st.markdown(new_desc)
+                    # === Load questions for this quiz, order ascending by id ===
+                    try:
+                        questions = supabase.table("quiz_questions").select("*").eq("quiz_id", q["id"]).order("id", desc=False).execute().data or []
+                    except Exception:
+                        # fallback: no order param if older client
+                        questions = supabase.table("quiz_questions").select("*").eq("quiz_id", q["id"]).execute().data or []
     
-                            save = st.form_submit_button("💾 Save Changes")
-                            if save:
-                                supabase.table("quizzes").update(
-                                    {
-                                        "title": new_title,
-                                        "description": new_desc,
-                                        "attempt_limit": new_attempt_limit,
-                                    }
-                                ).eq("id", q["id"]).execute()
-                                st.success("Quiz updated!")
-                                st.rerun()
-    
-                    # ==============================================================
-                    #  LOAD QUESTIONS (rubrik sekarang ikut)
-                    # ==============================================================
-                    questions = (
-                        supabase.table("quiz_questions")
-                        .select("*")
-                        .eq("quiz_id", q["id"])
-                        .order("id")
-                        .execute()
-                        .data
-                        or []
-                    )
-    
-                    # ==============================================================
-                    #  TAMBAH PERTANYAAN (instruktur)
-                    # ==============================================================
-                    if user["role"] == "instructor" and questions:
-                        st.markdown("### ➕ Add Question")
-    
-                    # ==============================================================
-                    #  Tampilkan soal untuk siswa mengerjakan
-                    # ==============================================================
-                    if user["role"] == "student":
-                        st.markdown("### ✏️ Jawab Pertanyaan")
+                    # === Show Questions & Student answer inputs ===
+                    if questions:
+                        st.markdown("### ✏️ Questions:")
+                        # container for student answers (kept in memory until submit)
                         answers = {}
+                        # Also keep rubric info per question
+                        q_rubrics = {}
                         for i, qs in enumerate(questions, 1):
-                            st.markdown(f"#### {i}. {qs['question']}")
+                            # Render question text (may contain markdown)
+                            st.markdown(f"**{i}.**")
+                            # Show question body (rendered)
+                            q_text_html = markdown.markdown(qs.get("question", ""), extensions=["fenced_code", "md_in_html", "tables"])
+                            st.components.v1.html(f"<div style='font-size:15px; line-height:1.5;'>{q_text_html}</div>", height=120, scrolling=False)
     
-                            if qs["type"] == "multiple_choice":
-                                choices = qs["choices"].split("|")
-                                ans = st.radio("", choices, key=f"ans_{qs['id']}")
+                            # Read stored rubric if any (stored as JSON string or as "max|desc" fallback)
+                            rubric_raw = qs.get("rubric", "") or ""
+                            rubric_data = None
+                            if rubric_raw:
+                                try:
+                                    rubric_data = json.loads(rubric_raw)
+                                except Exception:
+                                    # support simple legacy format "20|Kriteria..."
+                                    parts = rubric_raw.split("|", 1)
+                                    try:
+                                        rubric_data = {"max_score": float(parts[0]), "note": parts[1] if len(parts) > 1 else ""}
+                                    except:
+                                        rubric_data = None
+                            q_rubrics[qs["id"]] = rubric_data
+    
+                            # Input UI depending on type
+                            if qs.get("type") == "multiple_choice":
+                                choices = qs.get("choices", "") .split("|")
+                                # show radio choices
+                                ans = st.radio("Pilih jawaban:", choices, key=f"ans_{qs['id']}")
+                                answers[qs["id"]] = ans
+                            else:
+                                # short/essay answer - text area
+                                ans = st.text_area("Jawaban singkat / esai:", key=f"ans_{qs['id']}", height=120)
                                 answers[qs["id"]] = ans
     
-                            else:  # short answer
-                                ans = st.text_area("", key=f"ans_{qs['id']}")
-                                answers[qs["id"]] = ans
+                            # show rubric info if exists
+                            if rubric_data:
+                                st.caption(f"Rubrik: max {rubric_data.get('max_score')} — {rubric_data.get('note', '')}")
     
-                        if st.button("✅ Kumpulkan Jawaban"):
-                            # ===== CEK ATTEMPT LIMIT =====
-                            attempts = (
-                                supabase.table("quiz_submissions")
-                                .select("id")
-                                .eq("quiz_id", q["id"])
-                                .eq("user_id", user["id"])
-                                .execute()
-                                .data
-                            )
-                            limit = q.get("attempt_limit", 1)
+                            # Instructor: edit question & rubric
+                            if user["role"] == "instructor":
+                                st.markdown("— Instructor controls —")
+                                with st.form(f"edit_q_{qs['id']}", clear_on_submit=False):
+                                    new_q_text = st.text_area("Question Text (Markdown)", value=qs.get("question",""))
+                                    q_type = st.selectbox("Type", ["multiple_choice","short_answer"], index=0 if qs.get("type")=="multiple_choice" else 1)
+                                    new_choices = st.text_area("Choices (pipe | sep) — for MCQ", value=qs.get("choices",""))
+                                    new_correct = st.text_input("Correct Answer (for MCQ exact string)", value=qs.get("correct_answer",""))
+                                    # rubric editor (simple JSON or simple max|note)
+                                    new_rubric_max = st.text_input("Rubric max score (e.g. 20)", value=str((q_rubrics[qs["id"]]["max_score"]) if q_rubrics.get(qs["id"]) else ""))
+                                    new_rubric_note = st.text_input("Rubric note", value=(q_rubrics[qs["id"]]["note"] if q_rubrics.get(qs["id"]) else ""))
+                                    save_q = st.form_submit_button("💾 Save Question")
+                                    if save_q:
+                                        # build rubric storage
+                                        rubric_store = None
+                                        try:
+                                            if new_rubric_max:
+                                                rubric_store = json.dumps({"max_score": float(new_rubric_max), "note": new_rubric_note})
+                                        except:
+                                            rubric_store = None
+                                        update_payload = {
+                                            "question": new_q_text,
+                                            "type": q_type,
+                                            "correct_answer": new_correct,
+                                        }
+                                        if q_type == "multiple_choice":
+                                            update_payload["choices"] = new_choices
+                                        if rubric_store is not None:
+                                            update_payload["rubric"] = rubric_store
+                                        supabase.table("quiz_questions").update(update_payload).eq("id", qs["id"]).execute()
+                                        st.success("✅ Question updated!")
+                                        st.rerun()
     
-                            if limit != 0 and len(attempts) >= limit:
-                                st.error("❌ Attempt limit reached.")
-                                st.stop()
-    
-                            # ===== NILAI AUTOMATIC PILIHAN GANDA =====
-                            auto_score = 0
-                            auto_total = 0
-                            for qs in questions:
-                                if qs["type"] == "multiple_choice":
-                                    auto_total += 1
-                                    if answers.get(qs["id"], "").strip() == qs["correct_answer"]:
-                                        auto_score += 1
-    
-                            # Konversi MCQ → max 100
-                            mcq_score_scaled = (auto_score / auto_total * 100) if auto_total else 0
-    
-                            # Buat submission
-                            sub = (
-                                supabase.table("quiz_submissions")
-                                .insert(
-                                    {
-                                        "quiz_id": q["id"],
-                                        "user_id": user["id"],
-                                        "score": mcq_score_scaled,  # otomatis
-                                        "total": 100,
-                                        "submitted_at": str(datetime.now()),
-                                    }
-                                )
-                                .execute()
-                            )
-                            attempt_id = sub.data[0]["id"]
-    
-                            # Simpan jawaban ke quiz_answers (supaya bisa dinilai guru)
-                            for qs in questions:
-                                a = answers.get(qs["id"], "")
-                                supabase.table("quiz_answers").insert(
-                                    {
-                                        "attempt_id": attempt_id,
-                                        "question_id": qs["id"],
-                                        "text_answer": a,
-                                    }
-                                ).execute()
-    
-                            st.success("🎉 Quiz submitted!")
-                            st.rerun()
-    
-                    # ==============================================================
-                    #  FITUR GURU: LIHAT & NILAI JAWABAN
-                    # ==============================================================
-                    if user["role"] == "instructor":
-                        st.divider()
-                        st.markdown("### 👨‍🏫 Review & Grade Student Answers")
-    
-                        subs = (
-                            supabase.table("quiz_submissions")
-                            .select("*")
-                            .eq("quiz_id", q["id"])
-                            .order("submitted_at", desc=True)
-                            .execute()
-                            .data
-                        )
-    
-                        if not subs:
-                            st.info("Belum ada siswa yang mengerjakan.")
-                        else:
-                            # dropdown list students
-                            sub_map = {
-                                f"{s['user_id']} — submitted {s['submitted_at']}": s["id"] for s in subs
-                            }
-                            picked = st.selectbox(
-                                "Pilih jawaban siswa:",
-                                list(sub_map.keys()),
-                                key=f"pick_sub_{q['id']}"
-                            )
-    
-                            chosen_attempt = sub_map[picked]
-    
-                            # load answers
-                            ans = (
-                                supabase.table("quiz_answers")
-                                .select("*")
-                                .eq("attempt_id", chosen_attempt)
-                                .execute()
-                                .data
-                            )
-    
-                            st.markdown("---")
-                            st.markdown("### 📝 Student Answers")
-    
-                            # tampil satu per satu
-                            for i, qs in enumerate(questions, 1):
-                                st.markdown(f"#### {i}. {qs['question']}")
-                                a = next((x for x in ans if x["question_id"] == qs["id"]), None)
-    
-                                st.markdown(f"**Jawaban siswa:** {a['text_answer'] if a else '-'}")
-    
-                                # tampilkan rubrik
-                                st.markdown(f"**Rubric Max Score:** {qs.get('rubric_score', 0)}")
-    
-                                # form nilai guru
-                                teacher_score = st.number_input(
-                                    f"Nilai untuk soal {i}",
-                                    min_value=0,
-                                    max_value=qs.get("rubric_score", 0),
-                                    key=f"score_{chosen_attempt}_{qs['id']}",
-                                )
-    
-                                if st.button(f"💾 Simpan nilai soal {i}", key=f"save_score_{chosen_attempt}_{qs['id']}"):
-                                    supabase.table("quiz_answers").update(
-                                        {"is_correct": teacher_score}
-                                    ).eq("attempt_id", chosen_attempt).eq("question_id", qs["id"]).execute()
-    
-                                    st.success("Score saved!")
+                                # delete question button
+                                if st.button(f"🗑️ Delete Question {i}", key=f"del_q_{qs['id']}"):
+                                    supabase.table("quiz_questions").delete().eq("id", qs['id']).execute()
+                                    st.success("Question deleted.")
                                     st.rerun()
     
-                    # ==============================================================
-                    #  DELETE QUIZ
-                    # ==============================================================
+                        # === Student: submit attempt ===
+                        if user["role"] == "student":
+                            # Check attempts count
+                            try:
+                                attempt_limit = int(q.get("attempt_limit", 0) or 0)
+                            except:
+                                attempt_limit = 0
+                            # count existing attempts
+                            attempts = supabase.table("quiz_attempts").select("*").eq("quiz_id", q["id"]).eq("user_id", user["id"]).execute().data or []
+                            attempts_made = len(attempts)
+                            can_attempt = (attempt_limit == 0) or (attempts_made < attempt_limit)
+    
+                            if not can_attempt:
+                                st.warning(f"⚠️ Kamu sudah melakukan {attempts_made} percobaan. Batas percobaan = {attempt_limit}.")
+                            else:
+                                if st.button("✅ Kumpulkan Jawaban", key=f"submit_quiz_{q['id']}"):
+                                    # compute auto-score for MCQ
+                                    total_questions = len(questions)
+                                    auto_score = 0
+                                    total_auto_possible = 0
+                                    # record answers payload list
+                                    answers_payload = []
+                                    for qs in questions:
+                                        user_ans = (answers.get(qs["id"]) or "").strip()
+                                        if qs.get("type") == "multiple_choice":
+                                            # determine is_correct by string match vs correct_answer
+                                            correct = (qs.get("correct_answer") or "").strip()
+                                            is_correct = (user_ans == correct)
+                                            # For automatic scoring: treat each MCQ equal weight to max 100-based later
+                                            # We'll compute final numbers in attempt record
+                                            answers_payload.append({
+                                                "question_id": qs["id"],
+                                                "choice_id": None,
+                                                "text_answer": user_ans,
+                                                "is_correct": is_correct
+                                            })
+                                            total_auto_possible += 1
+                                            if is_correct:
+                                                auto_score += 1
+                                        else:
+                                            # essay / short answer stored; needs manual grading
+                                            answers_payload.append({
+                                                "question_id": qs["id"],
+                                                "choice_id": None,
+                                                "text_answer": user_ans,
+                                                "is_correct": None
+                                            })
+    
+                                    # Compute MCQ part as percentage of MCQ questions (0-100)
+                                    mcq_percent = (auto_score / total_auto_possible * 100) if total_auto_possible > 0 else None
+    
+                                    # Create attempt record
+                                    try:
+                                        # determine attempt number
+                                        attempt_number = attempts_made + 1
+                                        attempt_res = supabase.table("quiz_attempts").insert({
+                                            "quiz_id": q["id"],
+                                            "user_id": user["id"],
+                                            "score": int(auto_score),   # temp store auto raw count for now
+                                            "total": total_questions,
+                                            "submitted_at": datetime.now().isoformat(),
+                                            "manual_score": None,
+                                            "teacher_feedback": None,
+                                            "attempt_number": attempt_number
+                                        }).execute()
+                                        # get attempt id
+                                        attempt_id = attempt_res.data[0]["id"] if attempt_res.data else attempt_res.response.get("id") if hasattr(attempt_res, "response") else None
+                                    except Exception as e:
+                                        st.error(f"❌ Failed to create attempt record: {e}")
+                                        attempt_id = None
+    
+                                    # insert answers into quiz_answers table (if attempt_id available)
+                                    if attempt_id:
+                                        for a_payload in answers_payload:
+                                            try:
+                                                supabase.table("quiz_answers").insert({
+                                                    "attempt_id": attempt_id,
+                                                    "question_id": a_payload["question_id"],
+                                                    "choice_id": a_payload["choice_id"],
+                                                    "text_answer": a_payload["text_answer"],
+                                                    "is_correct": a_payload["is_correct"]
+                                                }).execute()
+                                            except Exception as e:
+                                                # don't stop on individual answer errors
+                                                st.warning(f"Warning saving one answer: {e}")
+                                        # compute initial final score: for now store MCQ raw count in 'score' and let teacher finalize manual_score
+                                        st.success(f"✅ Jawaban terkirim! (Attempt #{attempt_number}).")
+                                        st.rerun()
+                                    else:
+                                        st.error("❌ Gagal menyimpan attempt. Coba ulang.")
+    
+                        # === Instructor: View & Grade Submissions for this quiz ===
+                        if user["role"] == "instructor":
+                            st.divider()
+                            st.markdown("### 🧾 Submissions & Grading")
+                            # load attempts summary for this quiz (group by user)
+                            attempts_all = supabase.table("quiz_attempts").select("*").eq("quiz_id", q["id"]).order("submitted_at", desc=True).execute().data or []
+                            if not attempts_all:
+                                st.info("Belum ada submission untuk quiz ini.")
+                            else:
+                                # group attempts by user -> show latest attempt per user or all attempts (let's show all with attempt number)
+                                users_attempts = {}
+                                for at in attempts_all:
+                                    users_attempts.setdefault(at["user_id"], []).append(at)
+    
+                                for uid, at_list in users_attempts.items():
+                                    # show compact card for each attempt (multiple)
+                                    for at in at_list:
+                                        card_key = f"card_{q['id']}_{at['id']}"
+                                        with st.container():
+                                            st.markdown(f"**User #{uid} — Attempt #{at.get('attempt_number', '?')} — submitted {at.get('submitted_at', '')}**")
+                                            # Fetch answers for this attempt
+                                            answers_for_attempt = supabase.table("quiz_answers").select("*").eq("attempt_id", at["id"]).order("id", desc=False).execute().data or []
+                                            # Show each answer and allow manual grading for essay type
+                                            manual_scores = {}
+                                            total_manual_max = 0.0
+                                            total_manual_obtained = 0.0
+                                            for idx_q, ans_row in enumerate(answers_for_attempt, 1):
+                                                # load question to know type and rubric
+                                                qrec = supabase.table("quiz_questions").select("*").eq("id", ans_row["question_id"]).execute().data
+                                                qrec = qrec[0] if qrec else {}
+                                                qtext_html = markdown.markdown(qrec.get("question",""), extensions=["fenced_code", "md_in_html"])
+                                                st.markdown(f"**Soal {idx_q}:**")
+                                                st.components.v1.html(f"<div style='font-size:14px;'>{qtext_html}</div>", height=110, scrolling=False)
+    
+                                                if qrec.get("type") == "multiple_choice":
+                                                    st.markdown(f"- **Jawaban siswa:** {ans_row.get('text_answer','')}")
+                                                    is_corr = ans_row.get("is_correct")
+                                                    st.markdown(f"- **Auto-correct:** {'Benar' if is_corr else 'Salah'}")
+                                                else:
+                                                    st.markdown(f"- **Jawaban siswa (esai):**")
+                                                    st.markdown(ans_row.get("text_answer",""))
+                                                    # rubric handling
+                                                    rubric = {}
+                                                    raw = qrec.get("rubric", "")
+                                                    if raw:
+                                                        try:
+                                                            rubric = json.loads(raw)
+                                                        except:
+                                                            try:
+                                                                parts = raw.split("|",1)
+                                                                rubric = {"max_score": float(parts[0]), "note": parts[1] if len(parts)>1 else ""}
+                                                            except:
+                                                                rubric = {}
+                                                    max_score = rubric.get("max_score", 0.0)
+                                                    if max_score:
+                                                        total_manual_max += float(max_score)
+                                                    # allow teacher to input manual score for this question
+                                                    ms_key = f"manual_{at['id']}_{ans_row['id']}"
+                                                    manual_scores[ans_row['id']] = st.number_input(f"Nilai Soal {idx_q} (max {max_score})", min_value=0.0, max_value=float(max_score or 9999), value=0.0, step=0.5, key=ms_key)
+    
+                                            # Show overall auto score info
+                                            st.markdown("---")
+                                            st.markdown(f"**Auto-score (MCQ count):** {at.get('score')} / (MCQ raw count)")
+                                            # teacher overall manual addition and feedback
+                                            teacher_feedback = st.text_area(f"Teacher feedback (attempt {at['id']})", value=at.get("teacher_feedback") or "", key=f"tf_{at['id']}")
+                                            manual_total_key = f"manual_total_{at['id']}"
+                                            manual_total = st.number_input("Manual total (sum of essay scores)", min_value=0.0, value=float(at.get("manual_score") or 0.0), key=manual_total_key)
+    
+                                            if st.button("💾 Save Grade & Feedback", key=f"save_grade_{at['id']}"):
+                                                # compute final combined score:
+                                                # Strategy: convert MCQ to percentage of its part, and essay manual to percentage, then average depending on weighting.
+                                                # For simplicity: if there are MCQ and essay both, compute:
+                                                # final = ((mcq_percent if exists else 0) + (essay_percent if exists else 0)) / 2
+                                                # mcq_percent = (at['score']/num_mcq)*100
+                                                # essay_percent = (manual_total/total_manual_max)*100 (if total_manual_max>0)
+                                                try:
+                                                    # find num_mcq for this quiz attempt
+                                                    q_answers = supabase.table("quiz_answers").select("*").eq("attempt_id", at['id']).execute().data or []
+                                                    num_mcq = 0
+                                                    mcq_correct = 0
+                                                    for a_r in q_answers:
+                                                        qrec = supabase.table("quiz_questions").select("type").eq("id", a_r["question_id"]).execute().data
+                                                        qtype = qrec[0]["type"] if qrec else None
+                                                        if qtype == "multiple_choice":
+                                                            num_mcq += 1
+                                                            if a_r.get("is_correct"):
+                                                                mcq_correct += 1
+                                                    mcq_percent = (mcq_correct / num_mcq * 100) if num_mcq>0 else None
+                                                    essay_percent = (manual_total / total_manual_max * 100) if total_manual_max>0 else None
+    
+                                                    if mcq_percent is None and essay_percent is None:
+                                                        final_percent = 0.0
+                                                    elif mcq_percent is None:
+                                                        final_percent = essay_percent
+                                                    elif essay_percent is None:
+                                                        final_percent = mcq_percent
+                                                    else:
+                                                        final_percent = (mcq_percent + essay_percent) / 2.0
+    
+                                                    # final numeric score out of 100
+                                                    final_score = round(final_percent,2)
+                                                    # persist manual_score, teacher_feedback and final_score into quiz_attempts
+                                                    supabase.table("quiz_attempts").update({
+                                                        "manual_score": float(manual_total),
+                                                        "teacher_feedback": teacher_feedback,
+                                                        "score": final_score    # override score field to final percent for display
+                                                    }).eq("id", at['id']).execute()
+    
+                                                    st.success("✅ Grade saved.")
+                                                    st.rerun()
+                                                except Exception as e:
+                                                    st.error(f"❌ Failed to save grade: {e}")
+    
+                    else:
+                        st.info("No questions yet for this quiz.")
+    
+                    # === Instructor: Delete entire quiz (preserve) ===
                     if user["role"] == "instructor":
                         st.divider()
-                        if st.button(f"🗑 Delete Quiz '{q['title']}'"):
+                        if st.button(f"🗑️ Delete Quiz '{q['title']}'", key=f"del_quiz_{q['id']}"):
                             supabase.table("quiz_questions").delete().eq("quiz_id", q["id"]).execute()
                             supabase.table("quizzes").delete().eq("id", q["id"]).execute()
-                            st.success("Quiz deleted!")
+                            st.success("🗑️ Quiz deleted!")
                             st.rerun()
     
-        else:
-            st.info("No quizzes yet.")
-    
-        # ==============================================================
-        # CREATE NEW QUIZ
-        # ==============================================================
+        # === Create new quiz (instructor) — preserve previous creation UI but add attempt_limit ===
         if user["role"] == "instructor":
+            st.divider()
             with st.form("add_quiz"):
                 title = st.text_input("Quiz Title")
-                desc = st.text_area("Description")
-                attempt = st.number_input("Attempt Limit (0 = unlimited)", min_value=0, value=1)
-    
+                desc = st.text_area("Quiz Description (supports Markdown, LaTeX, and YouTube link)")
+                attempt_limit = st.number_input("Attempt limit (0 = unlimited)", min_value=0, value=0, step=1)
                 ok = st.form_submit_button("➕ Create Quiz")
                 if ok and title:
-                    supabase.table("quizzes").insert(
-                        {
+                    try:
+                        supabase.table("quizzes").insert({
                             "course_id": cid,
                             "title": title,
                             "description": desc,
-                            "attempt_limit": attempt,
-                        }
-                    ).execute()
-                    st.success("Quiz created!")
-                    st.rerun()
-
-
-
-
-
-
+                            "attempt_limit": int(attempt_limit)
+                        }).execute()
+                        st.success("✅ Quiz created successfully!")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"❌ Failed to create quiz: {e}")
+    
+        # === Add question (instructor) — preserve rich add question UI, now supports rubric ===
+        if user["role"] == "instructor" and quizzes:
+            st.markdown("### ➕ Add Question to Quiz (Rich Version)")
+            quiz_list = {q["title"]: q["id"] for q in quizzes}
+            selected_quiz = st.selectbox("Select Quiz", list(quiz_list.keys()))
+            qid = quiz_list[selected_quiz]
+    
+            with st.form("add_question_rich"):
+                question_text = st.text_area("Question Text (Markdown + LaTeX supported)", height=150)
+                question_image = st.file_uploader("Upload Question Image (optional)", type=["png", "jpg", "jpeg"])
+                q_type = st.selectbox("Type", ["multiple_choice", "short_answer"])
+                # rubric inputs
+                rubric_max = st.text_input("Rubric max score (leave empty for none)")
+                rubric_note = st.text_input("Rubric note (optional)")
+    
+                img_markdown = ""
+                if question_image:
+                    try:
+                        img_bytes = question_image.read()
+                        file_path = f"uploads/{int(datetime.now().timestamp())}_{question_image.name}"
+                        supabase.storage.from_("thinkverse_uploads").upload(file_path, img_bytes)
+                        img_url = f"{SUPABASE_URL}/storage/v1/object/public/thinkverse_uploads/{file_path}"
+                        img_markdown = f"\n\n![Question Image]({img_url})"
+                    except Exception as e:
+                        st.error(f"⚠️ Failed to upload question image: {e}")
+    
+                if q_type == "multiple_choice":
+                    st.markdown("#### ✏️ Multiple Choice Options")
+                    choices = []
+                    for ch in ["A","B","C","D","E"]:
+                        col1, col2 = st.columns([3,2])
+                        with col1:
+                            opt_text = st.text_input(f"Option {ch} Text", key=f"text_{ch}_new")
+                        with col2:
+                            opt_img = st.file_uploader(f"Upload Image for Option {ch}", type=["png","jpg","jpeg"], key=f"img_{ch}_new")
+                        img_opt_md = ""
+                        if opt_img:
+                            try:
+                                opt_bytes = opt_img.read()
+                                file_path = f"uploads/{int(datetime.now().timestamp())}_{opt_img.name}"
+                                supabase.storage.from_("thinkverse_uploads").upload(file_path, opt_bytes)
+                                img_url = f"{SUPABASE_URL}/storage/v1/object/public/thinkverse_uploads/{file_path}"
+                                img_opt_md = f"\n\n![Option {ch}]({img_url})"
+                            except Exception as e:
+                                st.error(f"⚠️ Failed to upload image for Option {ch}: {e}")
+                        full_choice = (opt_text or "") + img_opt_md
+                        choices.append(full_choice.strip())
+                    correct = st.selectbox("Correct Answer", ["A","B","C","D","E"])
+                    okq = st.form_submit_button("💾 Add Question")
+                    if okq and question_text:
+                        final_question = question_text + img_markdown
+                        rubric_store = None
+                        if rubric_max:
+                            try:
+                                rubric_store = json.dumps({"max_score": float(rubric_max), "note": rubric_note})
+                            except:
+                                rubric_store = None
+                        try:
+                            supabase.table("quiz_questions").insert({
+                                "quiz_id": qid,
+                                "question": final_question,
+                                "type": "multiple_choice",
+                                "choices": "|".join(choices),
+                                "correct_answer": correct,
+                                "rubric": rubric_store
+                            }).execute()
+                            st.success("✅ Question added successfully!")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"❌ Failed to add question: {e}")
+                else:
+                    st.markdown("#### ✏️ Short Answer Question")
+                    correct_ans = st.text_input("Correct Answer (text or equation) — optional")
+                    okq = st.form_submit_button("💾 Add Question")
+                    if okq and question_text:
+                        final_question = question_text + img_markdown
+                        rubric_store = None
+                        if rubric_max:
+                            try:
+                                rubric_store = json.dumps({"max_score": float(rubric_max), "note": rubric_note})
+                            except:
+                                rubric_store = None
+                        try:
+                            supabase.table("quiz_questions").insert({
+                                "quiz_id": qid,
+                                "question": final_question,
+                                "type": "short_answer",
+                                "correct_answer": correct_ans,
+                                "rubric": rubric_store
+                            }).execute()
+                            st.success("✅ Short-answer question added!")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"❌ Failed to add question: {e}")
 
 
 
@@ -2212,6 +2421,7 @@ def main():
 # === Panggil fungsi utama ===
 if __name__ == "__main__":
     main()
+
 
 
 
