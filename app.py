@@ -2339,7 +2339,7 @@ def page_course_detail():
                 for a in assigns:
                     subs, e2 = safe_fetch(
                         "assignment_submissions",
-                        select="id,assignment_id,student_id,score,file_url,submitted_at",
+                        select="id,assignment_id,user_id,score,file_url,submitted_at",
                         filters=[
                             ("assignment_id", "eq", a["id"]),
                             ("user_id", "eq", selected_student),
@@ -2360,6 +2360,40 @@ def page_course_detail():
                         st.markdown(f"- **{a['title']}** — ❌ Belum mengumpulkan")
             else:
                 st.info("Belum ada assignment untuk course ini.")
+    
+            # ====================
+            # 3) Quiz
+            # ====================
+            st.markdown("### 🧠 Quiz")
+    
+            quizzes, errq = safe_fetch(
+                "quizzes", select="id,title", filters=[("course_id", "eq", cid)]
+            )
+            if not errq and quizzes:
+                for q in quizzes:
+                    attempts, aerr = safe_fetch(
+                        "quiz_attempts",
+                        select="id,quiz_id,user_id,score,submitted_at,attempt_number",
+                        filters=[
+                            ("quiz_id", "eq", q["id"]),
+                            ("user_id", "eq", selected_student),
+                        ],
+                    )
+    
+                    if attempts:
+                        st.markdown(f"**{q['title']}** — Total percobaan: {len(attempts)}")
+                        for at in attempts:
+                            submitted_time = at.get("submitted_at")
+                            status = "✅ Selesai" if submitted_time else "❌ Belum mengerjakan"
+                            time_str = f"waktu: {submitted_time}" if submitted_time else ""
+                            st.markdown(
+                                f"- Skor: {at.get('score','-')} — {status} {time_str} — Attempt #{at.get('attempt_number','-')}"
+                            )
+                    else:
+                        st.markdown(f"- **{q['title']}** — ❌ Belum mengerjakan")
+            else:
+                st.info("Belum ada quiz pada course ini.")
+
     
             # ====================
             # 3) Quiz
@@ -2459,6 +2493,7 @@ def main():
 # === Panggil fungsi utama ===
 if __name__ == "__main__":
     main()
+
 
 
 
