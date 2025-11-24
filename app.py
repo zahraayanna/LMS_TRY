@@ -1507,45 +1507,56 @@ def page_course_detail():
                                     auto_score = 0
                                     total_auto_possible = 0
                                     answers_payload = []
+                                
                                     for qs in questions:
-                                        user_ans = (answers.get(qs["id"]) or "").strip()
+                                        # Ambil jawaban siswa dan bersihkan
+                                        user_ans_raw = answers.get(qs["id"]) or ""
+                                        user_ans_clean = user_ans_raw.strip().lower()
+                                        correct_clean = (qs.get("correct_answer") or "").strip().lower()
+                                
                                         if qs.get("type") == "multiple_choice":
-                                            correct = (qs.get("correct_answer") or "").strip()
-                                            is_correct = (user_ans == correct)
+                                            is_correct = (user_ans_clean == correct_clean)
                                             answers_payload.append({
                                                 "question_id": qs["id"],
                                                 "choice_id": None,
-                                                "text_answer": user_ans,
+                                                "text_answer": user_ans_raw,
                                                 "is_correct": is_correct
                                             })
                                             total_auto_possible += 1
                                             if is_correct:
                                                 auto_score += 1
                                         else:
+                                            # essay / short answer, perlu manual grading
                                             answers_payload.append({
                                                 "question_id": qs["id"],
                                                 "choice_id": None,
-                                                "text_answer": user_ans,
+                                                "text_answer": user_ans_raw,
                                                 "is_correct": None
                                             })
-                                    mcq_percent = (auto_score / total_auto_possible * 100) if total_auto_possible>0 else None
-                                    attempt_number = attempts_made + 1
+                                
+                                    # MCQ persen
+                                    mcq_percent = (auto_score / total_auto_possible * 100) if total_auto_possible > 0 else None
+                                
+                                    # Create attempt record
                                     try:
+                                        attempt_number = attempts_made + 1
                                         attempt_res = supabase.table("quiz_attempts").insert({
                                             "quiz_id": q["id"],
                                             "user_id": user["id"],
                                             "student_id": user["id"],
-                                            "score": int(auto_score),
+                                            "score": int(mcq_percent or 0),  # simpan skor awal MCQ (%)
                                             "total": total_questions,
                                             "submitted_at": datetime.now().isoformat(),
                                             "manual_score": None,
                                             "teacher_feedback": None,
                                             "attempt_number": attempt_number
                                         }).execute()
-                                        attempt_id = attempt_res.data[0]["id"] if attempt_res.data else attempt_res.response.get("id") if hasattr(attempt_res,"response") else None
+                                        attempt_id = attempt_res.data[0]["id"] if attempt_res.data else None
                                     except Exception as e:
                                         st.error(f"❌ Failed to create attempt record: {e}")
                                         attempt_id = None
+                                
+                                    # Insert answers ke quiz_answers
                                     if attempt_id:
                                         for a_payload in answers_payload:
                                             try:
@@ -1558,10 +1569,12 @@ def page_course_detail():
                                                 }).execute()
                                             except Exception as e:
                                                 st.warning(f"Warning saving one answer: {e}")
-                                        st.success(f"✅ Jawaban terkirim! (Attempt #{attempt_number})")
+                                
+                                        st.success(f"✅ Jawaban terkirim! (Attempt #{attempt_number}).")
                                         st.rerun()
                                     else:
                                         st.error("❌ Gagal menyimpan attempt. Coba ulang.")
+
     
                     else:
                         st.info("No questions yet for this quiz.")
@@ -2375,6 +2388,7 @@ def main():
 # === Panggil fungsi utama ===
 if __name__ == "__main__":
     main()
+
 
 
 
