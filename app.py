@@ -1499,6 +1499,7 @@ def page_course_detail():
                             attempts = supabase.table("quiz_attempts").select("*").eq("quiz_id", q["id"]).eq("user_id", user["id"]).execute().data or []
                             attempts_made = len(attempts)
                             can_attempt = (attempt_limit == 0) or (attempts_made < attempt_limit)
+                            
                             if not can_attempt:
                                 st.warning(f"⚠️ Kamu sudah melakukan {attempts_made} percobaan. Batas percobaan = {attempt_limit}.")
                             else:
@@ -1507,20 +1508,25 @@ def page_course_detail():
                                     auto_score = 0
                                     total_auto_possible = 0
                                     answers_payload = []
-                                
+                        
                                     for qs in questions:
                                         # Ambil jawaban siswa dan bersihkan
                                         user_ans_raw = answers.get(qs["id"]) or ""
                                         user_ans_clean = user_ans_raw.strip().lower()
                                         correct_clean = (qs.get("correct_answer") or "").strip().lower()
-                                
+                        
                                         if qs.get("type") == "multiple_choice":
+                                            # Compare cleaned strings
                                             is_correct = (user_ans_clean == correct_clean)
+                        
+                                            # Debug print (bisa dihapus setelah tes)
+                                            print(f"QID {qs['id']} | Student answer: {user_ans_clean} | Correct: {correct_clean} | is_correct: {is_correct}")
+                        
                                             answers_payload.append({
                                                 "question_id": qs["id"],
                                                 "choice_id": None,
                                                 "text_answer": user_ans_raw,
-                                                "is_correct": is_correct
+                                                "is_correct": bool(is_correct)   # pastikan boolean
                                             })
                                             total_auto_possible += 1
                                             if is_correct:
@@ -1533,18 +1539,18 @@ def page_course_detail():
                                                 "text_answer": user_ans_raw,
                                                 "is_correct": None
                                             })
-                                
-                                    # MCQ persen
-                                    mcq_percent = (auto_score / total_auto_possible * 100) if total_auto_possible > 0 else None
-                                
-                                    # Create attempt record
+                        
+                                    # Hitung skor MCQ sebagai persentase 0-100
+                                    mcq_percent = (auto_score / total_auto_possible * 100) if total_auto_possible > 0 else 0
+                        
+                                    # Insert attempt
+                                    attempt_number = attempts_made + 1
                                     try:
-                                        attempt_number = attempts_made + 1
                                         attempt_res = supabase.table("quiz_attempts").insert({
                                             "quiz_id": q["id"],
                                             "user_id": user["id"],
-                                            "student_id": user["id"],
-                                            "score": int(mcq_percent or 0),  # simpan skor awal MCQ (%)
+                                            "student_id": user["id"], 
+                                            "score": round(mcq_percent,2),  # simpan langsung % MCQ
                                             "total": total_questions,
                                             "submitted_at": datetime.now().isoformat(),
                                             "manual_score": None,
@@ -1555,8 +1561,8 @@ def page_course_detail():
                                     except Exception as e:
                                         st.error(f"❌ Failed to create attempt record: {e}")
                                         attempt_id = None
-                                
-                                    # Insert answers ke quiz_answers
+                        
+                                    # Insert jawaban ke quiz_answers
                                     if attempt_id:
                                         for a_payload in answers_payload:
                                             try:
@@ -1569,11 +1575,12 @@ def page_course_detail():
                                                 }).execute()
                                             except Exception as e:
                                                 st.warning(f"Warning saving one answer: {e}")
-                                
-                                        st.success(f"✅ Jawaban terkirim! (Attempt #{attempt_number}).")
+                        
+                                        st.success(f"✅ Jawaban terkirim! (Attempt #{attempt_number}) — Skor MCQ: {round(mcq_percent,2)}%")
                                         st.rerun()
                                     else:
                                         st.error("❌ Gagal menyimpan attempt. Coba ulang.")
+
 
     
                     else:
@@ -2388,6 +2395,7 @@ def main():
 # === Panggil fungsi utama ===
 if __name__ == "__main__":
     main()
+
 
 
 
