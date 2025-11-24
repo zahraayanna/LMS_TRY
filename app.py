@@ -1575,6 +1575,7 @@ def page_course_detail():
                                         attempt_res = supabase.table("quiz_attempts").insert({
                                             "quiz_id": q["id"],
                                             "user_id": user["id"],
+                                            "student_id": user["id"], 
                                             "score": int(auto_score),   # temp store auto raw count for now
                                             "total": total_questions,
                                             "submitted_at": datetime.now().isoformat(),
@@ -2458,6 +2459,7 @@ def main():
 # === Panggil fungsi utama ===
 if __name__ == "__main__":
     main()
+
 
 
 
