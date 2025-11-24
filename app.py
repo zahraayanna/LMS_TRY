@@ -1442,8 +1442,11 @@ def page_course_detail():
                             # Render question text (may contain markdown)
                             st.markdown(f"**{i}.**")
                             # Show question body (rendered)
-                            q_text_html = markdown.markdown(qs.get("question", ""), extensions=["fenced_code", "md_in_html", "tables"])
-                            st.components.v1.html(f"<div style='font-size:15px; line-height:1.5;'>{q_text_html}</div>", height=120, scrolling=False)
+                            st.markdown(
+                                f"<div style='font-size:15px; line-height:1.6;'>{qs.get('question','')}</div>",
+                                unsafe_allow_html=True
+                            )
+
     
                             # Read stored rubric if any (stored as JSON string or as "max|desc" fallback)
                             rubric_raw = qs.get("rubric", "") or ""
@@ -2455,6 +2458,7 @@ def main():
 # === Panggil fungsi utama ===
 if __name__ == "__main__":
     main()
+
 
 
 
