@@ -638,19 +638,32 @@ def page_course_detail():
     }
 
     
-    # === Inject JavaScript untuk auto-switch tab ===
-    if active_tab in ["quiz", "assignment"]:
+    # === SAFE TAB AUTO SWITCH ===
+    # Reset flag ketika masuk halaman baru
+    if "tab_triggered" not in st.session_state:
+        st.session_state.tab_triggered = False
+    
+    # Jalankan tab switch hanya sekali
+    if active_tab in ["quiz", "assignment"] and not st.session_state.tab_triggered:
         target_index = tab_index[active_tab]
+    
         js_code = f"""
         <script>
-        const tabs = window.parent.document.querySelectorAll('button[data-baseweb="tab"]');
-        if (tabs && tabs[{target_index}]) {{
-            tabs[{target_index}].click();
-        }}
+            // Delay supaya Streamlit UI sudah render sebelum pindah tab
+            setTimeout(function() {{
+                const tabs = window.parent.document.querySelectorAll('button[data-baseweb="tab"]');
+                if (tabs && tabs[{target_index}]) {{
+                    tabs[{target_index}].click();
+                }}
+            }}, 350);
         </script>
         """
-        st.components.v1.html(js_code, height=0, width=0)
-        st.session_state.active_tab = None  # reset supaya gak looping
+    
+        st.components.v1.html(js_code, height=0)
+        st.session_state.tab_triggered = True  # supaya tidak looping
+    else:
+        st.session_state.active_tab = None
+
     
         
 
@@ -2411,6 +2424,7 @@ def main():
 # === Panggil fungsi utama ===
 if __name__ == "__main__":
     main()
+
 
 
 
