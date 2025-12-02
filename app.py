@@ -537,8 +537,15 @@ def page_course_detail():
         st.error(f"Error loading course data: {e}")
         return
 
-    st.title(f"📘 {c['title']}")
-    st.caption(c.get("description", ""))
+    # --- COURSE HEADER CLEAN ---
+    st.markdown("""
+    <script>
+    window.scrollTo(0,0)
+    </script>
+    """, unsafe_allow_html=True)
+    
+    st.markdown(f"## 📘 {c['title']}")
+
 
     # === ACTION BUTTONS ===
     col1, col2 = st.columns([0.25, 0.75])
@@ -2404,6 +2411,7 @@ def main():
 # === Panggil fungsi utama ===
 if __name__ == "__main__":
     main()
+
 
 
 
