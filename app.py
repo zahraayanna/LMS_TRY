@@ -1447,8 +1447,17 @@ def page_course_detail():
                             # Input type
                             if qs.get("type") == "multiple_choice":
                                 choices = qs.get("choices","").split("|")
-                                ans = st.radio("Pilih jawaban:", choices, key=f"ans_{qs['id']}")
-                                answers[qs["id"]] = ans
+                            
+                                # gunakan selectbox biar jadi dropdown ABCDE
+                                ans = st.selectbox(
+                                    "Pilih jawaban:",
+                                    ["-- pilih jawaban --"] + choices,
+                                    key=f"ans_{qs['id']}"
+                                )
+                            
+                                # kalau user belum milih, simpan kosong biar gak error
+                                answers[qs["id"]] = "" if ans.startswith("--") else ans
+
                             else:
                                 ans = st.text_area("Jawaban singkat / esai:", key=f"ans_{qs['id']}", height=120)
                                 answers[qs["id"]] = ans
@@ -2395,6 +2404,7 @@ def main():
 # === Panggil fungsi utama ===
 if __name__ == "__main__":
     main()
+
 
 
 
