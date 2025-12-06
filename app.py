@@ -1566,10 +1566,6 @@ def page_course_detail():
                             
                                 answers[qs["id"]] = st.session_state.get(selected_key, "")
 
-
-                                # store only the letter (A-E) or "" if none selected
-                                answers[qs["id"]] = "" if ans.startswith("--") else ans.split(".")[0].strip().upper()
-    
                                 # store normalized correct answer for later (ensure single letter A-E if possible)
                                 normalized_correct_map[qs["id"]] = normalize_correct_answer(qs.get("correct_answer",""), qs.get("choices",""))
     
@@ -2563,6 +2559,7 @@ def main():
 # === Panggil fungsi utama ===
 if __name__ == "__main__":
     main()
+
 
 
 
