@@ -536,7 +536,7 @@ def page_course_detail():
         return
     
     # === AUTO SCROLL FIX ===
-       js_code = f"""
+    js_code = f"""
     <script>
         // Eksekusi setelah UI Streamlit selesai render
         setTimeout(function() {{
@@ -2431,6 +2431,7 @@ def main():
 # === Panggil fungsi utama ===
 if __name__ == "__main__":
     main()
+
 
 
 
