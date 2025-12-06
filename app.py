@@ -549,19 +549,16 @@ def page_course_detail():
 
 
     # === ACTION BUTTONS ===
-    col1, col2 = st.columns([0.25, 0.75])
-
-    # 🔙 Tombol Kembali ke Courses
-    if st.button("🔙 Back to Courses"):
-        for key in ["current_course", "last_course"]:
-            if key in st.session_state:
-                del st.session_state[key]
-        st.session_state.page = "dashboard"
-        st.session_state.user = st.session_state.get("user")
-        st.rerun()
-
-
-    # 🚪 Tombol Resign dari Course (student only)
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        if st.button("🔙 Back to Courses"):
+            for key in ["current_course", "last_course"]:
+                if key in st.session_state:
+                    del st.session_state[key]
+            st.session_state.page = "dashboard"
+            st.rerun()
+    
     with col2:
         if user and user["role"] == "student":
             if st.button("🚪 Leave this Course"):
@@ -570,12 +567,9 @@ def page_course_detail():
                     supabase.table("enrollments").delete().eq("user_id", user["id"]).eq("course_id", cid).execute()
                     st.success("✅ You have successfully left this course.")
                     time.sleep(1)
-                    # reset state dan arahkan kembali via router utama
                     st.session_state.current_course = None
-                    st.session_state.last_course = None
                     st.session_state.page = "dashboard"
-                    st.session_state._nav_back = True
-                    st.stop()
+                    st.rerun()
 
 
     # ⚠️ DELETE COURSE (Instructor only)
@@ -2434,6 +2428,7 @@ def main():
 # === Panggil fungsi utama ===
 if __name__ == "__main__":
     main()
+
 
 
 
