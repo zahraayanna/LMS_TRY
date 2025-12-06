@@ -536,18 +536,29 @@ def page_course_detail():
         return
     
     # === AUTO SCROLL FIX ===
-    scroll_js = """
+       js_code = f"""
     <script>
-        setTimeout(function() {
-            window.scrollTo({top: 0, behavior: 'smooth'});
-        }, 200);
+        // Eksekusi setelah UI Streamlit selesai render
+        setTimeout(function() {{
+            const tabs = window.parent.document.querySelectorAll('button[data-baseweb="tab"]');
+    
+            // Switch tab kalau target index valid
+            if (tabs && tabs[{target_index}]) {{
+                tabs[{target_index}].click();
+            }}
+    
+            // Setelah tab pindah, scroll ke atas
+            setTimeout(function() {{
+                window.scrollTo({{ top: 0, behavior: 'smooth' }});
+            }}, 400);
+    
+        }}, 300);
     </script>
     """
-    st.markdown(scroll_js, unsafe_allow_html=True)
     
+    st.markdown(js_code, unsafe_allow_html=True)
+
     st.title(f"📘 {c['title']}")
-
-
 
     # === ACTION BUTTONS ===
     col1, col2 = st.columns(2)
@@ -2420,6 +2431,7 @@ def main():
 # === Panggil fungsi utama ===
 if __name__ == "__main__":
     main()
+
 
 
 
