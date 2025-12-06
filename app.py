@@ -1523,11 +1523,43 @@ def page_course_detail():
                                 # build labels
                                 labeled_choices = [f"{chr(65+idx)}. {choice}" for idx, choice in enumerate(choices)]
                                 # selectbox shows labeled choices
-                                ans = st.selectbox(
-                                    "Pilih jawaban:",
-                                    ["-- pilih jawaban --"] + labeled_choices,
-                                    key=f"ans_{qs['id']}"
-                                )
+                                from htmldiff import diff
+                                import uuid
+                                
+                                st.markdown("**Pilihan Jawaban:**")
+                                
+                                selected = None
+                                for idx, choice in enumerate(choices):
+                                    html_id = f"{uuid.uuid4()}"
+                                
+                                    st.markdown(
+                                        f"""
+                                        <label style="display:flex;align-items:center;margin:6px;cursor:pointer;">
+                                            <input type="radio" name="q_{qs['id']}" value="{choice}" id="{html_id}" style="margin-right:8px;">
+                                            <span>{markdown.markdown(choice, extensions=["md_in_html"])}</span>
+                                        </label>
+                                        """,
+                                        unsafe_allow_html=True
+                                    )
+                                
+                                # ambil value dengan JS
+                                get_choice_js = f"""
+                                <script>
+                                    const radios = document.getElementsByName("q_{qs['id']}");
+                                    let selected = "";
+                                    for (let r of radios) {{
+                                        if (r.checked) selected = r.value;
+                                    }}
+                                    window.parent.postMessage(
+                                        {{type: "quiz_choice", id: "{qs['id']}", value: selected}},
+                                        "*"
+                                    );
+                                </script>
+                                """
+                                st.components.v1.html(get_choice_js, height=0)
+                                
+                                answers[qs["id"]] = st.session_state.get(f"answer_{qs['id']}", "")
+
                                 # store only the letter (A-E) or "" if none selected
                                 answers[qs["id"]] = "" if ans.startswith("--") else ans.split(".")[0].strip().upper()
     
@@ -2524,6 +2556,7 @@ def main():
 # === Panggil fungsi utama ===
 if __name__ == "__main__":
     main()
+
 
 
 
