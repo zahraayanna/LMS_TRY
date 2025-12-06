@@ -1387,27 +1387,6 @@ def page_course_detail():
         import io, base64
     
         st.subheader("🧠 Quiz")
-
-        # --- Listener script untuk menangkap jawaban dari HTML radio ---
-        streamlit_js = """
-        <script>
-        window.addEventListener("message", (event) => {
-            if(event.data?.type === "quiz_choice"){
-                window.parent.streamlitWebsocket.sendMessage(
-                    JSON.stringify({
-                        type: "streamlit:setComponentValue",
-                        componentId: "quiz_" + event.data.id,
-                        value: event.data.value
-                    })
-                );
-            }
-        });
-        </script>
-        """
-        
-        import streamlit.components.v1 as components
-        components.html(streamlit_js, height=0)
-
     
         # --- Helper: safe fetch quizzes for course ---
         def load_quizzes_for_course(course_id):
@@ -1536,37 +1515,19 @@ def page_course_detail():
                                         rubric_data = None
                             q_rubrics[qs["id"]] = rubric_data
     
-                            # --- Multiple Choice UI (dengan support LaTeX) ---
+                            # Input type
                             if qs.get("type") == "multiple_choice":
-                                choices = qs.get("choices", "").split("|")
-                            
-                                st.markdown("**Pilihan Jawaban:**")
-                            
-                                selected_key = f"quiz_{qs['id']}"
-                                current_val = st.session_state.get(selected_key, "")
-                            
-                                for idx, choice in enumerate(choices):
-                                    safe_choice = choice.replace('"', "'")  # biar tidak error di HTML
-                            
-                                    components.html(
-                                        f"""
-                                        <label style="display:flex;align-items:center;margin:6px;cursor:pointer;font-size:16px;">
-                                            <input type="radio" name="q_{qs['id']}"
-                                                   onclick="window.parent.postMessage({{
-                                                        type:'quiz_choice',
-                                                        id:'{qs['id']}',
-                                                        value:'{safe_choice}'
-                                                   }}, '*')"
-                                                   {'checked' if current_val == safe_choice else ''}>
-                                            <span style="margin-left:8px">{markdown.markdown(safe_choice)}</span>
-                                        </label>
-                                        """,
-                                        height=50,
-                                    )
-                            
-                                answers[qs["id"]] = st.session_state.get(selected_key, "")
-
-
+                                # parse choices and limit to A-E
+                                raw_choices = [c.strip() for c in (qs.get("choices","") or "").split("|") if c.strip()]
+                                choices = raw_choices[:5]  # A..E
+                                # build labels
+                                labeled_choices = [f"{chr(65+idx)}. {choice}" for idx, choice in enumerate(choices)]
+                                # selectbox shows labeled choices
+                                ans = st.selectbox(
+                                    "Pilih jawaban:",
+                                    ["-- pilih jawaban --"] + labeled_choices,
+                                    key=f"ans_{qs['id']}"
+                                )
                                 # store only the letter (A-E) or "" if none selected
                                 answers[qs["id"]] = "" if ans.startswith("--") else ans.split(".")[0].strip().upper()
     
@@ -1691,12 +1652,8 @@ def page_course_detail():
                                             })
     
                                     # compute MCQ percent
-                                    if total_auto_possible > 0:
-                                        mcq_percent = round((auto_score / total_auto_possible) * 100, 2)
-                                    else:
-                                        mcq_percent = 0
-                                    
-                                        
+                                    mcq_percent = (auto_score / total_auto_possible * 100) if total_auto_possible > 0 else 0
+    
                                     # Insert attempt record
                                     attempt_number = attempts_made + 1
                                     try:
@@ -2563,9 +2520,6 @@ def main():
 # === Panggil fungsi utama ===
 if __name__ == "__main__":
     main()
-
-
-
 
 
 
