@@ -526,13 +526,6 @@ def page_course_detail():
 
     cid = st.session_state.current_course
     user = st.session_state.user
-    # --- FIX: Auto scroll to top each time course is opened ---
-    st.markdown("""
-        <script>
-            window.scrollTo({ top: 0, behavior: 'instant' });
-        </script>
-    """, unsafe_allow_html=True)
-
     st.session_state.last_course = cid
 
     # --- Load course data ---
@@ -541,8 +534,19 @@ def page_course_detail():
     except Exception as e:
         st.error(f"Error loading course data: {e}")
         return
+    
+    # === AUTO SCROLL FIX ===
+    scroll_js = """
+    <script>
+        setTimeout(function() {
+            window.scrollTo({top: 0, behavior: 'smooth'});
+        }, 200);
+    </script>
+    """
+    st.markdown(scroll_js, unsafe_allow_html=True)
+    
+    st.title(f"📘 {c['title']}")
 
-    st.markdown(f"## 📘 {c['title']}")
 
 
     # === ACTION BUTTONS ===
@@ -2416,6 +2420,7 @@ def main():
 # === Panggil fungsi utama ===
 if __name__ == "__main__":
     main()
+
 
 
 
