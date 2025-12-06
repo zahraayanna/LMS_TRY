@@ -1554,46 +1554,28 @@ def page_course_detail():
     
                         # ---------- Multiple choice input ----------
                         if qs.get("type") == "multiple_choice":
-                            raw_choices = [c.strip() for c in (qs.get("choices","") or "").split("|")][:5]
-                            letters = ["A","B","C","D","E"][:len(raw_choices)]
+                            
+                            choices_raw = qs.get("choices", "")
+                            choices = [c.strip() for c in choices_raw.split("|") if c.strip()]
                         
-                            current_val = st.session_state.get(f"ans_{qs['id']}", "")
+                            # Format tampilan A., B., dst
+                            labeled_choices = [
+                                f"{chr(65+i)}. {c}" for i, c in enumerate(choices)
+                            ]
                         
-                            st.markdown("**Pilih jawaban:**")
+                            saved_key = f"ans_{qs['id']}"
+                            selected = st.selectbox(
+                                "Pilih jawaban:",
+                                ["-- Pilih jawaban --"] + labeled_choices,
+                                key=saved_key
+                            )
                         
-                            # Render choices as interactive HTML radio with LaTeX support
-                            choice_html = """
-                            <script>
-                            function selectAnswer(qid, value){
-                                window.parent.postMessage({type:"quiz_choice_select", qid:qid, value:value}, "*");
-                            }
-                            </script>
-                            """
-                            for idx, choice in enumerate(raw_choices):
-                                letter = letters[idx]
-                                rendered = markdown.markdown(choice, extensions=["md_in_html", "fenced_code"])
-                                
-                                choice_html += f"""
-                                <label style="display:flex;align-items:center;margin:6px;cursor:pointer;font-size:16px;">
-                                    <input type="radio" 
-                                           name="q_{qs['id']}" 
-                                           onclick="selectAnswer('{qs['id']}', '{letter}')"
-                                           {'checked' if current_val == letter else ''}>
-                                    <span style="margin-left:8px;">
-                                        <strong>{letter}.</strong> {rendered}
-                                    </span>
-                                </label>
-                                """
-                        
-                            # Include MathJax for LaTeX rendering
-                            choice_html += """
-                            <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
-                            <script id="MathJax-script" async
-                                src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
-                            """
-                        
-                            # Render the choice block
-                            components.html(choice_html, height=50 + len(raw_choices)*45)
+                            # simpan hanya huruf A/B/C/D/E agar konsisten di database
+                            if selected.startswith("--"):
+                                answers[qs["id"]] = ""
+                            else:
+                                answers[qs["id"]] = selected.split(".")[0]  # ambil hanya hurufnya (A/B/C/D/E)
+
                         
                             # Update stored answer from postMessage
                             if "quiz_js_listener" not in st.session_state:
@@ -2612,6 +2594,7 @@ def main():
 # === Panggil fungsi utama ===
 if __name__ == "__main__":
     main()
+
 
 
 
