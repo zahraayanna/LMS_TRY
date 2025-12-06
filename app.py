@@ -536,6 +536,48 @@ def page_course_detail():
         return
     
     st.title(f"📘 {c['title']}")
+    # Add hidden anchor target right under the title
+    st.markdown("<div id='course-top-anchor' style='height:1px;'></div>", unsafe_allow_html=True)
+    
+    # JS: Smart auto-scroll fixer (handles delayed content like YouTube embeds)
+    scroll_js = """
+    <script>
+    (function() {
+        function scrollToTop() {
+            const target = document.getElementById("course-top-anchor");
+            if (!target) return false;
+    
+            // Avoid iframe focus warping scroll
+            if (document.activeElement && document.activeElement.blur) {
+                try { document.activeElement.blur(); } catch(e) {}
+            }
+    
+            target.scrollIntoView({behavior: "smooth", block: "start"});
+            return true;
+        }
+    
+        // Instant attempt (if DOM is already ready)
+        if (scrollToTop()) return;
+    
+        // Soft retry after short delay (fix for Streamlit delayed widgets)
+        setTimeout(scrollToTop, 350);
+    
+        // MutationObserver: scroll again if new content loads (like YouTube)
+        const obs = new MutationObserver((m, o) => {
+            if (scrollToTop()) o.disconnect();
+        });
+    
+        obs.observe(document.body, {subtree: true, childList: true});
+    
+        // Safety timeout so observer doesn’t run forever
+        setTimeout(() => { obs.disconnect(); scrollToTop(); }, 1500);
+    })();
+    </script>
+    """
+    
+    import streamlit.components.v1 as components
+    components.html(scroll_js, height=0)
+
 
     # === ACTION BUTTONS ===
     col1, col2 = st.columns(2)
@@ -623,14 +665,12 @@ def page_course_detail():
 
     
     # === SAFE TAB AUTO SWITCH ===
-    # Reset flag ketika masuk halaman baru
-    # === SAFE TAB AUTO SWITCH (REVAMPED) ===
     if "tab_triggered" not in st.session_state:
         st.session_state.tab_triggered = False
     
     if active_tab in ["quiz", "assignment"] and not st.session_state.tab_triggered:
-        target_index = tab_index.get(active_tab, None)
-        
+        target_index = tab_index.get(active_tab)
+    
         if target_index is not None:
             js_code = f"""
             <script>
@@ -640,22 +680,33 @@ def page_course_detail():
                     if (tabs && tabs[{target_index}]) {{
                         tabs[{target_index}].click();
                     }}
+    
+                    // Scroll AFTER the tab switches
                     setTimeout(function() {{
-                        window.scrollTo({{top: 0, behavior: 'smooth'}});
-                    }}, 300);
+                        const anchor = document.getElementById("course-top-anchor");
+                        if (anchor) {{
+                            anchor.scrollIntoView({{behavior: "smooth", block: "start"}});
+                        }} else {{
+                            window.scrollTo(0,0);
+                        }}
+                    }}, 350);
+    
                 }} catch(e) {{
-                    console.warn("Auto tab fail:", e);
+                    console.warn("Auto tab switch error:", e);
                 }}
-            }}, 400);
+            }}, 450);
             </script>
             """
-            st.components.v1.html(js_code, height=0)
+    
+            import streamlit.components.v1 as components
+            components.html(js_code, height=0)
     
         st.session_state.tab_triggered = True
+    else:
+        # Reset after manual navigation
+        st.session_state.active_tab = None
     
-        
             
-
     # =====================================
     # DASHBOARD
     # =====================================
@@ -2413,6 +2464,7 @@ def main():
 # === Panggil fungsi utama ===
 if __name__ == "__main__":
     main()
+
 
 
 
