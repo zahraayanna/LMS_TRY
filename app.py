@@ -1550,29 +1550,76 @@ def page_course_detail():
                                     auto_score = 0
                                     total_auto_possible = 0
                                     answers_payload = []
-                        
+                    
                                     for qs in questions:
-                                        # Ambil jawaban siswa dan bersihkan
+                                        # Ambil jawaban siswa dan bersihkan (raw text dari selectbox / textarea)
                                         user_ans_raw = answers.get(qs["id"]) or ""
-                                        user_ans_clean = user_ans_raw.strip().lower()
-                                        correct_clean = (qs.get("correct_answer") or "").strip().lower()
-                        
+                                        user_ans_raw = str(user_ans_raw).strip()
+                                        # ambil correct_answer dari DB (bisa berupa "A" atau "a" atau "A. ..." tergantung input instructor)
+                                        correct_raw = str(qs.get("correct_answer") or "").strip()
+                                    
                                         if qs.get("type") == "multiple_choice":
-                                            # Compare cleaned strings
-                                            is_correct = (user_ans_clean == correct_clean)
-                        
-                                            # Debug print (bisa dihapus setelah tes)
-                                            print(f"QID {qs['id']} | Student answer: {user_ans_clean} | Correct: {correct_clean} | is_correct: {is_correct}")
-                        
+                                            # --- Normalisasi: ambil hanya huruf pilihan (a-e) di awal, kalau ada ---
+                                            # contoh: "A. Blabla", "a) text", "b - something", atau hanya "A"
+                                            user_letter = None
+                                            correct_letter = None
+                                    
+                                            # regex cari huruf a-e di awal
+                                            m_user = re.match(r"^\s*([A-Ea-e])", user_ans_raw)
+                                            if m_user:
+                                                user_letter = m_user.group(1).lower()
+                                            else:
+                                                # fallback: jika pilihan disimpan sebagai teks penuh, coba cocokan dengan choices
+                                                # (misal pilihan = "A. Photosynthesis" dan user_ans_raw = "A. Photosynthesis")
+                                                # dalam kasus selectbox kita menyimpan text utuh, jadi kalau tidak ada huruf di awal,
+                                                # coba ambil huruf dari awal token nonspasi
+                                                tokens = user_ans_raw.split()
+                                                if tokens:
+                                                    t0 = re.match(r"([A-Ea-e])", tokens[0])
+                                                    if t0:
+                                                        user_letter = t0.group(1).lower()
+                                    
+                                            # normalisasi correct answer juga
+                                            m_corr = re.match(r"^\s*([A-Ea-e])", correct_raw)
+                                            if m_corr:
+                                                correct_letter = m_corr.group(1).lower()
+                                            else:
+                                                # jika correct_raw berisi huruf penuh? ambil huruf pertama
+                                                if correct_raw:
+                                                    t0 = re.match(r"([A-Ea-e])", correct_raw)
+                                                    if t0:
+                                                        correct_letter = t0.group(1).lower()
+                                                    else:
+                                                        # fallback: jika key instructor memberi full text of choice,
+                                                        # coba cari huruf di awal dari that string
+                                                        m2 = re.match(r"^\s*([A-Ea-e])", str(qs.get("choices","")).strip())
+                                                        if m2:
+                                                            correct_letter = m2.group(1).lower()
+                                    
+                                            # Final decision: jika kita punya letter dari salah satu atau keduanya,
+                                            # bandingkan letter; kalau tidak ada letter (rare), bandingkan lowercase full text
+                                            if user_letter is not None and correct_letter is not None:
+                                                is_correct = (user_letter == correct_letter)
+                                            elif user_letter is not None and correct_raw:
+                                                # jika instructor memberi correct_raw sebagai full text, bandingkan letter vs full text start
+                                                is_correct = (user_letter == correct_raw.strip().lower()[0:1])
+                                            else:
+                                                # fallback ke direct compare (lowercase)
+                                                is_correct = (user_ans_raw.strip().lower() == correct_raw.strip().lower())
+                                    
+                                            # Debug (bisa dihapus)
+                                            print(f"QID {qs['id']} | Student raw: '{user_ans_raw}' | user_letter: {user_letter} | correct_raw: '{correct_raw}' | correct_letter: {correct_letter} | is_correct: {is_correct}")
+                                    
                                             answers_payload.append({
                                                 "question_id": qs["id"],
                                                 "choice_id": None,
                                                 "text_answer": user_ans_raw,
-                                                "is_correct": bool(is_correct)   # pastikan boolean
+                                                "is_correct": bool(is_correct)
                                             })
                                             total_auto_possible += 1
                                             if is_correct:
                                                 auto_score += 1
+                                    
                                         else:
                                             # essay / short answer, perlu manual grading
                                             answers_payload.append({
@@ -1581,6 +1628,7 @@ def page_course_detail():
                                                 "text_answer": user_ans_raw,
                                                 "is_correct": None
                                             })
+
                         
                                     # Hitung skor MCQ sebagai persentase 0-100
                                     mcq_percent = (auto_score / total_auto_possible * 100) if total_auto_possible > 0 else 0
@@ -2437,6 +2485,7 @@ def main():
 # === Panggil fungsi utama ===
 if __name__ == "__main__":
     main()
+
 
 
 
