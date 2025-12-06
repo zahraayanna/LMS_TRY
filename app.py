@@ -1392,6 +1392,40 @@ def page_course_detail():
         def load_quizzes_for_course(course_id):
             return supabase.table("quizzes").select("*").eq("course_id", course_id).execute().data or []
     
+        # --- Helper: normalize instructor-provided correct answer to a single letter A-E if possible
+        def normalize_correct_answer(raw_correct, choices_str):
+            raw = str(raw_correct or "").strip()
+            if not raw:
+                return ""
+            # if letter present at start, use it
+            m = re.match(r"^\s*([A-Ea-e])", raw)
+            if m:
+                return m.group(1).upper()
+            # else if raw equals one of choices exactly, map to corresponding letter
+            choices = [c.strip() for c in (choices_str or "").split("|") if c.strip()]
+            for i, ch in enumerate(choices):
+                if raw.strip().lower() == ch.strip().lower():
+                    return chr(65 + i) if i < 5 else ""
+            # fallback: if raw contains "A." at start
+            m2 = re.match(r"^\s*([A-Ea-e])\W", raw)
+            if m2:
+                return m2.group(1).upper()
+            # otherwise return first letter of raw if it's A-E
+            t0 = re.match(r".*([A-Ea-e]).*", raw)
+            if t0:
+                return t0.group(1).upper()
+            return ""
+    
+        # --- Helper: map letter to choice text (if available) ---
+        def letter_to_choice_text(letter, choices_str):
+            if not letter:
+                return ""
+            choices = [c.strip() for c in (choices_str or "").split("|") if c.strip()]
+            idx = ord(letter.upper()) - 65
+            if 0 <= idx < len(choices):
+                return choices[idx]
+            return ""
+    
         quizzes = load_quizzes_for_course(cid)
         selected_quiz_id = st.session_state.get("selected_quiz_id")
     
@@ -1459,6 +1493,10 @@ def page_course_detail():
                         st.markdown("### ✏️ Questions:")
                         answers = {}
                         q_rubrics = {}
+    
+                        # prepare normalized correct answers for display / use
+                        normalized_correct_map = {}
+    
                         for i, qs in enumerate(questions, 1):
                             st.markdown(f"**{i}.**")
                             st.markdown(f"<div style='font-size:15px; line-height:1.6;'>{qs.get('question','')}</div>", unsafe_allow_html=True)
@@ -1479,18 +1517,23 @@ def page_course_detail():
     
                             # Input type
                             if qs.get("type") == "multiple_choice":
-                                choices = qs.get("choices","").split("|")
-                            
-                                # gunakan selectbox biar jadi dropdown ABCDE
+                                # parse choices and limit to A-E
+                                raw_choices = [c.strip() for c in (qs.get("choices","") or "").split("|") if c.strip()]
+                                choices = raw_choices[:5]  # A..E
+                                # build labels
+                                labeled_choices = [f"{chr(65+idx)}. {choice}" for idx, choice in enumerate(choices)]
+                                # selectbox shows labeled choices
                                 ans = st.selectbox(
                                     "Pilih jawaban:",
-                                    ["-- pilih jawaban --"] + choices,
+                                    ["-- pilih jawaban --"] + labeled_choices,
                                     key=f"ans_{qs['id']}"
                                 )
-                            
-                                # kalau user belum milih, simpan kosong biar gak error
-                                answers[qs["id"]] = "" if ans.startswith("--") else ans
-
+                                # store only the letter (A-E) or "" if none selected
+                                answers[qs["id"]] = "" if ans.startswith("--") else ans.split(".")[0].strip().upper()
+    
+                                # store normalized correct answer for later (ensure single letter A-E if possible)
+                                normalized_correct_map[qs["id"]] = normalize_correct_answer(qs.get("correct_answer",""), qs.get("choices",""))
+    
                             else:
                                 ans = st.text_area("Jawaban singkat / esai:", key=f"ans_{qs['id']}", height=120)
                                 answers[qs["id"]] = ans
@@ -1505,7 +1548,9 @@ def page_course_detail():
                                     new_q_text = st.text_area("Question Text (Markdown)", value=qs.get("question",""))
                                     q_type = st.selectbox("Type", ["multiple_choice","short_answer"], index=0 if qs.get("type")=="multiple_choice" else 1)
                                     new_choices = st.text_area("Choices (pipe | sep) — for MCQ", value=qs.get("choices",""))
-                                    new_correct = st.text_input("Correct Answer (for MCQ exact string)", value=qs.get("correct_answer",""))
+                                    # helper: show correct input as letter if possible
+                                    existing_correct_letter = normalize_correct_answer(qs.get("correct_answer",""), qs.get("choices",""))
+                                    new_correct = st.text_input("Correct Answer (for MCQ letter A-E preferred)", value=existing_correct_letter or qs.get("correct_answer",""))
                                     new_rubric_max = st.text_input("Rubric max score", value=str((q_rubrics[qs['id']]['max_score']) if q_rubrics.get(qs['id']) else ""))
                                     new_rubric_note = st.text_input("Rubric note", value=(q_rubrics[qs['id']]['note'] if q_rubrics.get(qs['id']) else ""))
                                     save_q = st.form_submit_button("💾 Save Question")
@@ -1519,10 +1564,14 @@ def page_course_detail():
                                         update_payload = {
                                             "question": new_q_text,
                                             "type": q_type,
-                                            "correct_answer": new_correct
                                         }
                                         if q_type == "multiple_choice":
                                             update_payload["choices"] = new_choices
+                                            # normalize correct answer to letter if possible
+                                            corr_letter = normalize_correct_answer(new_correct or qs.get("correct_answer",""), new_choices)
+                                            update_payload["correct_answer"] = corr_letter or (new_correct or qs.get("correct_answer",""))
+                                        else:
+                                            update_payload["correct_answer"] = new_correct
                                         if rubric_store is not None:
                                             update_payload["rubric"] = rubric_store
                                         supabase.table("quiz_questions").update(update_payload).eq("id", qs["id"]).execute()
@@ -1541,7 +1590,7 @@ def page_course_detail():
                             attempts = supabase.table("quiz_attempts").select("*").eq("quiz_id", q["id"]).eq("user_id", user["id"]).execute().data or []
                             attempts_made = len(attempts)
                             can_attempt = (attempt_limit == 0) or (attempts_made < attempt_limit)
-                            
+    
                             if not can_attempt:
                                 st.warning(f"⚠️ Kamu sudah melakukan {attempts_made} percobaan. Batas percobaan = {attempt_limit}.")
                             else:
@@ -1550,97 +1599,69 @@ def page_course_detail():
                                     auto_score = 0
                                     total_auto_possible = 0
                                     answers_payload = []
-                    
+    
+                                    # process each question
                                     for qs in questions:
-                                        # Ambil jawaban siswa dan bersihkan (raw text dari selectbox / textarea)
                                         user_ans_raw = answers.get(qs["id"]) or ""
-                                        user_ans_raw = str(user_ans_raw).strip()
-                                        # ambil correct_answer dari DB (bisa berupa "A" atau "a" atau "A. ..." tergantung input instructor)
-                                        correct_raw = str(qs.get("correct_answer") or "").strip()
-                                    
+                                        # treat MCQ answers as single letter uppercase A-E (we stored it that way above)
+                                        correct_letter = normalize_correct_answer(qs.get("correct_answer",""), qs.get("choices",""))
+    
                                         if qs.get("type") == "multiple_choice":
-                                            # --- Normalisasi: ambil hanya huruf pilihan (a-e) di awal, kalau ada ---
-                                            # contoh: "A. Blabla", "a) text", "b - something", atau hanya "A"
-                                            user_letter = None
-                                            correct_letter = None
-                                    
-                                            # regex cari huruf a-e di awal
-                                            m_user = re.match(r"^\s*([A-Ea-e])", user_ans_raw)
-                                            if m_user:
-                                                user_letter = m_user.group(1).lower()
+                                            # user_ans_raw should be letter like "A" or empty
+                                            ua = str(user_ans_raw).strip().upper()
+                                            ua_letter = None
+                                            if re.match(r"^[A-E]$", ua):
+                                                ua_letter = ua
                                             else:
-                                                # fallback: jika pilihan disimpan sebagai teks penuh, coba cocokan dengan choices
-                                                # (misal pilihan = "A. Photosynthesis" dan user_ans_raw = "A. Photosynthesis")
-                                                # dalam kasus selectbox kita menyimpan text utuh, jadi kalau tidak ada huruf di awal,
-                                                # coba ambil huruf dari awal token nonspasi
-                                                tokens = user_ans_raw.split()
-                                                if tokens:
-                                                    t0 = re.match(r"([A-Ea-e])", tokens[0])
-                                                    if t0:
-                                                        user_letter = t0.group(1).lower()
-                                    
-                                            # normalisasi correct answer juga
-                                            m_corr = re.match(r"^\s*([A-Ea-e])", correct_raw)
-                                            if m_corr:
-                                                correct_letter = m_corr.group(1).lower()
+                                                # maybe student had typed something else; try extract
+                                                m_user = re.match(r"^\s*([A-Ea-e])", str(user_ans_raw))
+                                                if m_user:
+                                                    ua_letter = m_user.group(1).upper()
+                                                else:
+                                                    # fallback: if student selected labeled choice earlier we already stored letter
+                                                    ua_letter = ua if ua else None
+    
+                                            is_correct = False
+                                            if ua_letter and correct_letter:
+                                                is_correct = (ua_letter == correct_letter)
+                                            elif ua_letter and qs.get("correct_answer"):
+                                                # if correct_answer stored as full text, compare first letter fallback
+                                                is_correct = (ua_letter == (str(qs.get("correct_answer")).strip()[0:1].upper()))
                                             else:
-                                                # jika correct_raw berisi huruf penuh? ambil huruf pertama
-                                                if correct_raw:
-                                                    t0 = re.match(r"([A-Ea-e])", correct_raw)
-                                                    if t0:
-                                                        correct_letter = t0.group(1).lower()
-                                                    else:
-                                                        # fallback: jika key instructor memberi full text of choice,
-                                                        # coba cari huruf di awal dari that string
-                                                        m2 = re.match(r"^\s*([A-Ea-e])", str(qs.get("choices","")).strip())
-                                                        if m2:
-                                                            correct_letter = m2.group(1).lower()
-                                    
-                                            # Final decision: jika kita punya letter dari salah satu atau keduanya,
-                                            # bandingkan letter; kalau tidak ada letter (rare), bandingkan lowercase full text
-                                            if user_letter is not None and correct_letter is not None:
-                                                is_correct = (user_letter == correct_letter)
-                                            elif user_letter is not None and correct_raw:
-                                                # jika instructor memberi correct_raw sebagai full text, bandingkan letter vs full text start
-                                                is_correct = (user_letter == correct_raw.strip().lower()[0:1])
-                                            else:
-                                                # fallback ke direct compare (lowercase)
-                                                is_correct = (user_ans_raw.strip().lower() == correct_raw.strip().lower())
-                                    
-                                            # Debug (bisa dihapus)
-                                            print(f"QID {qs['id']} | Student raw: '{user_ans_raw}' | user_letter: {user_letter} | correct_raw: '{correct_raw}' | correct_letter: {correct_letter} | is_correct: {is_correct}")
-                                    
+                                                # fallback to text compare (very rare)
+                                                is_correct = (str(user_ans_raw).strip().lower() == str(qs.get("correct_answer") or "").strip().lower())
+    
+                                            # store the student's answer as the letter (for MCQ)
                                             answers_payload.append({
                                                 "question_id": qs["id"],
                                                 "choice_id": None,
-                                                "text_answer": user_ans_raw,
+                                                "text_answer": ua_letter or str(user_ans_raw).strip(),
                                                 "is_correct": bool(is_correct)
                                             })
                                             total_auto_possible += 1
                                             if is_correct:
                                                 auto_score += 1
-                                    
+    
                                         else:
-                                            # essay / short answer, perlu manual grading
+                                            # essay / short answer, needs manual grading
                                             answers_payload.append({
                                                 "question_id": qs["id"],
                                                 "choice_id": None,
-                                                "text_answer": user_ans_raw,
+                                                "text_answer": str(user_ans_raw).strip(),
                                                 "is_correct": None
                                             })
-
-                        
-                                    # Hitung skor MCQ sebagai persentase 0-100
+    
+                                    # compute MCQ percent
                                     mcq_percent = (auto_score / total_auto_possible * 100) if total_auto_possible > 0 else 0
-                        
-                                    # Insert attempt
+    
+                                    # Insert attempt record
                                     attempt_number = attempts_made + 1
                                     try:
                                         attempt_res = supabase.table("quiz_attempts").insert({
                                             "quiz_id": q["id"],
                                             "user_id": user["id"],
-                                            "student_id": user["id"], 
-                                            "score": round(mcq_percent,2),  # simpan langsung % MCQ
+                                            "student_id": user["id"],
+                                            "score": round(mcq_percent,2),  # percent for MCQ part
                                             "total": total_questions,
                                             "submitted_at": datetime.now().isoformat(),
                                             "manual_score": None,
@@ -1651,8 +1672,8 @@ def page_course_detail():
                                     except Exception as e:
                                         st.error(f"❌ Failed to create attempt record: {e}")
                                         attempt_id = None
-                        
-                                    # Insert jawaban ke quiz_answers
+    
+                                    # Insert answers
                                     if attempt_id:
                                         for a_payload in answers_payload:
                                             try:
@@ -1665,13 +1686,11 @@ def page_course_detail():
                                                 }).execute()
                                             except Exception as e:
                                                 st.warning(f"Warning saving one answer: {e}")
-                        
+    
                                         st.success(f"✅ Jawaban terkirim! (Attempt #{attempt_number}) — Skor MCQ: {round(mcq_percent,2)}%")
-                                        safe.rerun()
+                                        st.rerun()
                                     else:
                                         st.error("❌ Gagal menyimpan attempt. Coba ulang.")
-
-
     
                     else:
                         st.info("No questions yet for this quiz.")
@@ -1700,8 +1719,14 @@ def page_course_detail():
                                         qtext_html = markdown.markdown(qrec.get("question",""), extensions=["fenced_code","md_in_html"])
                                         st.markdown(f"**Soal {idx_q}:**")
                                         st.components.v1.html(f"<div style='font-size:14px;'>{qtext_html}</div>", height=110, scrolling=False)
+    
                                         if qrec.get("type") == "multiple_choice":
-                                            st.markdown(f"- **Jawaban siswa:** {ans_row.get('text_answer','')}")
+                                            # ans_row.text_answer probably stores a letter (A-E) or fallback text
+                                            saved_ans = str(ans_row.get('text_answer','') or "")
+                                            # try to show both letter and choice text
+                                            choice_text = letter_to_choice_text(saved_ans, qrec.get("choices",""))
+                                            display_student = f"{saved_ans}" + (f" — {choice_text}" if choice_text else "")
+                                            st.markdown(f"- **Jawaban siswa:** {display_student}")
                                             is_corr = ans_row.get("is_correct")
                                             st.markdown(f"- **Auto-correct:** {'Benar' if is_corr else 'Salah'}")
                                         else:
@@ -1725,7 +1750,7 @@ def page_course_detail():
                                             manual_scores[ans_row['id']] = st.number_input(f"Nilai Soal {idx_q} (max {max_score})", min_value=0.0, max_value=float(max_score or 9999), value=0.0, step=0.5, key=ms_key)
     
                                     st.markdown("---")
-                                    st.markdown(f"**Auto-score (MCQ count):** {at.get('score')} / (MCQ raw count)")
+                                    st.markdown(f"**Auto-score (MCQ percent):** {at.get('score')}%")
                                     teacher_feedback = st.text_area(f"Teacher feedback (attempt {at['id']})", value=at.get("teacher_feedback") or "", key=f"tf_{at['id']}")
                                     manual_total_key = f"manual_total_{at['id']}"
                                     manual_total = st.number_input("Manual total (sum of essay scores)", min_value=0.0, value=float(at.get("manual_score") or 0.0), key=manual_total_key)
@@ -1818,8 +1843,10 @@ def page_course_detail():
                 choices = ""
                 correct = ""
                 if q_type == "multiple_choice":
+                    st.markdown("**Enter choices separated by | (max 5 choices will be used -> A..E)**")
                     choices = st.text_area("Choices (pipe | sep)")
-                    correct = st.text_input("Correct answer (exact string match)")
+                    st.markdown("**Correct answer (letter A-E preferred). If you paste full option text, system will try to infer the letter.**")
+                    correct = st.text_input("Correct answer (letter or full text)")
                 submit_q = st.form_submit_button("➕ Add Question")
                 if submit_q and question_text:
                     rubric_data = None
@@ -1828,12 +1855,20 @@ def page_course_detail():
                             rubric_data = json.dumps({"max_score": float(rubric_max), "note": rubric_note})
                         except:
                             rubric_data = None
+    
+                    # normalize correct answer to single letter if possible
+                    if q_type == "multiple_choice":
+                        corr_letter = normalize_correct_answer(correct, choices)
+                        store_correct = corr_letter or correct
+                    else:
+                        store_correct = correct or None
+    
                     insert_data = {
                         "quiz_id": qid,
                         "question": question_text,
                         "type": q_type,
                         "choices": choices if q_type=="multiple_choice" else None,
-                        "correct_answer": correct if q_type=="multiple_choice" else None,
+                        "correct_answer": store_correct if q_type=="multiple_choice" else None,
                         "rubric": rubric_data
                     }
                     try:
@@ -2485,6 +2520,7 @@ def main():
 # === Panggil fungsi utama ===
 if __name__ == "__main__":
     main()
+
 
 
 
