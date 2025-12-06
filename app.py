@@ -553,12 +553,12 @@ def page_course_detail():
 
     # 🔙 Tombol Kembali ke Courses
     if st.button("🔙 Back to Courses"):
-    for key in ["current_course", "last_course"]:
-        if key in st.session_state:
-            del st.session_state[key]
-    st.session_state.page = "dashboard"
-    st.session_state.user = st.session_state.get("user")
-    st.rerun()
+        for key in ["current_course", "last_course"]:
+            if key in st.session_state:
+                del st.session_state[key]
+        st.session_state.page = "dashboard"
+        st.session_state.user = st.session_state.get("user")
+        st.rerun()
 
 
     # 🚪 Tombol Resign dari Course (student only)
@@ -2425,6 +2425,7 @@ def main():
 # === Panggil fungsi utama ===
 if __name__ == "__main__":
     main()
+
 
 
 
