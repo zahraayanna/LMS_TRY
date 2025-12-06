@@ -626,7 +626,16 @@ def page_course_detail():
 
     st.write("Jumlah tab:", len(tabs))
 
+    # === FORCE SCROLL TO TOP AFTER PAGE RENDER ===
+    st.markdown("""
+    <script>
+    setTimeout(() => {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }, 800);
+    </script>
+    """, unsafe_allow_html=True)
     
+        
     # === Map nama tab ke indeks ===
     tab_index = {
         "overview": 0,
@@ -2425,6 +2434,7 @@ def main():
 # === Panggil fungsi utama ===
 if __name__ == "__main__":
     main()
+
 
 
 
