@@ -526,6 +526,13 @@ def page_course_detail():
 
     cid = st.session_state.current_course
     user = st.session_state.user
+    # --- FIX: Auto scroll to top each time course is opened ---
+    st.markdown("""
+        <script>
+            window.scrollTo({ top: 0, behavior: 'instant' });
+        </script>
+    """, unsafe_allow_html=True)
+
     st.session_state.last_course = cid
 
     # --- Load course data ---
@@ -535,22 +542,12 @@ def page_course_detail():
         st.error(f"Error loading course data: {e}")
         return
 
-    # --- FORCE SCROLL TO TOP WHEN COURSE OPENS ---
-    st.markdown("""
-    <script>
-    setTimeout(() => {
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-    }, 500);
-    </script>
-    """, unsafe_allow_html=True)
-
-    
     st.markdown(f"## 📘 {c['title']}")
 
 
     # === ACTION BUTTONS ===
     col1, col2 = st.columns(2)
-    
+
     with col1:
         if st.button("🔙 Back to Courses"):
             for key in ["current_course", "last_course"]:
@@ -570,6 +567,7 @@ def page_course_detail():
                     st.session_state.current_course = None
                     st.session_state.page = "dashboard"
                     st.rerun()
+    
 
 
     # ⚠️ DELETE COURSE (Instructor only)
@@ -619,16 +617,6 @@ def page_course_detail():
         ])
 
     st.write("Jumlah tab:", len(tabs))
-
-    # === FORCE SCROLL TO TOP AFTER PAGE RENDER ===
-    st.markdown("""
-    <script>
-    setTimeout(() => {
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-    }, 800);
-    </script>
-    """, unsafe_allow_html=True)
-    
         
     # === Map nama tab ke indeks ===
     tab_index = {
@@ -2428,6 +2416,7 @@ def main():
 # === Panggil fungsi utama ===
 if __name__ == "__main__":
     main()
+
 
 
 
