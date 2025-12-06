@@ -535,12 +535,15 @@ def page_course_detail():
         st.error(f"Error loading course data: {e}")
         return
 
-    # --- COURSE HEADER CLEAN ---
+    # --- FORCE SCROLL TO TOP WHEN COURSE OPENS ---
     st.markdown("""
     <script>
-    window.scrollTo(0,0)
+    setTimeout(() => {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }, 500);
     </script>
     """, unsafe_allow_html=True)
+
     
     st.markdown(f"## 📘 {c['title']}")
 
@@ -2422,6 +2425,7 @@ def main():
 # === Panggil fungsi utama ===
 if __name__ == "__main__":
     main()
+
 
 
 
