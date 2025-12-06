@@ -1652,8 +1652,12 @@ def page_course_detail():
                                             })
     
                                     # compute MCQ percent
-                                    mcq_percent = (auto_score / total_auto_possible * 100) if total_auto_possible > 0 else 0
-    
+                                    if total_auto_possible > 0:
+                                        mcq_percent = round((auto_score / total_auto_possible) * 100, 2)
+                                    else:
+                                        mcq_percent = 0
+                                    
+                                        
                                     # Insert attempt record
                                     attempt_number = attempts_made + 1
                                     try:
@@ -2520,6 +2524,7 @@ def main():
 # === Panggil fungsi utama ===
 if __name__ == "__main__":
     main()
+
 
 
 
