@@ -558,7 +558,7 @@ def page_course_detail():
                     del st.session_state[key]
             st.session_state.page = "dashboard"
             st.session_state.user = st.session_state.get("user")
-            st.rerun()
+            safe.rerun()
 
     # 🚪 Tombol Resign dari Course (student only)
     with col2:
@@ -1606,7 +1606,7 @@ def page_course_detail():
                                                 st.warning(f"Warning saving one answer: {e}")
                         
                                         st.success(f"✅ Jawaban terkirim! (Attempt #{attempt_number}) — Skor MCQ: {round(mcq_percent,2)}%")
-                                        st.rerun()
+                                        safe.rerun()
                                     else:
                                         st.error("❌ Gagal menyimpan attempt. Coba ulang.")
 
@@ -2424,6 +2424,7 @@ def main():
 # === Panggil fungsi utama ===
 if __name__ == "__main__":
     main()
+
 
 
 
