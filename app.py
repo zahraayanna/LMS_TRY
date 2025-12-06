@@ -535,29 +535,6 @@ def page_course_detail():
         st.error(f"Error loading course data: {e}")
         return
     
-    # === AUTO SCROLL FIX ===
-    js_code = f"""
-    <script>
-        // Eksekusi setelah UI Streamlit selesai render
-        setTimeout(function() {{
-            const tabs = window.parent.document.querySelectorAll('button[data-baseweb="tab"]');
-    
-            // Switch tab kalau target index valid
-            if (tabs && tabs[{target_index}]) {{
-                tabs[{target_index}].click();
-            }}
-    
-            // Setelah tab pindah, scroll ke atas
-            setTimeout(function() {{
-                window.scrollTo({{ top: 0, behavior: 'smooth' }});
-            }}, 400);
-    
-        }}, 300);
-    </script>
-    """
-    
-    st.markdown(js_code, unsafe_allow_html=True)
-
     st.title(f"📘 {c['title']}")
 
     # === ACTION BUTTONS ===
@@ -566,10 +543,10 @@ def page_course_detail():
     with col1:
         if st.button("🔙 Back to Courses"):
             for key in ["current_course", "last_course"]:
-                if key in st.session_state:
-                    del st.session_state[key]
+                st.session_state.pop(key, None)
             st.session_state.page = "dashboard"
             st.rerun()
+
     
     with col2:
         if user and user["role"] == "student":
@@ -647,32 +624,37 @@ def page_course_detail():
     
     # === SAFE TAB AUTO SWITCH ===
     # Reset flag ketika masuk halaman baru
+    # === SAFE TAB AUTO SWITCH (REVAMPED) ===
     if "tab_triggered" not in st.session_state:
         st.session_state.tab_triggered = False
     
-    # Jalankan tab switch hanya sekali
     if active_tab in ["quiz", "assignment"] and not st.session_state.tab_triggered:
-        target_index = tab_index[active_tab]
-    
-        js_code = f"""
-        <script>
-            // Delay supaya Streamlit UI sudah render sebelum pindah tab
+        target_index = tab_index.get(active_tab, None)
+        
+        if target_index is not None:
+            js_code = f"""
+            <script>
             setTimeout(function() {{
-                const tabs = window.parent.document.querySelectorAll('button[data-baseweb="tab"]');
-                if (tabs && tabs[{target_index}]) {{
-                    tabs[{target_index}].click();
+                try {{
+                    const tabs = window.parent.document.querySelectorAll('button[data-baseweb="tab"]');
+                    if (tabs && tabs[{target_index}]) {{
+                        tabs[{target_index}].click();
+                    }}
+                    setTimeout(function() {{
+                        window.scrollTo({{top: 0, behavior: 'smooth'}});
+                    }}, 300);
+                }} catch(e) {{
+                    console.warn("Auto tab fail:", e);
                 }}
-            }}, 350);
-        </script>
-        """
+            }}, 400);
+            </script>
+            """
+            st.components.v1.html(js_code, height=0)
     
-        st.components.v1.html(js_code, height=0)
-        st.session_state.tab_triggered = True  # supaya tidak looping
-    else:
-        st.session_state.active_tab = None
-
+        st.session_state.tab_triggered = True
     
         
+            
 
     # =====================================
     # DASHBOARD
@@ -2431,6 +2413,7 @@ def main():
 # === Panggil fungsi utama ===
 if __name__ == "__main__":
     main()
+
 
 
 
