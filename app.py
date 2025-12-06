@@ -990,14 +990,13 @@ def page_course_detail():
                                     asg_id = asg_data.get("id")
                                 
                                 # --- Tombol untuk membuka assignment ---
-                                btn_key = f"open_asg_{m.get('id', 'unknown')}_{asg_id or 'none'}"
+                                btn_key = f"open_asg_{m['id']}_{a['id']}"
                                 if st.button("➡️ Open Assignment", key=btn_key):
-                                    if asg_id:
-                                        st.session_state.selected_assignment_id = asg_id
-                                        st.session_state.active_tab = "assignment"
-                                        st.rerun()
-                                    else:
-                                        st.warning("⚠️ Belum ada assignment yang terhubung dengan modul ini.")
+                                    st.session_state.selected_assignment_id = a["id"]
+                                    st.session_state.active_tab = "assignment"
+                                    st.session_state.tab_triggered = False  # <<< WAJIB supaya auto-switch jalan
+                                    st.rerun()
+                                
 
 
     
@@ -2438,6 +2437,7 @@ def main():
 # === Panggil fungsi utama ===
 if __name__ == "__main__":
     main()
+
 
 
 
