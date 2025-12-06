@@ -487,9 +487,7 @@ def page_courses():
                 st.session_state.current_course = c["id"]
                 st.session_state.last_course = c["id"]
                 st.session_state.page = "course_detail"
-
-                # 🚀 rerender langsung halaman detail
-                st.switch_page("app.py")  # pastikan nama file Streamlit utama kamu sesuai
+                st.rerun()
 
             st.markdown("---")
 
@@ -2424,6 +2422,7 @@ def main():
 # === Panggil fungsi utama ===
 if __name__ == "__main__":
     main()
+
 
 
 
