@@ -537,33 +537,6 @@ def page_course_detail():
     
     st.title(f"📘 {c['title']}")
     st.markdown("<div id='course-top-anchor' style='height:1px;'></div>", unsafe_allow_html=True)
-    # Add hidden anchor target right under the title
-    import streamlit.components.v1 as components
-    
-    scroll_fix = """
-    <script>
-    document.addEventListener("DOMContentLoaded", function() {
-        function scrollNow() {
-            const anchor = document.getElementById("course-top-anchor");
-            if (anchor) {
-                anchor.scrollIntoView({ behavior: "smooth", block: "start" });
-            } else {
-                window.scrollTo({top: 0, behavior: "smooth"});
-            }
-        }
-    
-        // Initial attempt
-        scrollNow();
-    
-        // Retry after delayed widgets load (YouTube, tabs, etc)
-        setTimeout(scrollNow, 400);
-        setTimeout(scrollNow, 900);
-    });
-    </script>
-    """
-    
-    components.html(scroll_fix, height=0)
-
 
     # === ACTION BUTTONS ===
     col1, col2 = st.columns(2)
@@ -650,49 +623,64 @@ def page_course_detail():
     }
 
     
-    # === SAFE TAB AUTO SWITCH ===
+    # === FINAL FIXED AUTO TAB + AUTO SCROLL ===
+    import streamlit.components.v1 as components
+    
     if "tab_triggered" not in st.session_state:
         st.session_state.tab_triggered = False
     
     if active_tab in ["quiz", "assignment"] and not st.session_state.tab_triggered:
         target_index = tab_index.get(active_tab)
     
-        if target_index is not None:
-            js_code = f"""
-            <script>
-            setTimeout(function() {{
-                try {{
-                    const tabs = window.parent.document.querySelectorAll('button[data-baseweb="tab"]');
-                    if (tabs && tabs[{target_index}]) {{
-                        tabs[{target_index}].click();
-                    }}
+        js = f"""
+        <script>
+        function goTop() {{
+            const anchor = document.getElementById("course-top-anchor");
+            if(anchor) {{
+                anchor.scrollIntoView({{behavior:"smooth", block:"start"}});
+            }} else {{
+                window.scrollTo({{top:0, behavior:"smooth"}});
+            }}
+        }}
     
-                    // Scroll AFTER the tab switches
-                    setTimeout(function() {{
-                        const anchor = document.getElementById("course-top-anchor");
-                        if (anchor) {{
-                            anchor.scrollIntoView({{behavior: "smooth", block: "start"}});
-                        }} else {{
-                            window.scrollTo(0,0);
-                        }}
-                    }}, 350);
-    
-                }} catch(e) {{
-                    console.warn("Auto tab switch error:", e);
+        setTimeout(() => {{
+            try {{
+                const tabs = window.parent.document.querySelectorAll('button[data-baseweb="tab"]');
+                if (tabs && tabs[{target_index}]) {{
+                    tabs[{target_index}].click();
                 }}
-            }}, 450);
-            </script>
-            """
+            }} catch(e) {{ console.log(e); }}
+        }}, 300);
     
-            import streamlit.components.v1 as components
-            components.html(js_code, height=0)
+        setTimeout(goTop, 800);
+        setTimeout(goTop, 1500);
+        </script>
+        """
     
+        components.html(js, height=1)
         st.session_state.tab_triggered = True
+    
     else:
-        # Reset after manual navigation
         st.session_state.active_tab = None
     
-            
+    
+    # ===== ALWAYS FORCE SCROLL TO TOP WHEN ENTERING COURSE =====
+    components.html("""
+    <script>
+    setTimeout(()=>{
+        try{
+            const anchor=document.getElementById("course-top-anchor");
+            if(anchor){
+                anchor.scrollIntoView({behavior:"smooth", block:"start"});
+            }
+        }catch(e){}
+    },200);
+    
+    </script>
+    """, height=1)
+
+    
+    
     # =====================================
     # DASHBOARD
     # =====================================
@@ -2450,6 +2438,7 @@ def main():
 # === Panggil fungsi utama ===
 if __name__ == "__main__":
     main()
+
 
 
 
