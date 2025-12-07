@@ -2257,41 +2257,42 @@ def page_course_detail():
     if user["role"] == "instructor":
         with tabs[7]:
             st.subheader("👥 Daftar Siswa di Kursus Ini (Klik → lihat progress)")
-
-            # Gunakan ID course langsung dari data course yang sudah di-load di atas
-            course_id = c["id"]   # <= PENTING: jangan pakai cid_int lagi
-
-            # --- DEBUG: lihat dulu course_id & tipe datanya ---
-            st.caption(f"DEBUG course_id di tab Students: {course_id} ({type(course_id)})")
-
-            # Ambil semua enrollment untuk course ini
+    
+            # ---------- DEBUG COURSE ID ----------
+            st.write("DEBUG course_id di tab Students:", cid, type(cid))
+    
+            # ---------- Ambil enrollments ----------
             try:
                 enroll_resp = (
                     supabase.table("enrollments")
                     .select("user_id, role, course_id")
-                    .eq("course_id", course_id)
+                    .eq("course_id", int(cid))  # paksa ke int biar aman
                     .execute()
                 )
-                raw_enroll = enroll_resp.data or []
+                all_enroll = enroll_resp.data or []
             except Exception as e:
                 st.error("❌ Gagal memuat daftar enrollments:")
                 st.error(str(e))
-                return  # jangan st.stop supaya tab lain tetap aman
-
-            # TAMPILKAN DEBUG supaya kelihatan di semua course
-            st.markdown("**DEBUG enrollments untuk course ini:**")
-            st.write(raw_enroll)
-
-            # Buang yang role-nya instructor saja, sisanya anggap siswa
-            enroll = [e for e in raw_enroll if e.get("role") != "instructor"]
-
-            if not enroll:
+                return
+    
+            # tampilkan semua dulu
+            st.write("DEBUG enrollments mentah untuk course ini:")
+            st.json(all_enroll)
+    
+            # filter hanya yang role == student
+            enroll = [e for e in all_enroll if str(e.get("role", "")).lower() == "student"]
+    
+            st.write("DEBUG enrollments (hanya role=student):")
+            st.json(enroll)
+    
+            if len(enroll) == 0:
                 st.info("Belum ada siswa yang bergabung di kursus ini.")
                 return
-
+    
             student_ids = [e["user_id"] for e in enroll]
-
-            # Ambil data siswa (users)
+            st.write("DEBUG student_ids:", student_ids)
+    
+            # ---------- Ambil data users ----------
             try:
                 users_resp = (
                     supabase.table("users")
@@ -2304,13 +2305,21 @@ def page_course_detail():
                 st.error("❌ Gagal memuat data users:")
                 st.error(str(e))
                 return
-
-            # tombol pilih siswa + tombol kick
+    
+            st.write("DEBUG students dari tabel users:")
+            st.json(students)
+    
+            if len(students) == 0:
+                st.warning("Ada enrollment, tapi tidak menemukan data siswa di tabel users untuk ID berikut:")
+                st.json(student_ids)
+                return
+    
+            # ---------- Tampilkan kartu siswa + tombol ----------
             selected_student = st.session_state.get("selected_student", None)
-
+    
             for s in students:
                 col1, col2, col3 = st.columns([0.6, 0.25, 0.15])
-
+    
                 # DATA SISWA
                 with col1:
                     st.markdown(
@@ -2321,55 +2330,39 @@ def page_course_detail():
                             <small>{s.get('email','-')}</small><br>
                             <small>User ID: {s.get('id')}</small>
                         </div>
-                        """,
+                    """,
                         unsafe_allow_html=True,
                     )
-
+    
                 # LIHAT PROGRESS
                 with col2:
                     if st.button("Lihat Progress", key=f"progress_{s['id']}"):
                         st.session_state["selected_student"] = s["id"]
                         st.rerun()
-
+    
                 # KICK STUDENT
                 with col3:
                     if st.button("❌ Kick", key=f"kick_{s['id']}"):
                         try:
-                            supabase.table("enrollments").delete().eq("user_id", s["id"]).eq(
-                                "course_id", course_id
-                            ).execute()
+                            supabase.table("enrollments").delete().eq(
+                                "user_id", s["id"]
+                            ).eq("course_id", cid).execute()
                             st.success(f"🚪 {s['name']} berhasil dikeluarkan dari course.")
                             st.rerun()
                         except Exception as e:
                             st.error("❌ Gagal mengeluarkan siswa:")
                             st.error(str(e))
-
-            # Jika belum memilih siswa → stop setelah list tampil
+    
+            # Setelah list siswa, baru cek selected_student untuk progress
             selected_student = st.session_state.get("selected_student")
             if not selected_student:
                 st.info("Klik tombol **Lihat Progress** untuk melihat perkembangan siswa.")
                 return
-
+    
             st.markdown("---")
             st.markdown(f"## 📊 Progress Siswa — ID {selected_student}")
+            # ↓↓↓ lanjutkan dengan blok Kehadiran / Assignment / Quiz yang sudah ada punyamu
 
-            # ---------- Helper to safe fetch table ----------
-            def safe_fetch(table_name, select="*", filters=None):
-                try:
-                    rb = supabase.table(table_name).select(select)
-                    if filters:
-                        for f in filters:
-                            col, op, val = f
-                            if op == "eq":
-                                rb = rb.eq(col, val)
-                            elif op == "in":
-                                rb = rb.in_(col, val)
-                            elif op == "neq":
-                                rb = rb.neq(col, val)
-                    resp = rb.execute()
-                    return (resp.data or [], None)
-                except Exception as e:
-                    return (None, str(e))
 
             # ====================
             # 1) Kehadiran (attendance)
@@ -2534,6 +2527,7 @@ def main():
 # === Panggil fungsi utama ===
 if __name__ == "__main__":
     main()
+
 
 
 
