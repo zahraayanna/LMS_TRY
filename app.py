@@ -2265,11 +2265,13 @@ def page_course_detail():
             try:
                 users_resp = (
                     supabase.table("users")
-                    .select("id, name, email")
+                    .select("id, name, email, role")
                     .in_("id", student_ids)
+                    .eq("role", "student")       # filter di sini
                     .execute()
                 )
                 students = users_resp.data or []
+
             except Exception as e:
                 st.error("❌ Gagal memuat data users:")
                 st.error(str(e))
@@ -2527,6 +2529,7 @@ def main():
 # === Panggil fungsi utama ===
 if __name__ == "__main__":
     main()
+
 
 
 
