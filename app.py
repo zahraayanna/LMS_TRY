@@ -2262,34 +2262,37 @@ def page_course_detail():
             st.write("DEBUG course_id di tab Students:", cid, type(cid))
     
             # ---------- Ambil enrollments ----------
+            # 🔍 Ambil semua enrollment mentah untuk course ini (tanpa filter role dulu)
             try:
-                enroll_resp = (
+                raw_resp = (
                     supabase.table("enrollments")
-                    .select("user_id, role, course_id")
-                    .eq("course_id", int(cid))  # paksa ke int biar aman
+                    .select("id, user_id, role, course_id")
+                    .eq("course_id", cid)
                     .execute()
                 )
-                all_enroll = enroll_resp.data or []
+                raw_enroll = raw_resp.data or []
             except Exception as e:
                 st.error("❌ Gagal memuat daftar enrollments:")
                 st.error(str(e))
-                return
+                st.stop()
     
-            # tampilkan semua dulu
+            # DEBUG: tampilkan data enrollment mentah (boleh dihapus kalau sudah beres)
             st.write("DEBUG enrollments mentah untuk course ini:")
-            st.json(all_enroll)
+            st.json(raw_enroll)
     
-            # filter hanya yang role == student
-            enroll = [e for e in all_enroll if str(e.get("role", "")).lower() == "student"]
+            # 🎯 Ambil hanya yang benar-benar student (case-insensitive, buang spasi)
+            enroll = [
+                e for e in raw_enroll
+                if str(e.get("role", "")).strip().lower() == "student"
+            ]
     
-            st.write("DEBUG enrollments (hanya role=student):")
-            st.json(enroll)
-    
-            if len(enroll) == 0:
+            if not enroll:
                 st.info("Belum ada siswa yang bergabung di kursus ini.")
-                return
+                st.stop()
     
-            student_ids = [e["user_id"] for e in enroll]
+            # daftar id siswa dari enrollments yang sudah difilter
+            student_ids = [e["user_id"] for e in enroll if e.get("user_id") is not None]
+
             st.write("DEBUG student_ids:", student_ids)
     
             # ---------- Ambil data users ----------
@@ -2527,6 +2530,7 @@ def main():
 # === Panggil fungsi utama ===
 if __name__ == "__main__":
     main()
+
 
 
 
