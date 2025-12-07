@@ -2246,9 +2246,9 @@ def page_course_detail():
                     supabase.table("enrollments")
                     .select("user_id")
                     .eq("course_id", cid)
-                    .eq("role", "student")
                     .execute()
                 )
+
                 enroll = enroll_resp.data or []
             except Exception as e:
                 st.error("❌ Gagal memuat daftar enrollments:")
@@ -2527,6 +2527,7 @@ def main():
 # === Panggil fungsi utama ===
 if __name__ == "__main__":
     main()
+
 
 
 
