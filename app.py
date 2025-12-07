@@ -830,7 +830,8 @@ def page_course_detail():
     with tabs[2]:
         from datetime import datetime
         import markdown, re
-        import streamlit.components.v1 as components
+        # ⛔️ import components boleh dihapus kalau nanti nggak dipakai lagi
+        # import streamlit.components.v1 as components
     
         # --- Helper: gambar di tengah + caption dari alt text ---
         def center_images_with_caption(html: str) -> str:
@@ -869,8 +870,7 @@ def page_course_detail():
             return re.sub(pattern, repl, html)
     
         st.subheader("📦 Learning Activities")
-
-    
+        
         # === Pastikan CID valid ===
         if not cid:
             cid = st.session_state.get("current_course") or st.session_state.get("last_course")
@@ -987,15 +987,19 @@ def page_course_detail():
                             extensions=["fenced_code", "tables", "md_in_html"]
                         )
     
-                        # ⬇️ bikin semua <img> jadi figure di tengah + caption dari alt text
+                        # bikin semua <img> jadi figure di tengah + caption dari alt text
                         rendered_md = center_images_with_caption(rendered_md)
-        
-                        html_content = f"""
-                        <div style="font-size:16px; line-height:1.7; text-align:justify;">
-                            <article class="markdown-body">{rendered_md}</article>
-                        </div>
-                        """
-                        components.html(html_content, height=600, scrolling=True)
+    
+                        # TAMPILKAN PAKAI st.markdown (bukan components.html)
+                        st.markdown(
+                            f"""
+                            <div style="font-size:16px; line-height:1.7; text-align:justify;">
+                                <article class="markdown-body">{rendered_md}</article>
+                            </div>
+                            """,
+                            unsafe_allow_html=True,
+                        )
+
 
     
                     if m.get("video_url"):
@@ -2617,6 +2621,7 @@ def main():
 # === Panggil fungsi utama ===
 if __name__ == "__main__":
     main()
+
 
 
 
