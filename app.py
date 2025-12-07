@@ -1387,7 +1387,21 @@ def page_course_detail():
         import io, base64
     
         st.subheader("🧠 Quiz")
-    
+
+        MATHJAX_SNIPPET = """
+        <script>
+        window.MathJax = {
+          tex: {inlineMath: [['$', '$'], ['\\\\(','\\\\)']]}
+        };
+        </script>
+        <script id="MathJax-script" async
+          src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js">
+        </script>
+        """
+        
+        components.html(MATHJAX_SNIPPET, height=0, scrolling=False)
+        
+            
         # --- Helper: safe fetch quizzes for course ---
         def load_quizzes_for_course(course_id):
             return supabase.table("quizzes").select("*").eq("course_id", course_id).execute().data or []
@@ -1459,18 +1473,21 @@ def page_course_detail():
                             video_id = youtube_url.split("v=")[-1] if "v=" in youtube_url else youtube_url.split("/")[-1]
                             st.video(f"https://www.youtube.com/watch?v={video_id}")
                             desc = desc.replace(youtube_url, "")
-                        rendered_md = markdown.markdown(desc, extensions=["fenced_code", "tables", "md_in_html"])
+                        rendered_md = markdown.markdown(
+                            desc,
+                            extensions=["fenced_code", "tables", "md_in_html"]
+                        )
+                        
                         html_content = f"""
-                        <div style="font-size:16px; line-height:1.6;">
-                            <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
-                            <script id="MathJax-script" async
-                                src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js">
-                            </script>
+                        <div style="font-size:16px; line-height:1.6; max-width:900px; overflow-wrap:break-word;">
                             {rendered_md}
                         </div>
                         """
-                        components.html(html_content, height=0, scrolling=False)
-    
+                        
+                        # tinggi dibuat cukup besar + boleh scroll kalau kepanjangan
+                        components.html(html_content, height=300, scrolling=True)
+                        
+                            
                     # --- Instructor: Edit Quiz ---
                     if user["role"] == "instructor":
                         st.divider()
@@ -1510,21 +1527,24 @@ def page_course_detail():
     
                         for i, qs in enumerate(questions, 1):
                             st.markdown(f"**{i}.**")
-                            import markdown  # pastikan ini di bagian atas file
 
+                            q_text = qs.get("question", "") or ""
                             question_html = markdown.markdown(
-                                qs.get("question",""),
+                                q_text,
                                 extensions=["fenced_code", "tables", "md_in_html"]
                             )
+                            
+                            # tinggi dinamis tapi tanpa scroll
+                            base_height = 180
+                            extra_height = min(420, len(q_text) // 2)  # makin panjang soal, makin tinggi
+                            q_height = base_height + extra_height
+                            
                             components.html(f"""
-                            <div style="font-size:15px; line-height:1.6;">
-                            <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
-                            <script id="MathJax-script" async
-                                src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js">
-                            </script>
-                            {question_html}
+                            <div style="font-size:15px; line-height:1.6; max-width:900px; overflow-wrap:break-word;">
+                                {question_html}
                             </div>
-                            """, height=150, scrolling=True)
+                            """, height=q_height, scrolling=False)
+
                             
                                 
                             # rubric
@@ -2566,6 +2586,7 @@ def main():
 # === Panggil fungsi utama ===
 if __name__ == "__main__":
     main()
+
 
 
 
