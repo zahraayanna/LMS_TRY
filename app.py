@@ -2244,20 +2244,24 @@ def page_course_detail():
             try:
                 enroll_resp = (
                     supabase.table("enrollments")
-                    .select("user_id")
+                    .select("user_id, role")
                     .eq("course_id", cid)
                     .execute()
                 )
-
-                enroll = enroll_resp.data or []
+                raw_enroll = enroll_resp.data or []
             except Exception as e:
                 st.error("❌ Gagal memuat daftar enrollments:")
                 st.error(str(e))
                 st.stop()
-    
+            
+            # Kalau mau tetap pastikan yang tampil hanya student,
+            # filter-nya cukup di Python (kalau kolom role tidak ada / None, tetap dianggap student)
+            enroll = [e for e in raw_enroll if e.get("role", "student") == "student"]
+            
             if not enroll:
                 st.info("Belum ada siswa yang bergabung di kursus ini.")
                 st.stop()
+
     
             student_ids = [e["user_id"] for e in enroll]
     
@@ -2529,6 +2533,7 @@ def main():
 # === Panggil fungsi utama ===
 if __name__ == "__main__":
     main()
+
 
 
 
