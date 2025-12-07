@@ -2239,17 +2239,26 @@ def page_course_detail():
     if user["role"] == "instructor":
         with tabs[7]:
             st.subheader("👥 Daftar Siswa di Kursus Ini (Klik → lihat progress)")
-    
-            # Ambil semua siswa terdaftar
+
+            # ---------- CAST CID KE INT JIKA BISA ----------
+            try:
+                cid_int = int(cid)
+            except Exception:
+                cid_int = cid
+
+            # Ambil semua siswa terdaftar (tanpa filter role ketat)
             try:
                 enroll_resp = (
                     supabase.table("enrollments")
-                    .select("user_id, role")
-                    .eq("course_id", cid)
+                    .select("user_id, role, course_id")
+                    .eq("course_id", cid_int)
                     .execute()
                 )
                 raw_enroll = enroll_resp.data or []
-        
+
+                # 🔍 DEBUG SEMENTARA: LIHAT DATA ENROLL
+                st.write("DEBUG enrollments untuk course ini:", raw_enroll)
+
                 # Anggap semua yang BUKAN instructor adalah siswa
                 enroll = [e for e in raw_enroll if e.get("role") != "instructor"]
             except Exception as e:
@@ -2261,8 +2270,8 @@ def page_course_detail():
                 st.info("Belum ada siswa yang bergabung di kursus ini.")
                 st.stop()
 
-    
             student_ids = [e["user_id"] for e in enroll]
+
     
             # Ambil data siswa (users)
             try:
@@ -2537,6 +2546,7 @@ def main():
 # === Panggil fungsi utama ===
 if __name__ == "__main__":
     main()
+
 
 
 
