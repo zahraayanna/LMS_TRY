@@ -1478,14 +1478,13 @@ def page_course_detail():
                             extensions=["fenced_code", "tables", "md_in_html"]
                         )
                         
-                        html_content = f"""
-                        <div style="font-size:16px; line-height:1.6; max-width:900px; overflow-wrap:break-word;">
-                            {rendered_md}
-                        </div>
-                        """
-                        
-                        # tinggi dibuat cukup besar + boleh scroll kalau kepanjangan
-                        components.html(html_content, height=300, scrolling=True)
+                        st.markdown(
+                            f"<div style='font-size:16px; line-height:1.6; max-width:900px; overflow-wrap:break-word;'>"
+                            f"{rendered_md}"
+                            f"</div>",
+                            unsafe_allow_html=True,
+                        )
+
                         
                             
                     # --- Instructor: Edit Quiz ---
@@ -1534,19 +1533,14 @@ def page_course_detail():
                                 extensions=["fenced_code", "tables", "md_in_html"]
                             )
                             
-                            # tinggi dinamis tapi tanpa scroll
-                            base_height = 180
-                            extra_height = min(420, len(q_text) // 2)  # makin panjang soal, makin tinggi
-                            q_height = base_height + extra_height
-                            
-                            components.html(f"""
-                            <div style="font-size:15px; line-height:1.6; max-width:900px; overflow-wrap:break-word;">
-                                {question_html}
-                            </div>
-                            """, height=q_height, scrolling=False)
+                            st.markdown(
+                                f"<div style='font-size:15px; line-height:1.6; max-width:900px; overflow-wrap:break-word;'>"
+                                f"{question_html}"
+                                f"</div>",
+                                unsafe_allow_html=True,
+                            )
 
-                            
-                                
+              
                             # rubric
                             rubric_raw = qs.get("rubric","") or ""
                             rubric_data = None
@@ -1569,12 +1563,17 @@ def page_course_detail():
                                 
                                 # Render preview LaTeX / Markdown untuk setiap pilihan
                                 for idx, choice in enumerate(choices):
-                                    choice_html = markdown.markdown(choice, extensions=["fenced_code","md_in_html"])
-                                    components.html(f"""
-                                    <div style="font-size:14px; line-height:1.4;">
-                                    <b>{chr(65+idx)}.</b> {choice_html}
-                                    </div>
-                                    """, height=50, scrolling=False)
+                                    choice_html = markdown.markdown(
+                                        choice,
+                                        extensions=["fenced_code", "md_in_html"]
+                                    )
+                                    st.markdown(
+                                        f"<div style='font-size:14px; line-height:1.4; max-width:900px; overflow-wrap:break-word;'>"
+                                        f"<b>{chr(65+idx)}.</b> {choice_html}"
+                                        f"</div>",
+                                        unsafe_allow_html=True,
+                                    )
+
                                 
                                 # Dropdown tetap huruf A-E
                                 ans = st.selectbox(
@@ -2586,6 +2585,7 @@ def main():
 # === Panggil fungsi utama ===
 if __name__ == "__main__":
     main()
+
 
 
 
