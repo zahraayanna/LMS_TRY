@@ -836,18 +836,41 @@ def page_course_detail():
     
         def render_md_with_latex(md_text: str):
             """
-            Render markdown yang mungkin berisi baris latex dengan $$...$$
-            Baris penuh $$...$$ -> st.latex
-            Baris lain -> st.markdown (bisa berisi gambar, list, dll.)
+            - Perbaiki heading markdown yang ditulis tanpa spasi (#Judul -> # Judul)
+            - Ubah gambar markdown ![alt](url) jadi figure di tengah + caption
+            - Baris penuh $$...$$ -> st.latex
+            - Baris lain -> st.markdown (boleh mengandung HTML)
             """
             if not md_text:
                 return
-    
+        
+            # 1) Otomatis tambahkan spasi setelah # kalau belum ada
+            #    "#Sejarah..." -> "# Sejarah..."
+            md_text = re.sub(r'^(#{1,6})(\S)', r'\1 \2', md_text, flags=re.MULTILINE)
+        
+            # 2) Ubah sintaks gambar markdown jadi <figure> center + caption
+            def img_repl(m):
+                alt_text = m.group(1) or ""
+                src = m.group(2)
+                caption = alt_text or "Gambar"
+        
+                return f"""
+        <figure style="text-align:center; margin:20px 0;">
+            <img src="{src}" alt="{caption}"
+                 style="max-width:70%; height:auto; border-radius:6px;">
+            <figcaption style="font-size:14px; color:#555; margin-top:8px;">
+                {caption}
+            </figcaption>
+        </figure>
+        """.strip()
+        
+            md_text = re.sub(r'!\[([^\]]*)\]\(([^)]+)\)', img_repl, md_text)
+        
+            # 3) Render latex dan markdown
             lines = md_text.splitlines()
             buffer = []
-    
+        
             for line in lines:
-                # baris yang isinya murni $$ ... $$
                 m = re.match(r'^\s*\$\$(.+?)\$\$\s*$', line)
                 if m:
                     if buffer:
@@ -856,10 +879,10 @@ def page_course_detail():
                     st.latex(m.group(1))
                 else:
                     buffer.append(line)
-    
+        
             if buffer:
                 st.markdown("\n".join(buffer), unsafe_allow_html=True)
-    
+        
         st.subheader("📦 Learning Activities")
 
         
@@ -2599,6 +2622,7 @@ def main():
 # === Panggil fungsi utama ===
 if __name__ == "__main__":
     main()
+
 
 
 
