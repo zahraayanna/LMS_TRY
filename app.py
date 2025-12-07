@@ -2273,17 +2273,28 @@ def page_course_detail():
                 enroll_resp = (
                     supabase.table("enrollments")
                     .select("user_id, role, course_id")
-                    .eq("course_id", cid_int)
                     .execute()
                 )
-                enroll = enroll_resp.data or []
+                all_enroll = enroll_resp.data or []
             except Exception as e:
                 st.error("❌ Gagal memuat daftar enrollments:")
                 st.error(str(e))
                 st.stop()
-
-            st.caption("DEBUG enrollments untuk course ini:")
+            
+            # DEBUG: tampilkan semua enroll supaya kelihatan isinya
+            st.caption("DEBUG: SEMUA baris di tabel enrollments:")
+            st.json(all_enroll)
+            
+            # Filter khusus course ini + role student
+            enroll = [
+                e for e in all_enroll
+                if e.get("course_id") == cid_int
+                   and str(e.get("role", "")).lower() == "student"
+            ]
+            
+            st.caption("DEBUG: enrollments untuk course ini setelah filter di Python:")
             st.json(enroll)
+
 
             # Filter hanya yang role-nya 'student' (case-insensitive, jaga-jaga)
             enroll_students = [
@@ -2545,6 +2556,7 @@ def main():
 # === Panggil fungsi utama ===
 if __name__ == "__main__":
     main()
+
 
 
 
