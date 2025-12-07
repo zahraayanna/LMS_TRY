@@ -832,7 +832,44 @@ def page_course_detail():
         import markdown, re
         import streamlit.components.v1 as components
     
+        # --- Helper: gambar di tengah + caption dari alt text ---
+        def center_images_with_caption(html: str) -> str:
+            """
+            Mencari <p><img ...></p> lalu membungkusnya jadi <figure> yang center
+            dan memakai alt-text sebagai caption.
+            """
+            def repl(m):
+                img_tag = m.group(1)
+    
+                # ambil alt text untuk caption
+                alt_m = re.search(r'alt="([^"]*)"', img_tag)
+                alt_text = alt_m.group(1) if alt_m else ""
+    
+                # tambahkan style ke img (max-width dll)
+                styled_img = re.sub(
+                    r"<img",
+                    '<img style="max-width:70%; height:auto; border-radius:6px;"',
+                    img_tag,
+                    count=1,
+                )
+    
+                caption = alt_text or "Gambar"
+    
+                return f"""
+                <figure style="text-align:center; margin:20px 0;">
+                    {styled_img}
+                    <figcaption style="font-size:14px; color:#555; margin-top:8px;">
+                        {caption}
+                    </figcaption>
+                </figure>
+                """
+    
+            # cari pola <p><img ...></p>
+            pattern = r"<p>\s*(<img[^>]*>)\s*</p>"
+            return re.sub(pattern, repl, html)
+    
         st.subheader("📦 Learning Activities")
+
     
         # === Pastikan CID valid ===
         if not cid:
@@ -944,18 +981,22 @@ def page_course_detail():
                         height = match.group(3) or "315"
                         return f'<div style="text-align:center; margin:16px 0;"><iframe src="{src}" width="{width}" height="{height}" frameborder="0" allowfullscreen></iframe></div>'
     
-                    content_with_embeds = re.sub(embed_pattern, replace_embed, raw_content)
-                    rendered_md = markdown.markdown(content_with_embeds, extensions=["fenced_code", "tables", "md_in_html"])
+                        content_with_embeds = re.sub(embed_pattern, replace_embed, raw_content)
+                        rendered_md = markdown.markdown(
+                            content_with_embeds,
+                            extensions=["fenced_code", "tables", "md_in_html"]
+                        )
     
-                    html_content = f"""
-                    <div style="font-size:16px; line-height:1.7; text-align:justify;">
-                        <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
-                        <script id="MathJax-script" async
-                            src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
-                        <article class="markdown-body">{rendered_md}</article>
-                    </div>
-                    """
-                    components.html(html_content, height=600, scrolling=True)
+                        # ⬇️ bikin semua <img> jadi figure di tengah + caption dari alt text
+                        rendered_md = center_images_with_caption(rendered_md)
+        
+                        html_content = f"""
+                        <div style="font-size:16px; line-height:1.7; text-align:justify;">
+                            <article class="markdown-body">{rendered_md}</article>
+                        </div>
+                        """
+                        components.html(html_content, height=600, scrolling=True)
+
     
                     if m.get("video_url"):
                         st.video(m["video_url"])
@@ -2576,6 +2617,7 @@ def main():
 # === Panggil fungsi utama ===
 if __name__ == "__main__":
     main()
+
 
 
 
