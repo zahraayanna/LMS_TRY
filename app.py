@@ -1385,23 +1385,38 @@ def page_course_detail():
         from datetime import datetime
         from PIL import Image
         import io, base64
-    
-        st.subheader("🧠 Quiz")
 
-        MATHJAX_SNIPPET = """
-        <script>
-        window.MathJax = {
-          tex: {inlineMath: [['$', '$'], ['\\\\(','\\\\)']]}
-        };
-        </script>
-        <script id="MathJax-script" async
-          src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js">
-        </script>
-        """
+        def render_md_with_latex(md_text: str):
+            """
+            Render markdown yang mungkin berisi baris latex dengan $$...$$
+            Baris yang full $$...$$ -> st.latex
+            Baris lain -> st.markdown
+            """
+            if not md_text:
+                return
         
-        components.html(MATHJAX_SNIPPET, height=0, scrolling=False)
+            lines = md_text.splitlines()
+            buffer = []
+        
+            for line in lines:
+                m = re.match(r'^\s*\$\$(.+?)\$\$\s*$', line)
+                if m:
+                    # kalau ada teks biasa yang sudah dikumpulkan, render dulu
+                    if buffer:
+                        st.markdown("\n".join(buffer))
+                        buffer = []
+                    # render latex tanpa $$-nya
+                    st.latex(m.group(1))
+                else:
+                    buffer.append(line)
+        
+            # sisa teks biasa
+            if buffer:
+                st.markdown("\n".join(buffer))
         
             
+        st.subheader("🧠 Quiz")
+
         # --- Helper: safe fetch quizzes for course ---
         def load_quizzes_for_course(course_id):
             return supabase.table("quizzes").select("*").eq("course_id", course_id).execute().data or []
@@ -1473,20 +1488,11 @@ def page_course_detail():
                             video_id = youtube_url.split("v=")[-1] if "v=" in youtube_url else youtube_url.split("/")[-1]
                             st.video(f"https://www.youtube.com/watch?v={video_id}")
                             desc = desc.replace(youtube_url, "")
-                        rendered_md = markdown.markdown(
-                            desc,
-                            extensions=["fenced_code", "tables", "md_in_html"]
-                        )
+                       st.markdown("### 📘 Quiz Description:")
                         
-                        st.markdown(
-                            f"<div style='font-size:16px; line-height:1.6; max-width:900px; overflow-wrap:break-word;'>"
-                            f"{rendered_md}"
-                            f"</div>",
-                            unsafe_allow_html=True,
-                        )
-
-                        
-                            
+                        # langsung render markdown + latex
+                        render_md_with_latex(desc)
+                               
                     # --- Instructor: Edit Quiz ---
                     if user["role"] == "instructor":
                         st.divider()
@@ -1528,19 +1534,8 @@ def page_course_detail():
                             st.markdown(f"**{i}.**")
 
                             q_text = qs.get("question", "") or ""
-                            question_html = markdown.markdown(
-                                q_text,
-                                extensions=["fenced_code", "tables", "md_in_html"]
-                            )
-                            
-                            st.markdown(
-                                f"<div style='font-size:15px; line-height:1.6; max-width:900px; overflow-wrap:break-word;'>"
-                                f"{question_html}"
-                                f"</div>",
-                                unsafe_allow_html=True,
-                            )
+                            render_md_with_latex(q_text)
 
-              
                             # rubric
                             rubric_raw = qs.get("rubric","") or ""
                             rubric_data = None
@@ -1563,17 +1558,8 @@ def page_course_detail():
                                 
                                 # Render preview LaTeX / Markdown untuk setiap pilihan
                                 for idx, choice in enumerate(choices):
-                                    choice_html = markdown.markdown(
-                                        choice,
-                                        extensions=["fenced_code", "md_in_html"]
-                                    )
-                                    st.markdown(
-                                        f"<div style='font-size:14px; line-height:1.4; max-width:900px; overflow-wrap:break-word;'>"
-                                        f"<b>{chr(65+idx)}.</b> {choice_html}"
-                                        f"</div>",
-                                        unsafe_allow_html=True,
-                                    )
-
+                                    st.markdown(f"**{chr(65+idx)}.**")
+                                    render_md_with_latex(choice)
                                 
                                 # Dropdown tetap huruf A-E
                                 ans = st.selectbox(
@@ -2585,6 +2571,7 @@ def main():
 # === Panggil fungsi utama ===
 if __name__ == "__main__":
     main()
+
 
 
 
