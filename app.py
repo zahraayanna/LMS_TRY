@@ -2258,57 +2258,52 @@ def page_course_detail():
         with tabs[7]:
             st.subheader("👥 Daftar Siswa di Kursus Ini (Klik → lihat progress)")
 
-            # --- DEBUG: cek tipe dan nilai cid ---
-            st.caption(f"DEBUG course_id di tab Students: {cid} ({type(cid)})")
-
-            # Pastikan cid integer
+            # --- pastikan course_id valid ---
+            cid_raw = cid
             try:
-                cid_int = int(cid)
+                cid_int = int(cid_raw) if cid_raw is not None else None
             except Exception:
-                st.error(f"course_id tidak bisa di-cast ke int: {cid}")
+                cid_int = None
+
+            st.caption(f"DEBUG course_id di tab Students: {cid_raw} ({type(cid_raw)})")
+
+            if cid_int is None:
+                st.error("❌ course_id tidak valid di tab Students.")
                 st.stop()
 
-            # --- Ambil semua enrollments untuk course ini ---
+            # ==========================
+            # 1. AMBIL ENROLLMENTS
+            # ==========================
             try:
                 enroll_resp = (
                     supabase.table("enrollments")
                     .select("user_id, role, course_id")
+                    .eq("course_id", cid_int)
                     .execute()
                 )
-                all_enroll = enroll_resp.data or []
+                enroll_rows = enroll_resp.data or []
             except Exception as e:
                 st.error("❌ Gagal memuat daftar enrollments:")
-                st.error(str(e))
-                st.stop()
-            
-            # DEBUG: tampilkan semua enroll supaya kelihatan isinya
-            st.caption("DEBUG: SEMUA baris di tabel enrollments:")
-            st.json(all_enroll)
-            
-            # Filter khusus course ini + role student
-            enroll = [
-                e for e in all_enroll
-                if e.get("course_id") == cid_int
-                   and str(e.get("role", "")).lower() == "student"
-            ]
-            
-            st.caption("DEBUG: enrollments untuk course ini setelah filter di Python:")
-            st.json(enroll)
-
-
-            # Filter hanya yang role-nya 'student' (case-insensitive, jaga-jaga)
-            enroll_students = [
-                e for e in enroll
-                if str(e.get("role", "")).lower() == "student"
-            ]
-
-            if not enroll_students:
-                st.info("Belum ada siswa yang bergabung di kursus ini.")
+                st.code(str(e))
                 st.stop()
 
-            student_ids = [e["user_id"] for e in enroll_students]
+            st.caption("DEBUG enrollments untuk course ini:")
+            st.json(enroll_rows)
 
-            # --- Ambil data siswa (users) ---
+            # filter hanya yang benar-benar student (abaikan spasi / kapital)
+            student_ids = [
+                row["user_id"]
+                for row in enroll_rows
+                if str(row.get("role", "")).strip().lower() == "student"
+            ]
+
+            if not student_ids:
+                st.info("Belum ada siswa (role='student') yang bergabung di kursus ini.")
+                st.stop()
+
+            # ==========================
+            # 2. AMBIL DATA USER SISWA
+            # ==========================
             try:
                 users_resp = (
                     supabase.table("users")
@@ -2319,21 +2314,22 @@ def page_course_detail():
                 students = users_resp.data or []
             except Exception as e:
                 st.error("❌ Gagal memuat data users:")
-                st.error(str(e))
+                st.code(str(e))
                 st.stop()
 
             if not students:
-                st.info("Enrollment ada, tapi data users kosong.")
-                st.json(enroll_students)
+                st.warning("Enrollments ada, tapi data users tidak ditemukan.")
                 st.stop()
 
-            # --- Tombol pilih siswa + kick ---
-            selected_student = st.session_state.get("selected_student", None)
+            # --------------------------
+            # TOMBOL LIST SISWA
+            # --------------------------
+            selected_student = st.session_state.get("selected_student")
 
             for s in students:
                 col1, col2, col3 = st.columns([0.6, 0.25, 0.15])
 
-                # DATA SISWA
+                # kartu siswa
                 with col1:
                     st.markdown(
                         f"""
@@ -2347,26 +2343,30 @@ def page_course_detail():
                         unsafe_allow_html=True,
                     )
 
-                # LIHAT PROGRESS
+                # tombol lihat progress
                 with col2:
                     if st.button("Lihat Progress", key=f"progress_{s['id']}"):
                         st.session_state["selected_student"] = s["id"]
                         st.rerun()
 
-                # KICK STUDENT
+                # tombol kick
                 with col3:
                     if st.button("❌ Kick", key=f"kick_{s['id']}"):
                         try:
-                            supabase.table("enrollments").delete().eq(
-                                "user_id", s["id"]
-                            ).eq("course_id", cid_int).execute()
+                            (
+                                supabase.table("enrollments")
+                                .delete()
+                                .eq("user_id", s["id"])
+                                .eq("course_id", cid_int)
+                                .execute()
+                            )
                             st.success(f"🚪 {s['name']} berhasil dikeluarkan dari course.")
                             st.rerun()
                         except Exception as e:
                             st.error("❌ Gagal mengeluarkan siswa:")
-                            st.error(str(e))
+                            st.code(str(e))
 
-            # ---------- Jika belum memilih siswa ----------
+            # kalau belum pilih siswa → berhenti di sini
             selected_student = st.session_state.get("selected_student")
             if not selected_student:
                 st.info("Klik tombol **Lihat Progress** untuk melihat perkembangan siswa.")
@@ -2375,7 +2375,7 @@ def page_course_detail():
             st.markdown("---")
             st.markdown(f"## 📊 Progress Siswa — ID {selected_student}")
 
-            # ---------- Helper safe_fetch ----------
+            # ---------- helper fetch ----------
             def safe_fetch(table_name, select="*", filters=None):
                 try:
                     rb = supabase.table(table_name).select(select)
@@ -2392,7 +2392,7 @@ def page_course_detail():
                 except Exception as e:
                     return (None, str(e))
 
-            # ===== 1) Kehadiran =====
+            # === 1) ATTENDANCE ===
             st.markdown("### 🕒 Kehadiran")
             att_data, err = safe_fetch(
                 "attendance",
@@ -2401,12 +2401,11 @@ def page_course_detail():
             )
             if err:
                 st.error("❌ Gagal memuat data attendance:")
-                st.error(err)
+                st.code(err)
             else:
                 total = len(att_data)
                 hadir = sum(
-                    1 for a in att_data
-                    if str(a.get("status", "")).lower() == "present"
+                    1 for a in att_data if str(a.get("status", "")).lower() == "present"
                 )
                 percent = round((hadir / total) * 100, 2) if total > 0 else 0
                 st.write(f"Hadir **{hadir}/{total}** — **{percent}%**")
@@ -2415,7 +2414,7 @@ def page_course_detail():
                         f"- Sesi {a.get('session_id')} — {a.get('status')} — {a.get('timestamp')}"
                     )
 
-            # ===== 2) Assignments =====
+            # === 2) ASSIGNMENTS ===
             st.markdown("### 📝 Tugas / Assignment")
             assigns, err = safe_fetch(
                 "assignments", select="id,title", filters=[("course_id", "eq", cid_int)]
@@ -2446,7 +2445,7 @@ def page_course_detail():
             else:
                 st.info("Belum ada assignment untuk course ini.")
 
-            # ===== 3) Quiz =====
+            # === 3) QUIZ ===
             st.markdown("### 🧠 Quiz")
             quizzes, errq = safe_fetch(
                 "quizzes", select="id,title", filters=[("course_id", "eq", cid_int)]
@@ -2471,9 +2470,7 @@ def page_course_detail():
                                 "✅ Selesai" if submitted_time else "❌ Belum mengerjakan"
                             )
                             time_str = (
-                                f"waktu: {submitted_time}"
-                                if submitted_time
-                                else ""
+                                f"waktu: {submitted_time}" if submitted_time else ""
                             )
                             st.markdown(
                                 f"- Skor: {at.get('score','-')} — {status} {time_str} — Attempt #{at.get('attempt_number','-')}"
@@ -2482,6 +2479,7 @@ def page_course_detail():
                         st.markdown(f"- **{q['title']}** — ❌ Belum mengerjakan")
             else:
                 st.info("Belum ada quiz pada course ini.")
+
 
 
 
@@ -2556,6 +2554,7 @@ def main():
 # === Panggil fungsi utama ===
 if __name__ == "__main__":
     main()
+
 
 
 
