@@ -1510,8 +1510,23 @@ def page_course_detail():
     
                         for i, qs in enumerate(questions, 1):
                             st.markdown(f"**{i}.**")
-                            st.markdown(f"<div style='font-size:15px; line-height:1.6;'>{qs.get('question','')}</div>", unsafe_allow_html=True)
-    
+                            import markdown  # pastikan ini di bagian atas file
+
+                            question_html = markdown.markdown(
+                                qs.get("question",""),
+                                extensions=["fenced_code", "tables", "md_in_html"]
+                            )
+                            components.html(f"""
+                            <div style="font-size:15px; line-height:1.6;">
+                            <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+                            <script id="MathJax-script" async
+                                src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js">
+                            </script>
+                            {question_html}
+                            </div>
+                            """, height=150, scrolling=True)
+                            
+                                
                             # rubric
                             rubric_raw = qs.get("rubric","") or ""
                             rubric_data = None
@@ -1531,16 +1546,26 @@ def page_course_detail():
                                 # parse choices and limit to A-E
                                 raw_choices = [c.strip() for c in (qs.get("choices","") or "").split("|") if c.strip()]
                                 choices = raw_choices[:5]  # A..E
-                                # build labels
-                                labeled_choices = [f"{chr(65+idx)}. {choice}" for idx, choice in enumerate(choices)]
-                                # selectbox shows labeled choices
+                                
+                                # Render preview LaTeX / Markdown untuk setiap pilihan
+                                for idx, choice in enumerate(choices):
+                                    choice_html = markdown.markdown(choice, extensions=["fenced_code","md_in_html"])
+                                    components.html(f"""
+                                    <div style="font-size:14px; line-height:1.4;">
+                                    <b>{chr(65+idx)}.</b> {choice_html}
+                                    </div>
+                                    """, height=50, scrolling=False)
+                                
+                                # Dropdown tetap huruf A-E
                                 ans = st.selectbox(
                                     "Pilih jawaban:",
-                                    ["-- pilih jawaban --"] + labeled_choices,
+                                    ["-- pilih jawaban --"] + [chr(65+idx) for idx in range(len(choices))],
                                     key=f"ans_{qs['id']}"
                                 )
-                                # store only the letter (A-E) or "" if none selected
-                                answers[qs["id"]] = "" if ans.startswith("--") else ans.split(".")[0].strip().upper()
+                                
+                                # Store selected letter
+                                answers[qs["id"]] = "" if ans.startswith("--") else ans.strip().upper()
+
     
                                 # store normalized correct answer for later (ensure single letter A-E if possible)
                                 normalized_correct_map[qs["id"]] = normalize_correct_answer(qs.get("correct_answer",""), qs.get("choices",""))
@@ -2541,6 +2566,7 @@ def main():
 # === Panggil fungsi utama ===
 if __name__ == "__main__":
     main()
+
 
 
 
