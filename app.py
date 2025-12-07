@@ -2271,9 +2271,10 @@ def page_course_detail():
                     supabase.table("users")
                     .select("id, name, email, role")
                     .in_("id", student_ids)
-                    .eq("role", "student")       # filter di sini
                     .execute()
                 )
+                students = users_resp.data or []
+
                 students = users_resp.data or []
 
             except Exception as e:
@@ -2285,7 +2286,13 @@ def page_course_detail():
             selected_student = st.session_state.get("selected_student", None)
     
             for s in students:
+                # lewati kalau bukan student
+                if s.get("role") != "student":
+                    continue
+            
                 col1, col2, col3 = st.columns([0.6, 0.25, 0.15])
+                ...
+
     
                 # DATA SISWA
                 with col1:
@@ -2533,6 +2540,7 @@ def main():
 # === Panggil fungsi utama ===
 if __name__ == "__main__":
     main()
+
 
 
 
