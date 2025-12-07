@@ -2301,7 +2301,7 @@ def page_course_detail():
                         st.session_state["selected_student"] = s["id"]
                         st.rerun()
     
-                # KICK STUDENT (FITUR BARU)
+                # KICK STUDENT
                 with col3:
                     if st.button("❌ Kick", key=f"kick_{s['id']}"):
                         try:
@@ -2366,25 +2366,39 @@ def page_course_detail():
                     )
     
             # ====================
-            # 2) Assignments
+            # 2) Assignments (OPTIMIZED)
             # ====================
             st.markdown("### 📝 Tugas / Assignment")
     
             assigns, err = safe_fetch(
                 "assignments", select="id,title", filters=[("course_id", "eq", cid)]
             )
-            if not err and assigns:
+            if err:
+                st.error("❌ Gagal memuat daftar assignment:")
+                st.error(err)
+            elif not assigns:
+                st.info("Belum ada assignment untuk course ini.")
+            else:
+                assignment_ids = [a["id"] for a in assigns]
+    
+                # ambil semua submission siswa ini untuk semua assignment dalam 1 query
+                subs_all, e2 = safe_fetch(
+                    "assignment_submissions",
+                    select="id,assignment_id,user_id,score,file_url,submitted_at",
+                    filters=[
+                        ("user_id", "eq", selected_student),
+                        ("assignment_id", "in", assignment_ids),
+                    ],
+                )
+    
+                subs_by_asg = {}
+                if not e2 and subs_all:
+                    for srow in subs_all:
+                        subs_by_asg[srow["assignment_id"]] = srow
+    
                 for a in assigns:
-                    subs, e2 = safe_fetch(
-                        "assignment_submissions",
-                        select="id,assignment_id,user_id,score,file_url,submitted_at",
-                        filters=[
-                            ("assignment_id", "eq", a["id"]),
-                            ("user_id", "eq", selected_student),
-                        ],
-                    )
-                    if subs:
-                        s0 = subs[0]
+                    s0 = subs_by_asg.get(a["id"])
+                    if s0:
                         score = s0.get("score")
                         if score is None:
                             st.markdown(
@@ -2396,31 +2410,43 @@ def page_course_detail():
                             )
                     else:
                         st.markdown(f"- **{a['title']}** — ❌ Belum mengumpulkan")
-            else:
-                st.info("Belum ada assignment untuk course ini.")
     
             # ====================
-            # 3) Quiz
+            # 3) Quiz (SATU BLOK SAJA, TIDAK DOBEL)
             # ====================
             st.markdown("### 🧠 Quiz")
     
             quizzes, errq = safe_fetch(
                 "quizzes", select="id,title", filters=[("course_id", "eq", cid)]
             )
-            if not errq and quizzes:
-                for q in quizzes:
-                    attempts, aerr = safe_fetch(
-                        "quiz_attempts",
-                        select="id,quiz_id,user_id,score,submitted_at,attempt_number",
-                        filters=[
-                            ("quiz_id", "eq", q["id"]),
-                            ("user_id", "eq", selected_student),
-                        ],
-                    )
+            if errq:
+                st.error("❌ Gagal memuat daftar quiz:")
+                st.error(errq)
+            elif not quizzes:
+                st.info("Belum ada quiz pada course ini.")
+            else:
+                quiz_ids = [q["id"] for q in quizzes]
     
-                    if attempts:
-                        st.markdown(f"**{q['title']}** — Total percobaan: {len(attempts)}")
-                        for at in attempts:
+                # ambil semua attempt siswa ini untuk semua quiz dalam 1 query
+                attempts_all, aerr = safe_fetch(
+                    "quiz_attempts",
+                    select="id,quiz_id,user_id,score,submitted_at,attempt_number",
+                    filters=[
+                        ("user_id", "eq", selected_student),
+                        ("quiz_id", "in", quiz_ids),
+                    ],
+                )
+    
+                attempts_by_quiz = {}
+                if not aerr and attempts_all:
+                    for at in attempts_all:
+                        attempts_by_quiz.setdefault(at["quiz_id"], []).append(at)
+    
+                for q in quizzes:
+                    ats = attempts_by_quiz.get(q["id"], [])
+                    if ats:
+                        st.markdown(f"**{q['title']}** — Total percobaan: {len(ats)}")
+                        for at in ats:
                             submitted_time = at.get("submitted_at")
                             status = "✅ Selesai" if submitted_time else "❌ Belum mengerjakan"
                             time_str = f"waktu: {submitted_time}" if submitted_time else ""
@@ -2429,38 +2455,7 @@ def page_course_detail():
                             )
                     else:
                         st.markdown(f"- **{q['title']}** — ❌ Belum mengerjakan")
-            else:
-                st.info("Belum ada quiz pada course ini.")
 
-    
-            # ====================
-            # 3) Quiz
-            # ====================
-            st.markdown("### 🧠 Quiz")
-    
-            quizzes, errq = safe_fetch(
-                "quizzes", select="id,title", filters=[("course_id", "eq", cid)]
-            )
-            if not errq and quizzes:
-                for q in quizzes:
-                    attempts, aerr = safe_fetch(
-                        "quiz_attempts",
-                        select="id,quiz_id,user_id,score,attempted_at",
-                        filters=[
-                            ("quiz_id", "eq", q["id"]),
-                            ("user_id", "eq", selected_student),
-                        ],
-                    )
-    
-                    if attempts:
-                        for at in attempts:
-                            st.markdown(
-                                f"- **{q['title']}** — Skor: {at.get('score')} — waktu: {at.get('attempted_at')}"
-                            )
-                    else:
-                        st.markdown(f"- **{q['title']}** — ❌ Belum mengerjakan")
-            else:
-                st.info("Belum ada quiz pada course ini.")
 
 
 def page_account(): 
@@ -2532,6 +2527,7 @@ def main():
 # === Panggil fungsi utama ===
 if __name__ == "__main__":
     main()
+
 
 
 
