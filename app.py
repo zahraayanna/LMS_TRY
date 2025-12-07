@@ -1725,26 +1725,26 @@ def page_course_detail():
                                     total_manual_max = 0.0
                                     total_manual_obtained = 0.0
                                     for idx_q, ans_row in enumerate(answers_for_attempt,1):
-                                                # Ambil data soal dengan aman (kalau error, jangan bikin app crash)
-                                                try:
-                                                    qrec_resp = (
-                                                        supabase.table("quiz_questions")
-                                                        .select("*")
-                                                        .eq("id", ans_row["question_id"])
-                                                        .execute()
-                                                    )
-                                                    qrec_list = qrec_resp.data or []
-                                                    qrec = qrec_list[0] if qrec_list else {}
-                                                except Exception as e:
-                                                    st.warning(
-                                                        f"Gagal memuat data soal (question_id={ans_row.get('question_id')}): {e}"
-                                                    )
-                                                    qrec = {}
+                                    # Ambil data soal dengan aman (kalau error, jangan bikin app crash)
+                                        try:
+                                            qrec_resp = (
+                                                supabase.table("quiz_questions")
+                                                .select("*")
+                                                .eq("id", ans_row["question_id"])
+                                                .execute()
+                                            )
+                                            qrec_list = qrec_resp.data or []
+                                            qrec = qrec_list[0] if qrec_list else {}
+                                        except Exception as e:
+                                            st.warning(
+                                                f"Gagal memuat data soal (question_id={ans_row.get('question_id')}): {e}"
+                                            )
+                                            qrec = {}
                                         
-                                                qtext_html = markdown.markdown(
-                                                    qrec.get("question", ""),
-                                                    extensions=["fenced_code", "md_in_html"]
-                                                )
+                                        qtext_html = markdown.markdown(
+                                            qrec.get("question", ""),
+                                            extensions=["fenced_code", "md_in_html"]
+                                        )
 
                                         st.markdown(f"**Soal {idx_q}:**")
                                         st.components.v1.html(f"<div style='font-size:14px;'>{qtext_html}</div>", height=110, scrolling=False)
@@ -2534,6 +2534,7 @@ def main():
 # === Panggil fungsi utama ===
 if __name__ == "__main__":
     main()
+
 
 
 
