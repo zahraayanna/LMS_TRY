@@ -830,46 +830,38 @@ def page_course_detail():
     with tabs[2]:
         from datetime import datetime
         import markdown, re
-        # ⛔️ import components boleh dihapus kalau nanti nggak dipakai lagi
+        # components sebenernya sudah nggak kepakai kalau kita tidak pakai components.html
+        # boleh kamu hapus baris di bawah ini kalau sudah yakin
         # import streamlit.components.v1 as components
     
-        # --- Helper: gambar di tengah + caption dari alt text ---
-        def center_images_with_caption(html: str) -> str:
+        def render_md_with_latex(md_text: str):
             """
-            Mencari <p><img ...></p> lalu membungkusnya jadi <figure> yang center
-            dan memakai alt-text sebagai caption.
+            Render markdown yang mungkin berisi baris latex dengan $$...$$
+            Baris penuh $$...$$ -> st.latex
+            Baris lain -> st.markdown (bisa berisi gambar, list, dll.)
             """
-            def repl(m):
-                img_tag = m.group(1)
+            if not md_text:
+                return
     
-                # ambil alt text untuk caption
-                alt_m = re.search(r'alt="([^"]*)"', img_tag)
-                alt_text = alt_m.group(1) if alt_m else ""
+            lines = md_text.splitlines()
+            buffer = []
     
-                # tambahkan style ke img (max-width dll)
-                styled_img = re.sub(
-                    r"<img",
-                    '<img style="max-width:70%; height:auto; border-radius:6px;"',
-                    img_tag,
-                    count=1,
-                )
+            for line in lines:
+                # baris yang isinya murni $$ ... $$
+                m = re.match(r'^\s*\$\$(.+?)\$\$\s*$', line)
+                if m:
+                    if buffer:
+                        st.markdown("\n".join(buffer), unsafe_allow_html=True)
+                        buffer = []
+                    st.latex(m.group(1))
+                else:
+                    buffer.append(line)
     
-                caption = alt_text or "Gambar"
-    
-                return f"""
-                <figure style="text-align:center; margin:20px 0;">
-                    {styled_img}
-                    <figcaption style="font-size:14px; color:#555; margin-top:8px;">
-                        {caption}
-                    </figcaption>
-                </figure>
-                """
-    
-            # cari pola <p><img ...></p>
-            pattern = r"<p>\s*(<img[^>]*>)\s*</p>"
-            return re.sub(pattern, repl, html)
+            if buffer:
+                st.markdown("\n".join(buffer), unsafe_allow_html=True)
     
         st.subheader("📦 Learning Activities")
+
         
         # === Pastikan CID valid ===
         if not cid:
@@ -974,34 +966,20 @@ def page_course_detail():
                     # === Render konten modul ===
                     raw_content = m.get("content", "No content available.")
                     embed_pattern = r"<embed\s+src=\"([^\"]+)\"(?:\s+width=\"(\d+)\"|\s*)?(?:\s+height=\"(\d+)\"|\s*)?>"
-    
+
                     def replace_embed(match):
                         src = match.group(1)
                         width = match.group(2) or "560"
                         height = match.group(3) or "315"
+                        # ini langsung HTML <iframe> yang nanti dirender lewat st.markdown (unsafe_allow_html=True)
                         return f'<div style="text-align:center; margin:16px 0;"><iframe src="{src}" width="{width}" height="{height}" frameborder="0" allowfullscreen></iframe></div>'
-    
-                        content_with_embeds = re.sub(embed_pattern, replace_embed, raw_content)
-                        rendered_md = markdown.markdown(
-                            content_with_embeds,
-                            extensions=["fenced_code", "tables", "md_in_html"]
-                        )
-    
-                        # bikin semua <img> jadi figure di tengah + caption dari alt text
-                        rendered_md = center_images_with_caption(rendered_md)
-    
-                        # TAMPILKAN PAKAI st.markdown (bukan components.html)
-                        st.markdown(
-                            f"""
-                            <div style="font-size:16px; line-height:1.7; text-align:justify;">
-                                <article class="markdown-body">{rendered_md}</article>
-                            </div>
-                            """,
-                            unsafe_allow_html=True,
-                        )
 
+                    # ganti <embed> jadi <iframe> dulu
+                    content_with_embeds = re.sub(embed_pattern, replace_embed, raw_content)
 
-    
+                    # sekarang render markdown + latex
+                    render_md_with_latex(content_with_embeds)
+                    
                     if m.get("video_url"):
                         st.video(m["video_url"])
     
@@ -2621,6 +2599,7 @@ def main():
 # === Panggil fungsi utama ===
 if __name__ == "__main__":
     main()
+
 
 
 
