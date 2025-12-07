@@ -2272,14 +2272,24 @@ def page_course_detail():
                 enroll_resp = (
                     supabase.table("enrollments")
                     .select("user_id, role, course_id")
-                    .eq("course_id", cid_int)
                     .execute()
                 )
-                raw_enroll = enroll_resp.data or []
+                all_enroll = enroll_resp.data or []
             except Exception as e:
                 st.error("❌ Gagal memuat daftar enrollments:")
                 st.error(str(e))
-                raw_enroll = []
+                all_enroll = []
+
+            # 🔍 DEBUG (boleh dimatikan kalau sudah beres)
+            # st.write("DEBUG ALL enrollments:", all_enroll)
+            # st.write("DEBUG cid:", cid, type(cid))
+
+            # Filter hanya enroll untuk course ini
+            raw_enroll = [
+                e for e in all_enroll
+                if str(e.get("course_id")) == str(cid_int)
+            ]
+
 
             # 🔍 DEBUG OPSIONAL: lihat isi enrollments course ini
             # st.write("DEBUG enrollments utk course ini:", raw_enroll)
@@ -2531,6 +2541,7 @@ def main():
 # === Panggil fungsi utama ===
 if __name__ == "__main__":
     main()
+
 
 
 
