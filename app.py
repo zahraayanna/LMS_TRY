@@ -2290,6 +2290,24 @@ def page_course_detail():
             st.caption("DEBUG enrollments untuk course ini:")
             st.json(enroll_rows)
 
+            # === DEBUG: tampilkan semua enrollments yang bisa dibaca app (max 50) ===
+            st.markdown("---")
+            st.caption("DEBUG SEMUA enrollments (limit 50) yang terlihat oleh aplikasi:")
+            try:
+                all_en = (
+                    supabase.table("enrollments")
+                    .select("user_id, role, course_id")
+                    .limit(50)
+                    .execute()
+                    .data
+                    or []
+                )
+                st.json(all_en)
+            except Exception as e:
+                st.error("Gagal load semua enrollments:")
+                st.code(str(e))
+
+
             # filter hanya yang benar-benar student (abaikan spasi / kapital)
             student_ids = [
                 row["user_id"]
@@ -2554,6 +2572,7 @@ def main():
 # === Panggil fungsi utama ===
 if __name__ == "__main__":
     main()
+
 
 
 
