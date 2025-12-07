@@ -2480,11 +2480,12 @@ def main():
     # === NAVIGASI BALIK JIKA KELUAR DARI COURSE ===
     if st.session_state.get("_nav_back"):
         del st.session_state["_nav_back"]
-        return main()
+        st.rerun()
 
     if st.session_state.get("_nav_trigger"):
         del st.session_state["_nav_trigger"]
-        return main()
+        st.rerun() 
+
 
     # === INISIALISASI SESSION STATE ===
     if "page" not in st.session_state:
@@ -2531,6 +2532,7 @@ def main():
 # === Panggil fungsi utama ===
 if __name__ == "__main__":
     main()
+
 
 
 
