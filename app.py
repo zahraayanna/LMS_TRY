@@ -1418,14 +1418,25 @@ def page_course_detail():
     
         # --- Helper: map letter to choice text (if available) ---
         def letter_to_choice_text(letter, choices_str):
-            if not letter:
+            # ✅ GUARD CLAUSE — cegah error
+            if not letter or not isinstance(letter, str):
                 return ""
+        
+            letter = letter.strip().upper()
+        
+            # ✅ HARUS 1 huruf A–E
+            if not re.match(r"^[A-E]$", letter):
+                return ""
+        
             choices = [c.strip() for c in (choices_str or "").split("|") if c.strip()]
-            idx = ord(letter.upper()) - 65
+            idx = ord(letter) - 65
+        
             if 0 <= idx < len(choices):
                 return choices[idx]
+        
             return ""
-    
+        
+            
         quizzes = load_quizzes_for_course(cid)
         selected_quiz_id = st.session_state.get("selected_quiz_id")
     
@@ -2520,6 +2531,7 @@ def main():
 # === Panggil fungsi utama ===
 if __name__ == "__main__":
     main()
+
 
 
 
