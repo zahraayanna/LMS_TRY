@@ -1488,11 +1488,11 @@ def page_course_detail():
                             video_id = youtube_url.split("v=")[-1] if "v=" in youtube_url else youtube_url.split("/")[-1]
                             st.video(f"https://www.youtube.com/watch?v={video_id}")
                             desc = desc.replace(youtube_url, "")
-                       st.markdown("### 📘 Quiz Description:")
+
+                            # langsung render markdown + latex
+                            render_md_with_latex(desc)
                         
-                        # langsung render markdown + latex
-                        render_md_with_latex(desc)
-                               
+                                                       
                     # --- Instructor: Edit Quiz ---
                     if user["role"] == "instructor":
                         st.divider()
@@ -2571,6 +2571,7 @@ def main():
 # === Panggil fungsi utama ===
 if __name__ == "__main__":
     main()
+
 
 
 
