@@ -1482,15 +1482,20 @@ def page_course_detail():
                     desc = q.get("description","") or ""
                     if desc.strip():
                         st.markdown("### 📘 Quiz Description:")
-                        youtube_match = re.search(r"(https?://(?:www\.)?(?:youtube\.com/watch\?v=|youtu\.be/)[\w\-]+)", desc)
+                    
+                        youtube_match = re.search(
+                            r"(https?://(?:www\.)?(?:youtube\.com/watch\?v=|youtu\.be/)[\w\-]+)",
+                            desc
+                        )
                         if youtube_match:
                             youtube_url = youtube_match.group(1)
                             video_id = youtube_url.split("v=")[-1] if "v=" in youtube_url else youtube_url.split("/")[-1]
                             st.video(f"https://www.youtube.com/watch?v={video_id}")
                             desc = desc.replace(youtube_url, "")
+                    
+                        # ⬇️ ini DI LUAR if youtube_match
+                        render_md_with_latex(desc)
 
-                            # langsung render markdown + latex
-                            render_md_with_latex(desc)
                         
                                                        
                     # --- Instructor: Edit Quiz ---
@@ -2571,6 +2576,7 @@ def main():
 # === Panggil fungsi utama ===
 if __name__ == "__main__":
     main()
+
 
 
 
