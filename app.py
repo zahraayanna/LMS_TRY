@@ -2249,15 +2249,14 @@ def page_course_detail():
                     .execute()
                 )
                 raw_enroll = enroll_resp.data or []
+        
+                # Anggap semua yang BUKAN instructor adalah siswa
+                enroll = [e for e in raw_enroll if e.get("role") != "instructor"]
             except Exception as e:
                 st.error("❌ Gagal memuat daftar enrollments:")
                 st.error(str(e))
                 st.stop()
-            
-            # Kalau mau tetap pastikan yang tampil hanya student,
-            # filter-nya cukup di Python (kalau kolom role tidak ada / None, tetap dianggap student)
-            enroll = [e for e in raw_enroll if e.get("role", "student") == "student"]
-            
+
             if not enroll:
                 st.info("Belum ada siswa yang bergabung di kursus ini.")
                 st.stop()
@@ -2273,8 +2272,6 @@ def page_course_detail():
                     .in_("id", student_ids)
                     .execute()
                 )
-                students = users_resp.data or []
-
                 students = users_resp.data or []
 
             except Exception as e:
@@ -2540,6 +2537,7 @@ def main():
 # === Panggil fungsi utama ===
 if __name__ == "__main__":
     main()
+
 
 
 
