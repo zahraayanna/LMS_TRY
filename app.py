@@ -1469,7 +1469,7 @@ def page_course_detail():
                             {rendered_md}
                         </div>
                         """
-                        components.html(html_content, height=250, scrolling=True)
+                        components.html(html_content, height=0, scrolling=False)
     
                     # --- Instructor: Edit Quiz ---
                     if user["role"] == "instructor":
@@ -2566,6 +2566,7 @@ def main():
 # === Panggil fungsi utama ===
 if __name__ == "__main__":
     main()
+
 
 
 
